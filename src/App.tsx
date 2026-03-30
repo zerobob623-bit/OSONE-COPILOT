@@ -39,6 +39,46 @@ import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
 import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
+import { useGeminiLive } from './hooks/useGeminiLive';
+
+export function App() {
+  const { 
+    isConnected, 
+    isListening, 
+    connect, 
+    disconnect, 
+    startListening, 
+    stopListening 
+  } = useGeminiLive();
+
+  const handleConnection = () => {
+    if (isConnected) {
+      disconnect();
+    } else {
+      connect(process.env.VITE_GEMINI_WS_URL || '');
+    }
+  };
+
+  const toggleMic = () => {
+    isListening ? stopListening() : startListening();
+  };
+
+  return (
+    <div>
+      <button onClick={handleConnection}>
+        {isConnected ? 'Desconectar' : 'Conectar ao Gemini'}
+      </button>
+
+      <button 
+        disabled={!isConnected} 
+        onClick={toggleMic}
+        className={isListening ? 'bg-red-500' : 'bg-blue-500'}
+      >
+        {isListening ? 'Mutar Microfone' : 'Ativar Live áudio'}
+      </button>
+    </div>
+  );
+}
 
 // --- Components ---
 
