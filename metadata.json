@@ -1,0 +1,8 @@
+{
+  "name": "OSONE COPILOT",
+  "description": "A HER-inspired operating system with voice interaction, workspace, and AI integration.",
+  "requestFramePermissions": [
+    "microphone",
+    "display-capture"
+  ]
+}
