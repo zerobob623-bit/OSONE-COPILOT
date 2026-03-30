@@ -144,14 +144,44 @@ export default function App() {
             name: 'components',
             type: 'folder',
             children: [
-              { id: 'Button-file', name: 'Button.tsx', type: 'file', content: 'export default function Button() {\n  return <button className="px-4 py-2 bg-blue-500 text-white rounded">Click me</button>;\n}' }
+              { id: 'Button-file', name: 'Button.tsx', type: 'file', content: 'import React from "react";\n\nexport default function Button() {\n  return <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">Click me</button>;\n}' }
             ]
+          },
+          {
+            id: 'hooks-folder',
+            name: 'hooks',
+            type: 'folder',
+            children: []
+          },
+          {
+            id: 'assets-folder',
+            name: 'assets',
+            type: 'folder',
+            children: []
+          },
+          {
+            id: 'context-folder',
+            name: 'context',
+            type: 'folder',
+            children: []
+          },
+          {
+            id: 'services-folder',
+            name: 'services',
+            type: 'folder',
+            children: []
           },
           {
             id: 'App-file',
             name: 'App.tsx',
             type: 'file',
-            content: 'import React from "react";\nimport Button from "./components/Button";\n\nexport default function App() {\n  return (\n    <div className="p-4">\n      <h1 className="text-2xl font-bold mb-4">Hello World</h1>\n      <Button />\n    </div>\n  );\n}'
+            content: 'import React from "react";\nimport Button from "./components/Button";\n\nexport default function App() {\n  return (\n    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">\n      <h1 className="text-4xl font-bold mb-8 text-gray-800">Hello World</h1>\n      <Button />\n    </div>\n  );\n}'
+          },
+          {
+            id: 'main-file',
+            name: 'main.tsx',
+            type: 'file',
+            content: 'import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\nimport "./index.css";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);'
           },
           {
             id: 'index-css-file',
@@ -166,14 +196,50 @@ export default function App() {
         name: 'public',
         type: 'folder',
         children: [
-          { id: 'index-html-file', name: 'index.html', type: 'file', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>React App</title>\n</head>\n<body>\n  <div id="root"></div>\n</body>\n</html>' }
+          { id: 'vite-svg-file', name: 'vite.svg', type: 'file', content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2z"/></svg>' }
         ]
+      },
+      {
+        id: 'index-html-file',
+        name: 'index.html',
+        type: 'file',
+        content: '<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="/vite.svg" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Vite + React + TS</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>'
       },
       {
         id: 'package-json-file',
         name: 'package.json',
         type: 'file',
-        content: '{\n  "name": "my-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  }\n}'
+        content: '{\n  "name": "osone-project",\n  "private": true,\n  "version": "0.0.0",\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",\n    "preview": "vite preview"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  },\n  "devDependencies": {\n    "@types/react": "^18.2.66",\n    "@types/react-dom": "^18.2.22",\n    "@vitejs/plugin-react": "^4.2.1",\n    "autoprefixer": "^10.4.19",\n    "postcss": "^8.4.38",\n    "tailwindcss": "^3.4.3",\n    "typescript": "^5.2.2",\n    "vite": "^5.2.0"\n  }\n}'
+      },
+      {
+        id: 'vite-config-file',
+        name: 'vite.config.ts',
+        type: 'file',
+        content: 'import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\n// https://vitejs.dev/config/\nexport default defineConfig({\n  plugins: [react()],\n});'
+      },
+      {
+        id: 'tailwind-config-file',
+        name: 'tailwind.config.js',
+        type: 'file',
+        content: '/** @type {import(\'tailwindcss\').Config} */\nexport default {\n  content: [\n    "./index.html",\n    "./src/**/*.{js,ts,jsx,tsx}",\n  ],\n  theme: {\n    extend: {},\n  },\n  plugins: [],\n}'
+      },
+      {
+        id: 'postcss-config-file',
+        name: 'postcss.config.js',
+        type: 'file',
+        content: 'export default {\n  plugins: {\n    tailwindcss: {},\n    autoprefixer: {},\n  },\n}'
+      },
+      {
+        id: 'tsconfig-file',
+        name: 'tsconfig.json',
+        type: 'file',
+        content: '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "useDefineForClassFields": true,\n    "lib": ["ES2020", "DOM", "DOM.Iterable"],\n    "module": "ESNext",\n    "skipLibCheck": true,\n\n    /* Bundler mode */\n    "moduleResolution": "bundler",\n    "allowImportingTsExtensions": true,\n    "resolveJsonModule": true,\n    "isolatedModules": true,\n    "noEmit": true,\n    "jsx": "react-jsx",\n\n    /* Linting */\n    "strict": true,\n    "noUnusedLocals": true,\n    "noUnusedParameters": true,\n    "noFallthroughCasesInSwitch": true\n  },\n  "include": ["src"],\n  "references": [{ "path": "./tsconfig.node.json" }]\n}'
+      },
+      {
+        id: 'tsconfig-node-file',
+        name: 'tsconfig.node.json',
+        type: 'file',
+        content: '{\n  "compilerOptions": {\n    "composite": true,\n    "skipLibCheck": true,\n    "module": "ESNext",\n    "moduleResolution": "bundler",\n    "allowSyntheticDefaultImports": true\n  },\n  "include": ["vite.config.ts"]\n}'
       }
     ];
 
@@ -335,6 +401,13 @@ export default function App() {
       };
       return updateChildren(prev);
     });
+  };
+
+  const resetFileSystem = () => {
+    if (confirm('Tem certeza que deseja resetar o projeto para a estrutura padrão? Isso apagará todos os seus arquivos atuais.')) {
+      localStorage.removeItem('osone_file_system');
+      window.location.reload();
+    }
   };
 
   const downloadFileSystem = async () => {
@@ -1466,6 +1539,13 @@ export default function App() {
                   >
                     <Copy size={14} />
                     Copiar Tudo
+                  </button>
+                  <button 
+                    onClick={resetFileSystem}
+                    className="flex items-center gap-2 px-5 py-2.5 hover:bg-red-500/10 text-red-400 rounded-2xl transition-colors text-xs font-light border border-transparent"
+                  >
+                    <Trash2 size={14} />
+                    Resetar
                   </button>
                   <button 
                     onClick={downloadFileSystem}
