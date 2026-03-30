@@ -35,7 +35,7 @@ connect(url: string) {
     // ESTA É A PARTE QUE FALTAVA:
     const setupMessage = {
       setup: {
-        model: "models/gemini-2.0-flash-exp", // O modelo Live Preview
+        model: "models/gemini-3.1-flash-live-preview", // O modelo Live Preview
         generation_config: {
           response_modalities: ["audio"], // Força a resposta em áudio
           speech_config: {
