@@ -151,7 +151,14 @@ export default function App() {
             id: 'hooks-folder',
             name: 'hooks',
             type: 'folder',
-            children: []
+            children: [
+              {
+                id: 'useGemini-file',
+                name: 'useGemini.ts',
+                type: 'file',
+                content: 'import { useState } from "react";\nimport { GoogleGenAI } from "@google/genai";\n\nexport function useGemini() {\n  const [loading, setLoading] = useState(false);\n  const [response, setResponse] = useState("");\n  const [error, setError] = useState<string | null>(null);\n\n  const generateContent = async (prompt: string, apiKey: string) => {\n    if (!apiKey) {\n      setError("API Key is required");\n      return;\n    }\n    \n    setLoading(true);\n    setError(null);\n    \n    try {\n      const ai = new GoogleGenAI({ apiKey });\n      const result = await ai.models.generateContent({\n        model: "gemini-3-flash-preview",\n        contents: prompt,\n      });\n      \n      setResponse(result.text || "");\n    } catch (err: any) {\n      setError(err.message || "An error occurred");\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  return { generateContent, response, loading, error };\n}'
+              }
+            ]
           },
           {
             id: 'assets-folder',
@@ -175,7 +182,7 @@ export default function App() {
             id: 'App-file',
             name: 'App.tsx',
             type: 'file',
-            content: 'import React from "react";\nimport Button from "./components/Button";\n\nexport default function App() {\n  return (\n    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">\n      <h1 className="text-4xl font-bold mb-8 text-gray-800">Hello World</h1>\n      <Button />\n    </div>\n  );\n}'
+            content: 'import React, { useState } from "react";\nimport { useGemini } from "./hooks/useGemini";\n\nexport default function App() {\n  const [prompt, setPrompt] = useState("");\n  const [apiKey, setApiKey] = useState("");\n  const { generateContent, response, loading, error } = useGemini();\n\n  return (\n    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">\n      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl">\n        <h1 className="text-3xl font-bold mb-6 text-gray-800">Gemini AI App</h1>\n        \n        <div className="space-y-4">\n          <input\n            type="password"\n            placeholder="Gemini API Key"\n            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"\n            value={apiKey}\n            onChange={(e) => setApiKey(e.target.value)}\n          />\n          \n          <textarea\n            placeholder="Ask Gemini something..."\n            className="w-full p-3 border rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none"\n            value={prompt}\n            onChange={(e) => setPrompt(e.target.value)}\n          />\n          \n          <button\n            onClick={() => generateContent(prompt, apiKey)}\n            disabled={loading || !prompt || !apiKey}\n            className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"\n          >\n            {loading ? "Generating..." : "Generate"}\n          </button>\n          \n          {error && (\n            <div className="p-4 bg-red-50 text-red-600 rounded-lg border border-red-100">\n              {error}\n            </div>\n          )}\n          \n          {response && (\n            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 whitespace-pre-wrap">\n              {response}\n            </div>\n          )}\n        </div>\n      </div>\n    </div>\n  );\n}'
           },
           {
             id: 'main-file',
@@ -209,7 +216,7 @@ export default function App() {
         id: 'package-json-file',
         name: 'package.json',
         type: 'file',
-        content: '{\n  "name": "osone-project",\n  "private": true,\n  "version": "0.0.0",\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",\n    "preview": "vite preview"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  },\n  "devDependencies": {\n    "@types/react": "^18.2.66",\n    "@types/react-dom": "^18.2.22",\n    "@vitejs/plugin-react": "^4.2.1",\n    "autoprefixer": "^10.4.19",\n    "postcss": "^8.4.38",\n    "tailwindcss": "^3.4.3",\n    "typescript": "^5.2.2",\n    "vite": "^5.2.0"\n  }\n}'
+        content: '{\n  "name": "osone-project",\n  "private": true,\n  "version": "0.0.0",\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",\n    "preview": "vite preview"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0",\n    "@google/genai": "^0.1.2"\n  },\n  "devDependencies": {\n    "@types/react": "^18.2.66",\n    "@types/react-dom": "^18.2.22",\n    "@vitejs/plugin-react": "^4.2.1",\n    "autoprefixer": "^10.4.19",\n    "postcss": "^8.4.38",\n    "tailwindcss": "^3.4.3",\n    "typescript": "^5.2.2",\n    "vite": "^5.2.0"\n  }\n}'
       },
       {
         id: 'vite-config-file',
