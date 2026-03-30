@@ -2,34 +2,35 @@
 
 export class GeminiLiveService {
   private socket: WebSocket | null = null;
+  private url: string = "";
 
   connect(url: string) {
+    this.url = url;
     this.socket = new WebSocket(url);
 
     this.socket.onopen = () => {
-      console.log("Conexão Neural Ativa");
+      console.log("🟢 Conexão Neural Estabelecida");
     };
 
-    this.socket.onclose = () => {
-      console.warn("Conexão encerrada. Tentando reconectar...");
-      // Aqui você pode implementar uma lógica de retry
+    this.socket.onmessage = (event) => {
+      // Aqui você trata a resposta da IA
+      const data = JSON.parse(event.data);
+      console.log("📩 Resposta recebida:", data);
     };
 
-    this.socket.onerror = (error) => {
-      console.error("Erro no WebSocket:", error);
+    this.socket.onclose = (event) => {
+      console.warn(`🔴 Conexão fechada (Código: ${event.code}). Tentando reconectar em 3s...`);
+      setTimeout(() => this.connect(this.url), 3000); // Reconexão automática
     };
   }
 
   sendMessage(data: any) {
+    // CHECAGEM CRÍTICA: Só envia se o estado for exatamente 1 (OPEN)
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(data));
     } else {
-      console.error("Não foi possível enviar: WebSocket não está aberto.");
+      console.warn("⚠️ Tentativa de envio bloqueada: Socket fechado ou fechando.");
     }
-  }
-
-  disconnect() {
-    this.socket?.close();
   }
 }
 
