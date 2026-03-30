@@ -39,616 +39,13 @@ import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
 import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
+import { FileTreeItem } from './components/FileTreeItem';
+import { InfinityLogo } from './components/InfinityLogo';
+import { SettingsModal } from './components/SettingsModal';
+import { Sidebar } from './components/Sidebar';
+import { CodePreview } from './components/CodePreview';
 
-// --- Components ---
-
-const FileTreeItem = ({ 
-  item, 
-  depth, 
-  selectedFileId, 
-  setSelectedFileId, 
-  onAddFile, 
-  onAddFolder, 
-  onDelete, 
-  onRename 
-}: { 
-  item: FileSystemItem; 
-  depth: number;
-  selectedFileId: string | null;
-  setSelectedFileId: (id: string | null) => void;
-  onAddFile: (parentId: string, name: string) => void;
-  onAddFolder: (parentId: string, name: string) => void;
-  onDelete: (id: string) => void;
-  onRename: (id: string, name: string) => void;
-}) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(item.name);
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [isAdding, setIsAdding] = useState<'file' | 'folder' | null>(null);
-  const [newName, setNewName] = useState('');
-
-  const handleRename = () => {
-    if (editName.trim() && editName !== item.name) {
-      onRename(item.id, editName);
-    }
-    setIsEditing(false);
-  };
-
-  const handleAdd = () => {
-    if (newName.trim()) {
-      if (isAdding === 'file') {
-        onAddFile(item.id, newName.trim());
-      } else if (isAdding === 'folder') {
-        onAddFolder(item.id, newName.trim());
-      }
-    }
-    setIsAdding(null);
-    setNewName('');
-    setIsExpanded(true);
-  };
-
-  return (
-    <div className="space-y-1">
-      <div 
-        className={cn(
-          "flex items-center justify-between group px-2 py-1.5 rounded-lg cursor-pointer transition-colors",
-          item.type === 'file' && selectedFileId === item.id ? "bg-her-accent/20 text-her-accent" : "hover:bg-white/5 text-her-muted",
-          item.type === 'folder' && "text-her-ink"
-        )}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => {
-          if (item.type === 'file') {
-            setSelectedFileId(item.id);
-          } else {
-            setIsExpanded(!isExpanded);
-          }
-        }}
-      >
-        <div className="flex items-center gap-2 text-sm flex-1 min-w-0">
-          {item.type === 'folder' ? (
-            <Folder size={14} className={cn("text-her-accent shrink-0", !isExpanded && "opacity-50")} />
-          ) : (
-            <FileText size={14} className="shrink-0" />
-          )}
-          
-          {isEditing ? (
-            <input 
-              autoFocus
-              className="bg-white/50 border border-her-accent/30 rounded px-1 w-full focus:outline-none text-xs"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={handleRename}
-              onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <span className="truncate" onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}>
-              {item.name}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
-          {item.type === 'folder' && (
-            <>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsAdding('file');
-                  setNewName('');
-                  setIsExpanded(true);
-                }}
-                className="p-2 md:p-1 hover:bg-white/10 rounded text-her-muted hover:text-her-accent"
-                title="Novo Arquivo"
-              >
-                <FilePlus size={16} className="md:w-3 md:h-3" />
-              </button>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsAdding('folder');
-                  setNewName('');
-                  setIsExpanded(true);
-                }}
-                className="p-2 md:p-1 hover:bg-white/10 rounded text-her-muted hover:text-her-accent"
-                title="Nova Subpasta"
-              >
-                <Plus size={16} className="md:w-3 md:h-3" />
-              </button>
-            </>
-          )}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(item.id);
-            }}
-            className="p-2 md:p-1 hover:bg-white/10 rounded text-her-muted hover:text-red-400"
-            title="Excluir"
-          >
-            <Trash2 size={16} className="md:w-3 md:h-3" />
-          </button>
-        </div>
-      </div>
-
-      {isAdding && (
-        <div 
-          className="flex items-center gap-2 text-sm px-2 py-1.5"
-          style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
-        >
-          {isAdding === 'folder' ? (
-            <Folder size={14} className="text-her-accent shrink-0" />
-          ) : (
-            <FileText size={14} className="shrink-0 text-her-muted" />
-          )}
-          <input
-            autoFocus
-            className="bg-white/50 border border-her-accent/30 rounded px-1 w-full focus:outline-none text-xs"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onBlur={handleAdd}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAdd();
-              if (e.key === 'Escape') {
-                setIsAdding(null);
-                setNewName('');
-              }
-            }}
-            placeholder={`Nome do ${isAdding === 'folder' ? 'diretório' : 'arquivo'}...`}
-          />
-        </div>
-      )}
-
-      {item.type === 'folder' && isExpanded && (
-        <div className="space-y-1">
-          {(item.children || []).map(child => (
-            <FileTreeItem 
-              key={child.id}
-              item={child}
-              depth={depth + 1}
-              selectedFileId={selectedFileId}
-              setSelectedFileId={setSelectedFileId}
-              onAddFile={onAddFile}
-              onAddFolder={onAddFolder}
-              onDelete={onDelete}
-              onRename={onRename}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const InfinityLogo = ({ active, speaking }: { active: boolean; speaking: boolean }) => {
-  return (
-    <div className="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
-      {/* Outer Glow */}
-      <div className={cn(
-        "absolute inset-0 rounded-full transition-all duration-1000",
-        active || speaking ? "bg-her-accent/10 blur-[100px] scale-110" : "bg-transparent"
-      )} />
-      
-      <div className="relative flex items-center gap-2 md:gap-4">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            animate={{
-              scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
-              opacity: speaking ? [0.2, 0.5, 0.2] : active ? [0.15, 0.3, 0.15] : 0.1,
-              y: speaking ? [0, -5, 0] : 0
-            }}
-            transition={{
-              duration: speaking ? 2 : 4,
-              repeat: Infinity,
-              delay: i * 0.3,
-              ease: "easeInOut"
-            }}
-            className={cn(
-              "w-8 h-8 md:w-12 md:h-12 rounded-full border border-white/[0.05] flex items-center justify-center",
-              (active || speaking) && "bg-white/[0.02] shadow-[0_0_40px_rgba(255,78,0,0.05)]"
-            )}
-          >
-            <div className={cn(
-              "w-1.5 h-1.5 md:w-2 md:h-2 rounded-full transition-all duration-700",
-              (active || speaking) ? "bg-her-accent/60 scale-110" : "bg-white/10 scale-100"
-            )} />
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Rotating Rings */}
-      <motion.div 
-        animate={{ rotate: 360 }}
-        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-        className="absolute inset-0 border border-white/[0.03] rounded-full"
-      />
-      <motion.div 
-        animate={{ rotate: -360 }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-        className="absolute inset-6 border border-white/[0.02] rounded-full border-dashed"
-      />
-      
-      {/* Speaking rings */}
-      {speaking && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          {[1, 2, 3].map((i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: [0, 0.3, 0], scale: [0.8, 1.5, 2] }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                delay: i * 0.5,
-                ease: "easeOut"
-              }}
-              className="absolute w-full h-full border border-her-accent/30 rounded-full"
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const SettingsModal = ({ isOpen, onClose, keys, setKeys, selectedVoice, setSelectedVoice }: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  keys: ApiKeys;
-  setKeys: (keys: ApiKeys) => void;
-  selectedVoice: string;
-  setSelectedVoice: (voice: string) => void;
-}) => {
-  const [activeTab, setActiveTab] = useState<'ia' | 'integrations'>('ia');
-  const [newNumber, setNewNumber] = useState('');
-
-  const addNumber = () => {
-    if (newNumber.trim() && !keys.whatsappNumbers.includes(newNumber.trim())) {
-      setKeys({ ...keys, whatsappNumbers: [...(keys.whatsappNumbers || []), newNumber.trim()] });
-      setNewNumber('');
-    }
-  };
-
-  const removeNumber = (num: string) => {
-    setKeys({ ...keys, whatsappNumbers: (keys.whatsappNumbers || []).filter(n => n !== num) });
-  };
-
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4"
-        >
-          <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-her-bg w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-white/[0.05] backdrop-blur-2xl"
-          >
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-serif italic font-light">Configurações</h2>
-              <button onClick={onClose} className="p-2 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="flex gap-4 mb-8 border-b border-white/[0.05]">
-              <button 
-                onClick={() => setActiveTab('ia')}
-                className={cn(
-                  "pb-4 text-[10px] uppercase tracking-[0.2em] font-light transition-all border-b-2",
-                  activeTab === 'ia' ? "border-her-accent text-her-accent" : "border-transparent text-her-muted hover:text-her-ink/60"
-                )}
-              >
-                Modelos IA
-              </button>
-              <button 
-                onClick={() => setActiveTab('integrations')}
-                className={cn(
-                  "pb-4 text-[10px] uppercase tracking-[0.2em] font-light transition-all border-b-2",
-                  activeTab === 'integrations' ? "border-her-accent text-her-accent" : "border-transparent text-her-muted hover:text-her-ink/60"
-                )}
-              >
-                Integrações
-              </button>
-            </div>
-            
-            <div className="space-y-6 max-h-[400px] overflow-y-auto scrollbar-hide pr-2">
-              {activeTab === 'ia' ? (
-                <>
-                  <div>
-                    <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Gemini API</label>
-                    <input 
-                      type="password"
-                      value={keys.gemini}
-                      onChange={(e) => setKeys({ ...keys, gemini: e.target.value })}
-                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                      placeholder="Insira sua chave..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">OpenAI API</label>
-                    <input 
-                      type="password"
-                      value={keys.openai}
-                      onChange={(e) => setKeys({ ...keys, openai: e.target.value })}
-                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                      placeholder="Insira sua chave..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Groq API</label>
-                    <input 
-                      type="password"
-                      value={keys.groq}
-                      onChange={(e) => setKeys({ ...keys, groq: e.target.value })}
-                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                      placeholder="Insira sua chave..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Voz do OSONE</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'].map((voice) => (
-                        <button
-                          key={voice}
-                          onClick={() => setSelectedVoice(voice)}
-                          className={cn(
-                            "px-3 py-2 rounded-xl text-xs font-light transition-all border",
-                            selectedVoice === voice 
-                              ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                              : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
-                          )}
-                        >
-                          {voice}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-4">
-                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-her-accent font-medium">Evolution API (WhatsApp)</h3>
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">API URL</label>
-                      <input 
-                        type="text"
-                        value={keys.evolutionApiUrl}
-                        onChange={(e) => setKeys({ ...keys, evolutionApiUrl: e.target.value })}
-                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                        placeholder="https://api.evolution.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">API Key</label>
-                      <input 
-                        type="password"
-                        value={keys.evolutionApiKey}
-                        onChange={(e) => setKeys({ ...keys, evolutionApiKey: e.target.value })}
-                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                        placeholder="Insira sua chave..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Nome da Instância</label>
-                      <input 
-                        type="text"
-                        value={keys.evolutionInstanceName}
-                        onChange={(e) => setKeys({ ...keys, evolutionInstanceName: e.target.value })}
-                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                        placeholder="Ex: minha_instancia"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pt-4 border-t border-white/[0.05]">
-                    <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Números de WhatsApp</label>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text"
-                        value={newNumber}
-                        onChange={(e) => setNewNumber(e.target.value)}
-                        className="flex-1 bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                        placeholder="Ex: 5511999999999"
-                      />
-                      <button 
-                        onClick={addNumber}
-                        className="p-3 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-2xl hover:bg-her-accent/20 transition-all"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {(keys.whatsappNumbers || []).map((num) => (
-                        <div key={num} className="flex justify-between items-center bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-2">
-                          <span className="text-sm font-light text-her-ink/80">{num}</span>
-                          <button onClick={() => removeNumber(num)} className="text-her-muted hover:text-red-400 transition-colors">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pt-4 border-t border-white/[0.05]">
-                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-her-accent font-medium">Alexa</h3>
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Alexa Skill ID</label>
-                      <input 
-                        type="text"
-                        value={keys.alexaSkillId}
-                        onChange={(e) => setKeys({ ...keys, alexaSkillId: e.target.value })}
-                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
-                        placeholder="amzn1.ask.skill.xxx..."
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <button 
-              onClick={onClose}
-              className="w-full mt-10 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-2xl py-4 font-light text-sm hover:bg-her-accent/20 transition-all"
-            >
-              Confirmar Alterações
-            </button>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
-
-const Sidebar = ({ isOpen, onClose, mode, setMode }: { 
-  isOpen: boolean; 
-  onClose: () => void;
-  mode: WorkspaceMode;
-  setMode: (mode: WorkspaceMode) => void;
-}) => (
-  <AnimatePresence>
-    {isOpen && (
-      <>
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[2px]"
-        />
-        <motion.div 
-          initial={{ x: -300 }}
-          animate={{ x: 0 }}
-          exit={{ x: -300 }}
-          transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-          className="fixed inset-y-0 left-0 z-50 w-72 bg-her-bg border-r border-white/[0.03] shadow-2xl p-8 flex flex-col"
-        >
-          <div className="flex justify-between items-center mb-12">
-            <h1 className="text-2xl font-serif italic tracking-tight font-light text-her-ink/40">OSONE</h1>
-            <button onClick={onClose} className="p-2 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted">
-              <X size={20} />
-            </button>
-          </div>
-
-          <div className="space-y-10 flex-1">
-            <div>
-              <h3 className="text-[9px] uppercase tracking-[0.3em] text-her-muted mb-6 font-light">Navegação</h3>
-              <button 
-                onClick={() => { setMode('home'); onClose(); }}
-                className={cn(
-                  "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                  mode === 'home' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
-                )}
-              >
-                <Volume2 size={18} />
-                <span>Início</span>
-              </button>
-            </div>
-
-            <div>
-              <h3 className="text-[9px] uppercase tracking-[0.3em] text-her-muted mb-6 font-light">Workspace</h3>
-              <div className="space-y-3">
-                <button 
-                  onClick={() => { setMode('writing'); onClose(); }}
-                  className={cn(
-                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                    mode === 'writing' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
-                  )}
-                >
-                  <FileText size={18} />
-                  <span>Escrita</span>
-                </button>
-                <button 
-                  onClick={() => { setMode('folder_construction'); onClose(); }}
-                  className={cn(
-                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                    mode === 'folder_construction' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
-                  )}
-                >
-                  <Folder size={18} />
-                  <span>Estrutura</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-auto">
-            <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.03]">
-              <p className="text-[9px] text-her-muted/40 leading-relaxed italic font-light">
-                "O sistema não é apenas uma ferramenta, é uma extensão da sua consciência."
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      </>
-    )}
-  </AnimatePresence>
-);
-
-const CodePreview = ({ code }: { code: string }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-
-  useEffect(() => {
-    if (iframeRef.current) {
-      const doc = iframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <script src="https://cdn.tailwindcss.com"></script>
-              <style>
-                body { font-family: sans-serif; margin: 0; padding: 20px; }
-              </style>
-            </head>
-            <body>
-              ${code}
-            </body>
-          </html>
-        `);
-        doc.close();
-      }
-    }
-  }, [code]);
-
-  const toggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen);
-  };
-
-  return (
-    <div 
-      ref={containerRef} 
-      className={cn(
-        "bg-white overflow-hidden border border-black/10 shadow-inner relative group transition-all duration-300",
-        isFullScreen ? "fixed inset-0 z-[100] rounded-none" : "w-full h-full rounded-xl"
-      )}
-    >
-      <iframe 
-        ref={iframeRef}
-        title="Preview"
-        className="w-full h-full border-none"
-      />
-      <button 
-        onClick={toggleFullScreen}
-        className="absolute bottom-4 right-4 p-2 bg-black/50 text-white rounded-lg lg:opacity-0 lg:group-hover:opacity-100 opacity-100 transition-opacity hover:bg-black/70 backdrop-blur-sm z-40"
-        title={isFullScreen ? "Sair da Tela Cheia" : "Tela Cheia"}
-      >
-        {isFullScreen ? <Minimize size={18} /> : <Maximize size={18} />}
-      </button>
-    </div>
-  );
-};
-
+// --- Main App ---
 // --- Main App ---
 
 export default function App() {
@@ -736,10 +133,59 @@ export default function App() {
       });
     };
 
-    if (needsMigration(initialData)) {
-      return migrate(initialData);
+    const defaultStructure: FileSystemItem[] = [
+      {
+        id: 'src-folder',
+        name: 'src',
+        type: 'folder',
+        children: [
+          {
+            id: 'components-folder',
+            name: 'components',
+            type: 'folder',
+            children: [
+              { id: 'Button-file', name: 'Button.tsx', type: 'file', content: 'export default function Button() {\n  return <button className="px-4 py-2 bg-blue-500 text-white rounded">Click me</button>;\n}' }
+            ]
+          },
+          {
+            id: 'App-file',
+            name: 'App.tsx',
+            type: 'file',
+            content: 'import React from "react";\nimport Button from "./components/Button";\n\nexport default function App() {\n  return (\n    <div className="p-4">\n      <h1 className="text-2xl font-bold mb-4">Hello World</h1>\n      <Button />\n    </div>\n  );\n}'
+          },
+          {
+            id: 'index-css-file',
+            name: 'index.css',
+            type: 'file',
+            content: '@tailwind base;\n@tailwind components;\n@tailwind utilities;'
+          }
+        ]
+      },
+      {
+        id: 'public-folder',
+        name: 'public',
+        type: 'folder',
+        children: [
+          { id: 'index-html-file', name: 'index.html', type: 'file', content: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>React App</title>\n</head>\n<body>\n  <div id="root"></div>\n</body>\n</html>' }
+        ]
+      },
+      {
+        id: 'package-json-file',
+        name: 'package.json',
+        type: 'file',
+        content: '{\n  "name": "my-app",\n  "version": "1.0.0",\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0"\n  }\n}'
+      }
+    ];
+
+    let dataToUse = initialData;
+    if (!saved || initialData.length === 0) {
+      dataToUse = defaultStructure;
     }
-    return initialData;
+
+    if (needsMigration(dataToUse)) {
+      return migrate(dataToUse);
+    }
+    return dataToUse;
   });
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
 
@@ -1465,56 +911,48 @@ export default function App() {
                 },
                 {
                   name: "create_folder",
-                  description: "Cria uma nova pasta no sistema de arquivos virtual.",
+                  description: "Cria uma nova pasta no sistema de arquivos virtual. Use o caminho completo.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      name: {
+                      path: {
                         type: Type.STRING,
-                        description: "O nome da nova pasta."
-                      },
-                      parentName: {
-                        type: Type.STRING,
-                        description: "O nome da pasta pai onde a nova pasta será criada. Deixe vazio ou omita para criar na raiz."
+                        description: "O caminho completo da nova pasta (ex: src/components)."
                       }
                     },
-                    required: ["name"]
+                    required: ["path"]
                   }
                 },
                 {
                   name: "create_file",
-                  description: "Cria um novo arquivo no sistema de arquivos virtual.",
+                  description: "Cria um novo arquivo no sistema de arquivos virtual. Use o caminho completo.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      name: {
+                      path: {
                         type: Type.STRING,
-                        description: "O nome do novo arquivo (ex: index.html)."
-                      },
-                      parentName: {
-                        type: Type.STRING,
-                        description: "O nome da pasta pai onde o arquivo será criado. Deixe vazio ou omita para criar na raiz."
+                        description: "O caminho completo do novo arquivo (ex: src/components/Button.tsx)."
                       }
                     },
-                    required: ["name"]
+                    required: ["path"]
                   }
                 },
                 {
                   name: "write_to_file",
-                  description: "Escreve conteúdo em um arquivo existente no sistema de arquivos virtual.",
+                  description: "Escreve conteúdo em um arquivo no sistema de arquivos virtual. Use o caminho completo.",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
-                      fileName: {
+                      path: {
                         type: Type.STRING,
-                        description: "O nome do arquivo onde o conteúdo será escrito."
+                        description: "O caminho completo do arquivo (ex: src/components/Button.tsx)."
                       },
                       content: {
                         type: Type.STRING,
                         description: "O conteúdo a ser escrito no arquivo."
                       }
                     },
-                    required: ["fileName", "content"]
+                    required: ["path", "content"]
                   }
                 }
               ]
@@ -1574,67 +1012,146 @@ export default function App() {
                     response: { result: "Estrutura de projeto sendo gerada na aba de Construção de Pastas." }
                   });
                 } else if (call.name === "create_folder") {
-                  const name = call.args.name as string;
-                  const parentName = call.args.parentName as string | undefined;
+                  const path = call.args.path as string;
+                  const parts = path.split('/').filter(Boolean);
+                  const folderName = parts.pop();
                   
-                  addFolder(null, name, parentName);
+                  if (folderName) {
+                    setFileSystem(prev => {
+                      const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
+                        if (pathParts.length === 0) {
+                          if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
+                          return [...items, itemToAdd];
+                        }
+                        const currentPart = pathParts[0];
+                        const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
+                        if (existingIdx >= 0) {
+                          const newItems = [...items];
+                          const folder = newItems[existingIdx] as VirtualFolder;
+                          newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
+                          return newItems;
+                        } else {
+                          const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
+                          return [...items, newFolder];
+                        }
+                      };
+                      
+                      const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: folderName, type: 'folder', children: [] };
+                      return ensurePathAndAddItem(prev, parts, newFolder);
+                    });
+                  }
+                  
                   setWorkspaceMode('folder_construction');
                   responses.push({
                     name: call.name,
                     id: call.id,
-                    response: { result: `Comando para criar pasta '${name}'${parentName ? ` dentro de '${parentName}'` : ' na raiz'} enviado.` }
+                    response: { result: `Pasta '${path}' criada com sucesso.` }
                   });
                 } else if (call.name === "create_file") {
-                  const name = call.args.name as string;
-                  const parentName = call.args.parentName as string | undefined;
+                  const path = call.args.path as string;
+                  const parts = path.split('/').filter(Boolean);
+                  const fileName = parts.pop();
                   
-                  addFile(null, name, parentName);
+                  if (fileName) {
+                    setFileSystem(prev => {
+                      const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
+                        if (pathParts.length === 0) {
+                          if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
+                          return [...items, itemToAdd];
+                        }
+                        const currentPart = pathParts[0];
+                        const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
+                        if (existingIdx >= 0) {
+                          const newItems = [...items];
+                          const folder = newItems[existingIdx] as VirtualFolder;
+                          newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
+                          return newItems;
+                        } else {
+                          const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
+                          return [...items, newFolder];
+                        }
+                      };
+                      
+                      const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content: '' };
+                      return ensurePathAndAddItem(prev, parts, newFile);
+                    });
+                  }
+                  
                   setWorkspaceMode('folder_construction');
                   responses.push({
                     name: call.name,
                     id: call.id,
-                    response: { result: `Comando para criar arquivo '${name}'${parentName ? ` dentro de '${parentName}'` : ' na raiz'} enviado.` }
+                    response: { result: `Arquivo '${path}' criado com sucesso.` }
                   });
                 } else if (call.name === "write_to_file") {
-                  const fileName = call.args.fileName as string;
+                  const path = call.args.path as string;
                   const content = call.args.content as string;
+                  const parts = path.split('/').filter(Boolean);
+                  const fileName = parts.pop();
                   
-                  setFileSystem(prev => {
-                    let fileId: string | null = null;
-                    const findFileId = (items: FileSystemItem[], targetName: string): string | null => {
-                      for (const item of items) {
-                        if (item.type === 'file' && item.name === targetName) return item.id;
-                        if (item.type === 'folder' && item.children) {
-                          const found = findFileId(item.children, targetName);
-                          if (found) return found;
+                  if (fileName) {
+                    setFileSystem(prev => {
+                      const writeToPath = (items: FileSystemItem[], pathParts: string[]): FileSystemItem[] => {
+                        if (pathParts.length === 0) {
+                          return items.map(item => {
+                            if (item.type === 'file' && item.name === fileName) {
+                              return { ...item, content };
+                            }
+                            return item;
+                          });
                         }
-                      }
-                      return null;
-                    };
-                    fileId = findFileId(prev, fileName);
-                    
-                    if (fileId) {
-                      const updateChildren = (items: FileSystemItem[]): FileSystemItem[] => {
+                        const currentPart = pathParts[0];
                         return items.map(item => {
-                          if (item.type === 'file' && item.id === fileId) {
-                            return { ...item, content };
-                          }
-                          if (item.type === 'folder') {
-                            return { ...item, children: updateChildren(item.children || []) };
+                          if (item.type === 'folder' && item.name === currentPart) {
+                            return { ...item, children: writeToPath(item.children || [], pathParts.slice(1)) };
                           }
                           return item;
                         });
                       };
-                      return updateChildren(prev);
-                    }
-                    return prev;
-                  });
+                      
+                      // Check if file exists first, if not create it
+                      let fileExists = false;
+                      const checkExists = (items: FileSystemItem[], pathParts: string[]) => {
+                        if (pathParts.length === 0) {
+                          fileExists = items.some(i => i.type === 'file' && i.name === fileName);
+                          return;
+                        }
+                        const folder = items.find(i => i.type === 'folder' && i.name === pathParts[0]) as VirtualFolder | undefined;
+                        if (folder) checkExists(folder.children || [], pathParts.slice(1));
+                      };
+                      checkExists(prev, parts);
+
+                      if (!fileExists) {
+                        const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
+                          if (pathParts.length === 0) {
+                            if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
+                            return [...items, itemToAdd];
+                          }
+                          const currentPart = pathParts[0];
+                          const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
+                          if (existingIdx >= 0) {
+                            const newItems = [...items];
+                            const folder = newItems[existingIdx] as VirtualFolder;
+                            newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
+                            return newItems;
+                          } else {
+                            const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
+                            return [...items, newFolder];
+                          }
+                        };
+                        const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content };
+                        return ensurePathAndAddItem(prev, parts, newFile);
+                      }
+
+                      return writeToPath(prev, parts);
+                    });
+                  }
                   
                   setWorkspaceMode('folder_construction');
                   responses.push({
                     name: call.name,
                     id: call.id,
-                    response: { result: `Comando para escrever no arquivo '${fileName}' enviado.` }
+                    response: { result: `Conteúdo escrito no arquivo '${path}'.` }
                   });
                 } else if (call.name === "openUrl") {
                   const url = call.args.url as string;
@@ -1727,7 +1244,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative h-screen w-screen flex flex-col overflow-hidden">
+    <div className="relative h-[100dvh] w-screen flex flex-col overflow-hidden">
       {/* Click Visual Effect */}
       <AnimatePresence>
         {clickVisual.visible && (
@@ -1755,7 +1272,7 @@ export default function App() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(230,126,34,0.05)_0%,_transparent_70%)] pointer-events-none" />
 
       {/* Header */}
-      <header className="relative z-30 flex justify-between items-center p-6 md:p-8">
+      <header className="relative z-30 flex justify-between items-center p-4 md:p-6">
         <button 
           onClick={() => setIsSidebarOpen(true)}
           className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
@@ -1776,7 +1293,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative z-20 flex flex-col items-center justify-center overflow-hidden">
+      <main className="flex-1 relative z-20 flex flex-col items-center justify-center overflow-hidden w-full">
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -1784,7 +1301,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-6xl h-[75vh] px-6 flex flex-col gap-6"
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
             >
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
                 <div className="flex items-center gap-4">
@@ -1853,12 +1370,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden">
+              <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
                 <div className={cn(
-                  "transition-all duration-500 flex flex-col gap-6",
-                  isPreviewOpen ? "w-full md:w-1/2 h-1/2 md:h-full" : "w-full h-full"
+                  "transition-all duration-500 flex flex-col gap-4 md:gap-6 min-h-0",
+                  isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
                 )}>
-                  <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[200px]">
+                  <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px]">
                     <textarea 
                       value={workspaceText}
                       onChange={(e) => setWorkspaceText(e.target.value)}
@@ -1891,7 +1408,7 @@ export default function App() {
                   <motion.div 
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="w-full md:w-1/2 h-1/2 md:h-full bg-white/[0.02] rounded-[2.5rem] border border-white/[0.05] overflow-hidden"
+                    className="w-full lg:w-1/2 h-1/2 lg:h-full bg-white/[0.02] rounded-[2.5rem] border border-white/[0.05] overflow-hidden min-h-[150px]"
                   >
                     <CodePreview code={workspaceText} />
                   </motion.div>
@@ -1904,7 +1421,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-6xl h-[75vh] px-6 flex flex-col gap-6"
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
             >
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
                 <div className="flex items-center gap-4">
@@ -1960,10 +1477,10 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
+              <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
                 {/* File Explorer */}
-                <div className="w-full md:w-1/3 h-1/2 md:h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-6 flex flex-col gap-6 min-h-[200px] scrollbar-hide">
-                  <div className="flex items-center justify-between mb-2">
+                <div className="w-full lg:w-80 shrink-0 h-1/2 lg:h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6 min-h-[150px] scrollbar-hide">
+                  <div className="flex items-center justify-between mb-2 shrink-0">
                     <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Arquivos</span>
                     <button 
                       onClick={() => {
@@ -1995,7 +1512,7 @@ export default function App() {
                 </div>
 
                 {/* Editor */}
-                <div className="flex-1 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 overflow-hidden flex flex-col">
+                <div className="flex-1 bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 overflow-hidden flex flex-col min-h-[150px]">
                   {selectedFileId ? (
                     <textarea 
                       value={(() => {
@@ -2030,16 +1547,16 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center w-full max-w-6xl h-full px-4"
+              className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8"
             >
-              <div className="mb-8 text-center shrink-0">
+              <div className="mb-4 md:mb-8 text-center shrink-0">
                 <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE</h1>
                 <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
               </div>
 
-              <div className="flex-1 w-full flex flex-col min-h-0 gap-6">
+              <div className="flex-1 w-full flex flex-col min-h-0 gap-4 md:gap-6">
                 {/* Visualizer Area */}
-                <div className="flex flex-col items-center justify-center py-4 shrink-0">
+                <div className="flex flex-col items-center justify-center py-2 md:py-4 shrink-0">
                   <InfinityLogo active={isListening} speaking={isSpeaking} />
                   
                   <div className="mt-6 flex flex-col items-center gap-2">
@@ -2091,7 +1608,7 @@ export default function App() {
                 </div>
 
                 {/* Chat History - Integrated into screen */}
-                <div className="flex-1 flex flex-col justify-center gap-4 px-8 overflow-hidden">
+                <div className="flex-1 flex flex-col justify-center gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto">
                   {chatHistory.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-her-muted/10 italic text-lg font-light">
                       <p>Manifeste sua intenção...</p>
@@ -2179,7 +1696,7 @@ export default function App() {
                 </div>
 
                 {/* Chat Input Area */}
-                <div className="shrink-0 pb-4">
+                <div className="shrink-0 pt-4 w-full max-w-3xl mx-auto">
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={handleVoiceToggle}
@@ -2219,7 +1736,7 @@ export default function App() {
       </main>
 
       {/* Footer Controls */}
-      <footer className="relative z-30 p-4 md:p-8 flex justify-center items-center gap-8">
+      <footer className="relative z-30 p-4 md:p-6 flex justify-center items-center gap-8">
         <button 
           onClick={handleMuteToggle}
           className={cn(

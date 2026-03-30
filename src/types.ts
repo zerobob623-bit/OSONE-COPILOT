@@ -11,17 +11,6 @@ export interface ApiKeys {
 
 export type WorkspaceMode = 'home' | 'writing' | 'folder_construction';
 
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface LiveState {
-  status: 'idle' | 'connecting' | 'connected' | 'error';
-  error?: string;
-}
-
 export interface VirtualFile {
   id: string;
   name: string;
@@ -37,3 +26,14 @@ export interface VirtualFolder {
 }
 
 export type FileSystemItem = VirtualFile | VirtualFolder;
+
+export interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface LiveState {
+  status: 'idle' | 'connecting' | 'connected' | 'error';
+  error?: string;
+}
