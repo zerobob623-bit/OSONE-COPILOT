@@ -228,28 +228,45 @@ const InfinityLogo = ({ active, speaking }: { active: boolean; speaking: boolean
         active || speaking ? "bg-her-accent/10 blur-[100px] scale-110" : "bg-transparent"
       )} />
       
-      <motion.div
-        animate={{
-          scale: speaking ? [1, 1.05, 1] : active ? [1, 1.02, 1] : 1,
-          rotate: active ? [0, 5, -5, 0] : 0
-        }}
-        transition={{
-          duration: speaking ? 2 : 4,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-        className="relative z-10 w-full h-full"
-      >
-        <img 
-          src="https://storage.googleapis.com/static.antigravity.ai/projects/6386d2bd-28da-476a-b186-4e838294c2e4/assets/1743367115161_input_file_0.png"
-          alt="OSONE"
-          className={cn(
-            "w-full h-full object-contain transition-all duration-500",
-            active || speaking ? "drop-shadow-[0_0_30px_rgba(242,125,38,0.4)]" : "opacity-40 grayscale-[50%]"
-          )}
-          referrerPolicy="no-referrer"
-        />
-      </motion.div>
+      <div className="relative flex items-center gap-2 md:gap-4">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            animate={{
+              scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
+              opacity: speaking ? [0.2, 0.5, 0.2] : active ? [0.15, 0.3, 0.15] : 0.1,
+              y: speaking ? [0, -5, 0] : 0
+            }}
+            transition={{
+              duration: speaking ? 2 : 4,
+              repeat: Infinity,
+              delay: i * 0.3,
+              ease: "easeInOut"
+            }}
+            className={cn(
+              "w-8 h-8 md:w-12 md:h-12 rounded-full border border-white/[0.05] flex items-center justify-center",
+              (active || speaking) && "bg-white/[0.02] shadow-[0_0_40px_rgba(255,78,0,0.05)]"
+            )}
+          >
+            <div className={cn(
+              "w-1.5 h-1.5 md:w-2 md:h-2 rounded-full transition-all duration-700",
+              (active || speaking) ? "bg-her-accent/60 scale-110" : "bg-white/10 scale-100"
+            )} />
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Rotating Rings */}
+      <motion.div 
+        animate={{ rotate: 360 }}
+        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+        className="absolute inset-0 border border-white/[0.03] rounded-full"
+      />
+      <motion.div 
+        animate={{ rotate: -360 }}
+        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+        className="absolute inset-6 border border-white/[0.02] rounded-full border-dashed"
+      />
       
       {/* Speaking rings */}
       {speaking && (
