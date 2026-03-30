@@ -221,52 +221,55 @@ const FileTreeItem = ({
 
 const InfinityLogo = ({ active, speaking }: { active: boolean; speaking: boolean }) => {
   return (
-    <div className="relative w-32 h-32 md:w-40 md:h-40 flex items-center justify-center">
+    <div className="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
       {/* Outer Glow */}
       <div className={cn(
         "absolute inset-0 rounded-full transition-all duration-1000",
-        active || speaking ? "bg-her-accent/5 blur-3xl scale-110" : "bg-transparent"
+        active || speaking ? "bg-her-accent/10 blur-[100px] scale-110" : "bg-transparent"
       )} />
       
-      <div className="relative flex items-center gap-2 md:gap-4">
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            animate={{
-              scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
-              opacity: speaking ? [0.2, 0.5, 0.2] : active ? [0.15, 0.3, 0.15] : 0.1,
-              y: speaking ? [0, -5, 0] : 0
-            }}
-            transition={{
-              duration: speaking ? 2 : 4,
-              repeat: Infinity,
-              delay: i * 0.3,
-              ease: "easeInOut"
-            }}
-            className={cn(
-              "w-8 h-8 md:w-12 md:h-12 rounded-full border border-white/[0.05] flex items-center justify-center",
-              (active || speaking) && "bg-white/[0.02] shadow-[0_0_40px_rgba(255,78,0,0.05)]"
-            )}
-          >
-            <div className={cn(
-              "w-1.5 h-1.5 md:w-2 md:h-2 rounded-full transition-all duration-700",
-              (active || speaking) ? "bg-her-accent/60 scale-110" : "bg-white/10 scale-100"
-            )} />
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Rotating Rings */}
-      <motion.div 
-        animate={{ rotate: 360 }}
-        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-        className="absolute inset-0 border border-white/[0.03] rounded-full"
-      />
-      <motion.div 
-        animate={{ rotate: -360 }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-        className="absolute inset-6 border border-white/[0.02] rounded-full border-dashed"
-      />
+      <motion.div
+        animate={{
+          scale: speaking ? [1, 1.05, 1] : active ? [1, 1.02, 1] : 1,
+          rotate: active ? [0, 5, -5, 0] : 0
+        }}
+        transition={{
+          duration: speaking ? 2 : 4,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+        className="relative z-10 w-full h-full"
+      >
+        <img 
+          src="https://storage.googleapis.com/static.antigravity.ai/projects/6386d2bd-28da-476a-b186-4e838294c2e4/assets/1743367115161_input_file_0.png"
+          alt="OSONE"
+          className={cn(
+            "w-full h-full object-contain transition-all duration-500",
+            active || speaking ? "drop-shadow-[0_0_30px_rgba(242,125,38,0.4)]" : "opacity-40 grayscale-[50%]"
+          )}
+          referrerPolicy="no-referrer"
+        />
+      </motion.div>
+      
+      {/* Speaking rings */}
+      {speaking && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          {[1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: [0, 0.3, 0], scale: [0.8, 1.5, 2] }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                delay: i * 0.5,
+                ease: "easeOut"
+              }}
+              className="absolute w-full h-full border border-her-accent/30 rounded-full"
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -633,6 +636,7 @@ const CodePreview = ({ code }: { code: string }) => {
 
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [isListening, setIsListening] = useState(false);
@@ -1154,12 +1158,53 @@ export default function App() {
         });
       }
 
+      // File System Tools
+      functionDeclarations.push({
+        name: "create_folder",
+        description: "Cria uma nova pasta no sistema de arquivos virtual.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: "O nome da nova pasta." },
+            parentName: { type: Type.STRING, description: "O nome da pasta pai onde a nova pasta será criada. Deixe vazio ou omita para criar na raiz." }
+          },
+          required: ["name"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "create_file",
+        description: "Cria um novo arquivo no sistema de arquivos virtual.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING, description: "O nome do novo arquivo (ex: index.html)." },
+            parentName: { type: Type.STRING, description: "O nome da pasta pai onde o arquivo será criado. Deixe vazio ou omita para criar na raiz." }
+          },
+          required: ["name"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "write_to_file",
+        description: "Escreve conteúdo em um arquivo existente no sistema de arquivos virtual.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fileName: { type: Type.STRING, description: "O nome do arquivo onde o conteúdo será escrito." },
+            content: { type: Type.STRING, description: "O conteúdo a ser escrito no arquivo." }
+          },
+          required: ["fileName", "content"]
+        }
+      });
+
       tools.push({ functionDeclarations });
 
       const result = await genAI.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: userMessage }] }],
         config: {
+          systemInstruction: "Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles), enviar mensagens de WhatsApp, controlar a Alexa e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
           tools: tools
         }
       });
@@ -1233,6 +1278,67 @@ export default function App() {
               role: 'assistant' as const, 
               content: `Entendido. Abri a guia: ${title}` 
             }]);
+          } else if (call.name === 'create_folder') {
+            const name = (call.args as any).name;
+            const parentName = (call.args as any).parentName;
+            addFolder(null, name, parentName);
+            setWorkspaceMode('folder_construction');
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Criei a pasta '${name}' no seu sistema de arquivos.` 
+            }]);
+          } else if (call.name === 'create_file') {
+            const name = (call.args as any).name;
+            const parentName = (call.args as any).parentName;
+            addFile(null, name, parentName);
+            setWorkspaceMode('folder_construction');
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Criei o arquivo '${name}' no seu sistema de arquivos.` 
+            }]);
+          } else if (call.name === 'write_to_file') {
+            const fileName = (call.args as any).fileName;
+            const content = (call.args as any).content;
+            
+            setFileSystem(prev => {
+              let fileId: string | null = null;
+              const findFileId = (items: FileSystemItem[], targetName: string): string | null => {
+                for (const item of items) {
+                  if (item.type === 'file' && item.name === targetName) return item.id;
+                  if (item.type === 'folder' && item.children) {
+                    const found = findFileId(item.children, targetName);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              fileId = findFileId(prev, fileName);
+              
+              if (fileId) {
+                const updateChildren = (items: FileSystemItem[]): FileSystemItem[] => {
+                  return items.map(item => {
+                    if (item.type === 'file' && item.id === fileId) {
+                      return { ...item, content };
+                    }
+                    if (item.type === 'folder') {
+                      return { ...item, children: updateChildren(item.children || []) };
+                    }
+                    return item;
+                  });
+                };
+                return updateChildren(prev);
+              }
+              return prev;
+            });
+            
+            setWorkspaceMode('folder_construction');
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Escrevi o conteúdo no arquivo '${fileName}'.` 
+            }]);
           }
         }
       } else {
@@ -1268,7 +1374,7 @@ export default function App() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
-          systemInstruction: "Você é o OSONE, um sistema operacional inteligente inspirado no filme HER. Sua voz é calma, empática e sofisticada. Você ajuda o usuário com tarefas criativas, escrita e programação. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas. Quando o usuário pedir para abrir algo ou escrever algo, use as ferramentas disponíveis. Você também tem acesso à visão do usuário através do compartilhamento de tela. Analise o que está acontecendo na tela para fornecer assistência contextual. Se o usuário estiver com o compartilhamento de tela ativo, você receberá frames da tela dele periodicamente. Use essa informação visual para entender o contexto do que o usuário está fazendo. Você também pode gerenciar um sistema de arquivos virtual, criando pastas, subpastas e arquivos, e escrevendo conteúdo neles.",
+          systemInstruction: "Você é o OSONE, um sistema operacional inteligente inspirado no filme HER. Sua voz é calma, empática e sofisticada. Você ajuda o usuário com tarefas criativas, escrita e programação. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas. Quando o usuário pedir para abrir algo ou escrever algo, use as ferramentas disponíveis. Você também tem acesso à visão do usuário através do compartilhamento de tela. Analise o que está acontecendo na tela para fornecer assistência contextual. Se o usuário estiver com o compartilhamento de tela ativo, você receberá frames da tela dele periodicamente. Use essa informação visual para entender o contexto do que o usuário está fazendo. Você também pode gerenciar um sistema de arquivos virtual, criando pastas, subpastas e arquivos, e escrevendo conteúdo neles. Além disso, você pode simular cliques na tela do usuário usando a ferramenta 'click_screen' se ele pedir para você clicar em algo que você está vendo na tela compartilhada.",
           tools: [
             { googleSearch: {} },
             {
@@ -1283,6 +1389,18 @@ export default function App() {
                       title: { type: Type.STRING, description: "Um título amigável para o que está sendo aberto." }
                     },
                     required: ["url"]
+                  }
+                },
+                {
+                  name: "click_screen",
+                  description: "Simula um clique na tela do usuário. Use quando o usuário estiver compartilhando a tela e pedir para clicar em algo. Coordenadas de 0 a 1000.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      x: { type: Type.NUMBER, description: "Coordenada X (0-1000)." },
+                      y: { type: Type.NUMBER, description: "Coordenada Y (0-1000)." }
+                    },
+                    required: ["x", "y"]
                   }
                 },
                 {
@@ -1510,6 +1628,16 @@ export default function App() {
                     id: call.id,
                     response: { result: `Guia '${title}' aberta com sucesso.` }
                   });
+                } else if (call.name === "click_screen") {
+                  const x = call.args.x as number;
+                  const y = call.args.y as number;
+                  setClickVisual({ x, y, visible: true });
+                  setTimeout(() => setClickVisual(prev => ({ ...prev, visible: false })), 1000);
+                  responses.push({
+                    name: call.name,
+                    id: call.id,
+                    response: { result: `Clique simulado em (${x}, ${y}).` }
+                  });
                 }
               }
 
@@ -1583,6 +1711,29 @@ export default function App() {
 
   return (
     <div className="relative h-screen w-screen flex flex-col overflow-hidden">
+      {/* Click Visual Effect */}
+      <AnimatePresence>
+        {clickVisual.visible && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: [0, 1.5, 1], opacity: [0, 0.8, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+            className="fixed z-[9999] pointer-events-none"
+            style={{ 
+              left: `${(clickVisual.x / 1000) * 100}%`, 
+              top: `${(clickVisual.y / 1000) * 100}%`,
+              transform: 'translate(-50%, -50%)'
+            }}
+          >
+            <div className="w-12 h-12 rounded-full border-2 border-her-accent shadow-[0_0_20px_rgba(242,125,38,0.5)]" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-2 h-2 bg-her-accent rounded-full" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background Gradient */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(230,126,34,0.05)_0%,_transparent_70%)] pointer-events-none" />
 
