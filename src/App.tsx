@@ -25,6 +25,7 @@ import {
   Monitor,
   MonitorOff,
   Plus,
+  Paperclip,
   Image as ImageIcon,
   MessageSquare,
   Maximize,
@@ -39,6 +40,7 @@ import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
 import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
+import { TuyaService } from './services/tuyaService';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
 import { SettingsModal } from './components/SettingsModal';
@@ -66,7 +68,10 @@ export default function App() {
       evolutionApiUrl: '', 
       evolutionApiKey: '', 
       evolutionInstanceName: '', 
-      alexaSkillId: '' 
+      alexaSkillId: '',
+      tuyaClientId: '',
+      tuyaClientSecret: '',
+      tuyaRegion: 'us'
     };
     return saved ? { ...defaultKeys, ...JSON.parse(saved) } : defaultKeys;
   });
@@ -90,6 +95,19 @@ export default function App() {
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setAttachedFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Virtual File System State
   const [fileSystem, setFileSystem] = useState<FileSystemItem[]>(() => {
@@ -639,14 +657,29 @@ export default function App() {
   };
 
   const handleHomeChat = async () => {
-    if (!homePrompt.trim() || !apiKeys.gemini) {
+    if ((!homePrompt.trim() && attachedFiles.length === 0) || !apiKeys.gemini) {
       if (!apiKeys.gemini) setIsSettingsOpen(true);
       return;
     }
 
     const userMessage = homePrompt.trim();
-    setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'user' as const, content: userMessage }]);
+    const fileNames = attachedFiles.map(f => f.name).join(', ');
+    const fullMessage = fileNames ? `${userMessage}\n\n[Arquivos anexados: ${fileNames}]` : userMessage;
+    
+    if (liveState.status === 'connected' && liveSessionRef.current) {
+      if (userMessage) {
+        liveSessionRef.current.sendRealtimeInput({ text: userMessage });
+      }
+      if (attachedFiles.length > 0) {
+        sendFilesToLiveSession(liveSessionRef.current);
+      }
+      setHomePrompt('');
+      return;
+    }
+
+    setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'user' as const, content: fullMessage }]);
     setHomePrompt('');
+    setAttachedFiles([]);
 
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
@@ -701,6 +734,41 @@ export default function App() {
         });
       }
 
+      if (apiKeys.tuyaClientId && apiKeys.tuyaClientSecret) {
+        functionDeclarations.push({
+          name: "list_home_devices",
+          description: "Lista todos os dispositivos inteligentes da casa (Tuya).",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {}
+          }
+        });
+
+        functionDeclarations.push({
+          name: "control_home_device",
+          description: "Controla um dispositivo inteligente da casa (Tuya).",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              deviceId: { type: Type.STRING, description: "O ID do dispositivo a ser controlado." },
+              commands: { 
+                type: Type.ARRAY, 
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    code: { type: Type.STRING, description: "O código do comando (ex: switch_1, bright_value)." },
+                    value: { type: Type.STRING, description: "O valor do comando (ex: true, false, 500)." }
+                  },
+                  required: ["code", "value"]
+                },
+                description: "Lista de comandos a enviar." 
+              }
+            },
+            required: ["deviceId", "commands"]
+          }
+        });
+      }
+
       // File System Tools
       functionDeclarations.push({
         name: "create_folder",
@@ -741,14 +809,28 @@ export default function App() {
         }
       });
 
+      functionDeclarations.push({
+        name: "generate_image",
+        description: "Gera uma imagem baseada em uma descrição (prompt).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            prompt: { type: Type.STRING, description: "A descrição detalhada da imagem a ser gerada." },
+            aspectRatio: { type: Type.STRING, description: "A proporção da imagem (ex: '1:1', '16:9', '9:16'). Padrão: '1:1'." }
+          },
+          required: ["prompt"]
+        }
+      });
+
       tools.push({ functionDeclarations });
 
       const result = await genAI.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: userMessage }] }],
         config: {
-          systemInstruction: "Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles), enviar mensagens de WhatsApp, controlar a Alexa e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
-          tools: tools
+          systemInstruction: "Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles), enviar mensagens de WhatsApp, controlar a Alexa, controlar dispositivos inteligentes da casa via Tuya e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
+          tools: tools,
+          toolConfig: { includeServerSideToolInvocations: true }
         }
       });
       
@@ -812,6 +894,42 @@ export default function App() {
               role: 'assistant' as const, 
               content: `Comando enviado para sua Alexa: "${cmd}"` 
             }]);
+          } else if (call.name === 'list_home_devices') {
+            try {
+              const result = await TuyaService.listDevices(apiKeys);
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Dispositivos encontrados: ${JSON.stringify(result.result || result)}` 
+              }]);
+            } catch (err: any) {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Erro ao listar dispositivos: ${err.message}` 
+              }]);
+            }
+          } else if (call.name === 'control_home_device') {
+            const { deviceId, commands } = call.args as any;
+            try {
+              // Convert values to actual types if needed (Tuya expects specific types)
+              const processedCommands = commands.map((c: any) => ({
+                code: c.code,
+                value: c.value === 'true' ? true : c.value === 'false' ? false : isNaN(Number(c.value)) ? c.value : Number(c.value)
+              }));
+              const result = await TuyaService.controlDevice(apiKeys, deviceId, processedCommands);
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Comando enviado para o dispositivo ${deviceId}. Resultado: ${JSON.stringify(result)}` 
+              }]);
+            } catch (err: any) {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Erro ao controlar dispositivo: ${err.message}` 
+              }]);
+            }
           } else if (call.name === 'openUrl') {
             const url = (call.args as any).url;
             const title = (call.args as any).title || url;
@@ -882,6 +1000,56 @@ export default function App() {
               role: 'assistant' as const, 
               content: `Escrevi o conteúdo no arquivo '${fileName}'.` 
             }]);
+          } else if (call.name === 'generate_image') {
+            const prompt = (call.args as any).prompt;
+            const aspectRatio = (call.args as any).aspectRatio || '1:1';
+            
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Gerando imagem para: "${prompt}"...` 
+            }]);
+
+            try {
+              const imageResult = await genAI.models.generateContent({
+                model: 'gemini-3.1-flash-image-preview',
+                contents: {
+                  parts: [{ text: prompt }]
+                },
+                config: {
+                  imageConfig: {
+                    aspectRatio: aspectRatio,
+                    imageSize: "1K"
+                  }
+                }
+              });
+
+              let imageUrl = '';
+              for (const part of imageResult.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                  const base64EncodeString = part.inlineData.data;
+                  imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+                  break;
+                }
+              }
+
+              if (imageUrl) {
+                setChatHistory(prev => [...prev, { 
+                  id: Math.random().toString(36).substr(2, 9), 
+                  role: 'assistant' as const, 
+                  content: `Aqui está a imagem gerada para: "${prompt}"`,
+                  imageUrl: imageUrl
+                }]);
+              } else {
+                throw new Error("Não foi possível gerar a imagem.");
+              }
+            } catch (err: any) {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Erro ao gerar imagem: ${err.message}` 
+              }]);
+            }
           }
         }
       } else {
@@ -894,6 +1062,33 @@ export default function App() {
       console.error("Erro ao enviar mensagem:", error);
       setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." }]);
     }
+  };
+
+  const sendFilesToLiveSession = async (session: any, filesToRead: File[] = attachedFiles) => {
+    if (!session) return;
+
+    for (const file of filesToRead) {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          session.sendRealtimeInput({
+            video: { data: base64, mimeType: file.type }
+          });
+        };
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const content = reader.result as string;
+          session.sendRealtimeInput({
+            text: `Conteúdo do arquivo '${file.name}':\n\n${content}`
+          });
+        };
+        reader.readAsText(file);
+      }
+    }
+    setAttachedFiles([]);
   };
 
   const startLiveSession = async () => {
@@ -910,14 +1105,14 @@ export default function App() {
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer();
 
-      const session = await ai.live.connect({
+      const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
-          systemInstruction: "Você é o OSONE, um sistema operacional inteligente inspirado no filme HER. Sua voz é calma, empática e sofisticada. Você ajuda o usuário com tarefas criativas, escrita e programação. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas. Quando o usuário pedir para abrir algo ou escrever algo, use as ferramentas disponíveis. Você também tem acesso à visão do usuário através do compartilhamento de tela. Analise o que está acontecendo na tela para fornecer assistência contextual. Se o usuário estiver com o compartilhamento de tela ativo, você receberá frames da tela dele periodicamente. Use essa informação visual para entender o contexto do que o usuário está fazendo. Você também pode gerenciar um sistema de arquivos virtual, criando pastas, subpastas e arquivos, e escrevendo conteúdo neles. Além disso, você pode simular cliques na tela do usuário usando a ferramenta 'click_screen' se ele pedir para você clicar em algo que você está vendo na tela compartilhada.",
+          systemInstruction: "Você é o OSONE, um sistema operacional inteligente inspirado no filme HER. Sua voz é calma, empática e sofisticada. Você ajuda o usuário com tarefas criativas, escrita e programação. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas. Quando o usuário pedir para abrir algo ou escrever algo, use as ferramentas disponíveis. Você também tem acesso à visão do usuário através do compartilhamento de tela. Analise o que está acontecendo na tela para fornecer assistência contextual. Se o usuário estiver com o compartilhamento de tela ativo, você receberá frames da tela dele periodicamente. Use essa informação visual para entender o contexto do que o usuário está fazendo. Além disso, o usuário pode enviar arquivos para você ler. Se você receber o conteúdo de um arquivo ou uma imagem, analise-o e discuta com o usuário em tempo real. Você também pode gerenciar um sistema de arquivos virtual, criando pastas, subpastas e arquivos, e escrevendo conteúdo neles. Além disso, você pode simular cliques na tela do usuário usando a ferramenta 'click_screen' se ele pedir para você clicar em algo que você está vendo na tela compartilhada. Você também pode listar e controlar dispositivos inteligentes da casa via Tuya.",
           tools: [
             { googleSearch: {} },
             {
@@ -990,6 +1185,37 @@ export default function App() {
                   }
                 },
                 {
+                  name: "list_home_devices",
+                  description: "Lista todos os dispositivos inteligentes da casa (Tuya).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: "control_home_device",
+                  description: "Controla um dispositivo inteligente da casa (Tuya).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      deviceId: { type: Type.STRING, description: "O ID do dispositivo a ser controlado." },
+                      commands: { 
+                        type: Type.ARRAY, 
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            code: { type: Type.STRING, description: "O código do comando (ex: switch_1, bright_value)." },
+                            value: { type: Type.STRING, description: "O valor do comando (ex: true, false, 500)." }
+                          },
+                          required: ["code", "value"]
+                        },
+                        description: "Lista de comandos a enviar." 
+                      }
+                    },
+                    required: ["deviceId", "commands"]
+                  }
+                },
+                {
                   name: "create_folder",
                   description: "Cria uma nova pasta no sistema de arquivos virtual. Use o caminho completo.",
                   parameters: {
@@ -1041,167 +1267,107 @@ export default function App() {
         },
         callbacks: {
           onopen: () => {
-            setLiveState({ status: 'connected' });
-            setIsListening(true);
-            audioProcessorRef.current?.startRecording((base64Data) => {
-              session.sendRealtimeInput({
-                audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            sessionPromise.then((session) => {
+              liveSessionRef.current = session;
+              setLiveState({ status: 'connected' });
+              setIsListening(true);
+              audioProcessorRef.current?.startRecording((base64Data) => {
+                session.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                });
               });
+              
+              // If there are files attached when starting the session, send them
+              if (attachedFiles.length > 0) {
+                sendFilesToLiveSession(session);
+              }
             });
           },
           onmessage: async (message) => {
-            if (message.serverContent?.modelTurn?.parts) {
-              const audioPart = message.serverContent.modelTurn.parts.find(p => p.inlineData);
-              if (audioPart?.inlineData?.data) {
-                setIsSpeaking(true);
-                audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
+            sessionPromise.then(async (session) => {
+              if (message.serverContent?.modelTurn?.parts) {
+                const audioPart = message.serverContent.modelTurn.parts.find(p => p.inlineData);
+                if (audioPart?.inlineData?.data) {
+                  setIsSpeaking(true);
+                  audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
+                }
+                
+                const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
+                if (textPart?.text) {
+                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: textPart.text! }]);
+                }
               }
-              
-              const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
-              if (textPart?.text) {
-                setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: textPart.text! }]);
-              }
-            }
 
-            if (message.toolCall) {
-              const calls = message.toolCall.functionCalls;
-              const responses: any[] = [];
+              if (message.toolCall) {
+                const calls = message.toolCall.functionCalls;
+                const responses: any[] = [];
 
-              for (const call of calls) {
-                if (call.name === "switch_workspace_mode") {
-                  setWorkspaceMode(call.args.mode as any);
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Modo alterado para ${call.args.mode}` }
-                  });
-                } else if (call.name === "write_text_to_workspace") {
-                  setWorkspaceText(call.args.content as string);
-                  setWorkspaceMode('writing');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: "Texto escrito com sucesso na aba de Escrita." }
-                  });
-                } else if (call.name === "generate_project_structure") {
-                  handleGenerateStructure(call.args.description as string);
-                  setWorkspaceMode('folder_construction');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: "Estrutura de projeto sendo gerada na aba de Construção de Pastas." }
-                  });
-                } else if (call.name === "create_folder") {
-                  const path = call.args.path as string;
-                  const parts = path.split('/').filter(Boolean);
-                  const folderName = parts.pop();
-                  
-                  if (folderName) {
-                    setFileSystem(prev => {
-                      const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
-                        if (pathParts.length === 0) {
-                          if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
-                          return [...items, itemToAdd];
-                        }
-                        const currentPart = pathParts[0];
-                        const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
-                        if (existingIdx >= 0) {
-                          const newItems = [...items];
-                          const folder = newItems[existingIdx] as VirtualFolder;
-                          newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
-                          return newItems;
-                        } else {
-                          const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
-                          return [...items, newFolder];
-                        }
-                      };
-                      
-                      const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: folderName, type: 'folder', children: [] };
-                      return ensurePathAndAddItem(prev, parts, newFolder);
+                for (const call of calls) {
+                  if (call.name === "switch_workspace_mode") {
+                    setWorkspaceMode(call.args.mode as any);
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Modo alterado para ${call.args.mode}` }
                     });
-                  }
-                  
-                  setWorkspaceMode('folder_construction');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Pasta '${path}' criada com sucesso.` }
-                  });
-                } else if (call.name === "create_file") {
-                  const path = call.args.path as string;
-                  const parts = path.split('/').filter(Boolean);
-                  const fileName = parts.pop();
-                  
-                  if (fileName) {
-                    setFileSystem(prev => {
-                      const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
-                        if (pathParts.length === 0) {
-                          if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
-                          return [...items, itemToAdd];
-                        }
-                        const currentPart = pathParts[0];
-                        const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
-                        if (existingIdx >= 0) {
-                          const newItems = [...items];
-                          const folder = newItems[existingIdx] as VirtualFolder;
-                          newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
-                          return newItems;
-                        } else {
-                          const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
-                          return [...items, newFolder];
-                        }
-                      };
-                      
-                      const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content: '' };
-                      return ensurePathAndAddItem(prev, parts, newFile);
+                  } else if (call.name === "write_text_to_workspace") {
+                    setWorkspaceText(call.args.content as string);
+                    setWorkspaceMode('writing');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Texto escrito com sucesso na aba de Escrita." }
                     });
-                  }
-                  
-                  setWorkspaceMode('folder_construction');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Arquivo '${path}' criado com sucesso.` }
-                  });
-                } else if (call.name === "write_to_file") {
-                  const path = call.args.path as string;
-                  const content = call.args.content as string;
-                  const parts = path.split('/').filter(Boolean);
-                  const fileName = parts.pop();
-                  
-                  if (fileName) {
-                    setFileSystem(prev => {
-                      const writeToPath = (items: FileSystemItem[], pathParts: string[]): FileSystemItem[] => {
-                        if (pathParts.length === 0) {
-                          return items.map(item => {
-                            if (item.type === 'file' && item.name === fileName) {
-                              return { ...item, content };
-                            }
-                            return item;
-                          });
-                        }
-                        const currentPart = pathParts[0];
-                        return items.map(item => {
-                          if (item.type === 'folder' && item.name === currentPart) {
-                            return { ...item, children: writeToPath(item.children || [], pathParts.slice(1)) };
-                          }
-                          return item;
-                        });
-                      };
-                      
-                      // Check if file exists first, if not create it
-                      let fileExists = false;
-                      const checkExists = (items: FileSystemItem[], pathParts: string[]) => {
-                        if (pathParts.length === 0) {
-                          fileExists = items.some(i => i.type === 'file' && i.name === fileName);
-                          return;
-                        }
-                        const folder = items.find(i => i.type === 'folder' && i.name === pathParts[0]) as VirtualFolder | undefined;
-                        if (folder) checkExists(folder.children || [], pathParts.slice(1));
-                      };
-                      checkExists(prev, parts);
-
-                      if (!fileExists) {
+                  } else if (call.name === "generate_project_structure") {
+                    handleGenerateStructure(call.args.description as string);
+                    setWorkspaceMode('folder_construction');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Estrutura de projeto sendo gerada na aba de Construção de Pastas." }
+                    });
+                  } else if (call.name === "list_home_devices") {
+                    try {
+                      const result = await TuyaService.listDevices(apiKeys);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Dispositivos encontrados: ${JSON.stringify(result.result || result)}` }
+                      });
+                    } catch (err: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Erro ao listar dispositivos: ${err.message}` }
+                      });
+                    }
+                  } else if (call.name === "control_home_device") {
+                    const { deviceId, commands } = call.args as any;
+                    try {
+                      const processedCommands = commands.map((c: any) => ({
+                        code: c.code,
+                        value: c.value === 'true' ? true : c.value === 'false' ? false : isNaN(Number(c.value)) ? c.value : Number(c.value)
+                      }));
+                      const result = await TuyaService.controlDevice(apiKeys, deviceId, processedCommands);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Comando enviado. Resultado: ${JSON.stringify(result)}` }
+                      });
+                    } catch (err: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Erro ao controlar dispositivo: ${err.message}` }
+                      });
+                    }
+                  } else if (call.name === "create_folder") {
+                    const path = call.args.path as string;
+                    const parts = path.split('/').filter(Boolean);
+                    const folderName = parts.pop();
+                    
+                    if (folderName) {
+                      setFileSystem(prev => {
                         const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
                           if (pathParts.length === 0) {
                             if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
@@ -1219,54 +1385,162 @@ export default function App() {
                             return [...items, newFolder];
                           }
                         };
-                        const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content };
+                        
+                        const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: folderName, type: 'folder', children: [] };
+                        return ensurePathAndAddItem(prev, parts, newFolder);
+                      });
+                    }
+                    
+                    setWorkspaceMode('folder_construction');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Pasta '${path}' criada com sucesso.` }
+                    });
+                  } else if (call.name === "create_file") {
+                    const path = call.args.path as string;
+                    const parts = path.split('/').filter(Boolean);
+                    const fileName = parts.pop();
+                    
+                    if (fileName) {
+                      setFileSystem(prev => {
+                        const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
+                          if (pathParts.length === 0) {
+                            if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
+                            return [...items, itemToAdd];
+                          }
+                          const currentPart = pathParts[0];
+                          const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
+                          if (existingIdx >= 0) {
+                            const newItems = [...items];
+                            const folder = newItems[existingIdx] as VirtualFolder;
+                            newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
+                            return newItems;
+                          } else {
+                            const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
+                            return [...items, newFolder];
+                          }
+                        };
+                        
+                        const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content: '' };
                         return ensurePathAndAddItem(prev, parts, newFile);
-                      }
+                      });
+                    }
+                    
+                    setWorkspaceMode('folder_construction');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Arquivo '${path}' criado com sucesso.` }
+                    });
+                  } else if (call.name === "write_to_file") {
+                    const path = call.args.path as string;
+                    const content = call.args.content as string;
+                    const parts = path.split('/').filter(Boolean);
+                    const fileName = parts.pop();
+                    
+                    if (fileName) {
+                      setFileSystem(prev => {
+                        const writeToPath = (items: FileSystemItem[], pathParts: string[]): FileSystemItem[] => {
+                          if (pathParts.length === 0) {
+                            return items.map(item => {
+                              if (item.type === 'file' && item.name === fileName) {
+                                return { ...item, content };
+                              }
+                              return item;
+                            });
+                          }
+                          const currentPart = pathParts[0];
+                          return items.map(item => {
+                            if (item.type === 'folder' && item.name === currentPart) {
+                              return { ...item, children: writeToPath(item.children || [], pathParts.slice(1)) };
+                            }
+                            return item;
+                          });
+                        };
+                        
+                        // Check if file exists first, if not create it
+                        let fileExists = false;
+                        const checkExists = (items: FileSystemItem[], pathParts: string[]) => {
+                          if (pathParts.length === 0) {
+                            fileExists = items.some(i => i.type === 'file' && i.name === fileName);
+                            return;
+                          }
+                          const folder = items.find(i => i.type === 'folder' && i.name === pathParts[0]) as VirtualFolder | undefined;
+                          if (folder) checkExists(folder.children || [], pathParts.slice(1));
+                        };
+                        checkExists(prev, parts);
 
-                      return writeToPath(prev, parts);
+                        if (!fileExists) {
+                          const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
+                            if (pathParts.length === 0) {
+                              if (items.some(i => i.name === itemToAdd.name && i.type === itemToAdd.type)) return items;
+                              return [...items, itemToAdd];
+                            }
+                            const currentPart = pathParts[0];
+                            const existingIdx = items.findIndex(i => i.name === currentPart && i.type === 'folder');
+                            if (existingIdx >= 0) {
+                              const newItems = [...items];
+                              const folder = newItems[existingIdx] as VirtualFolder;
+                              newItems[existingIdx] = { ...folder, children: ensurePathAndAddItem(folder.children || [], pathParts.slice(1), itemToAdd) };
+                              return newItems;
+                            } else {
+                              const newFolder: VirtualFolder = { id: Math.random().toString(36).substr(2, 9), name: currentPart, type: 'folder', children: ensurePathAndAddItem([], pathParts.slice(1), itemToAdd) };
+                              return [...items, newFolder];
+                            }
+                          };
+                          const newFile: VirtualFile = { id: Math.random().toString(36).substr(2, 9), name: fileName, type: 'file', content };
+                          return ensurePathAndAddItem(prev, parts, newFile);
+                        }
+
+                        return writeToPath(prev, parts);
+                      });
+                    }
+                    
+                    setWorkspaceMode('folder_construction');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Conteúdo escrito no arquivo '${path}'.` }
+                    });
+                  } else if (call.name === "openUrl") {
+                    const url = call.args.url as string;
+                    const title = (call.args.title as string) || url;
+                    window.open(url, '_blank');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Guia '${title}' aberta com sucesso.` }
+                    });
+                  } else if (call.name === "click_screen") {
+                    const x = call.args.x as number;
+                    const y = call.args.y as number;
+                    
+                    // Visual feedback in the OSONE app
+                    setClickVisual({ x, y, visible: true });
+                    setTimeout(() => setClickVisual(prev => ({ ...prev, visible: false })), 1000);
+                    
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Clique simulado em (${x}, ${y}).` }
                     });
                   }
-                  
-                  setWorkspaceMode('folder_construction');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Conteúdo escrito no arquivo '${path}'.` }
-                  });
-                } else if (call.name === "openUrl") {
-                  const url = call.args.url as string;
-                  const title = (call.args.title as string) || url;
-                  window.open(url, '_blank');
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Guia '${title}' aberta com sucesso.` }
-                  });
-                } else if (call.name === "click_screen") {
-                  const x = call.args.x as number;
-                  const y = call.args.y as number;
-                  setClickVisual({ x, y, visible: true });
-                  setTimeout(() => setClickVisual(prev => ({ ...prev, visible: false })), 1000);
-                  responses.push({
-                    name: call.name,
-                    id: call.id,
-                    response: { result: `Clique simulado em (${x}, ${y}).` }
-                  });
+                }
+
+                if (responses.length > 0) {
+                  session.sendToolResponse({ functionResponses: responses });
                 }
               }
 
-              if (responses.length > 0) {
-                session.sendToolResponse({ functionResponses: responses });
+              if (message.serverContent?.interrupted) {
+                audioPlayerRef.current?.stop();
+                setIsSpeaking(false);
               }
-            }
-
-            if (message.serverContent?.interrupted) {
-              audioPlayerRef.current?.stop();
-              setIsSpeaking(false);
-            }
-            if (message.serverContent?.turnComplete) {
-              setIsSpeaking(false);
-            }
+              if (message.serverContent?.turnComplete) {
+                setIsSpeaking(false);
+              }
+            });
           },
           onclose: () => {
             stopLiveSession();
@@ -1278,8 +1552,6 @@ export default function App() {
           }
         }
       });
-
-      liveSessionRef.current = session;
     } catch (error) {
       console.error("Failed to start Live session:", error);
       setLiveState({ status: 'error', error: "Falha ao iniciar sessão de voz." });
@@ -1774,6 +2046,11 @@ export default function App() {
                           </div>
                           <div className="max-w-[90%]">
                             {msg.content}
+                            {msg.imageUrl && (
+                              <div className="mt-4 rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
+                                <img src={msg.imageUrl} alt="Generated" className="w-full h-auto object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       ))}
@@ -1797,22 +2074,49 @@ export default function App() {
                       {liveState.status === 'connected' ? <MicOff size={20} /> : <Mic size={20} />}
                     </button>
 
-                    <div className="flex-1 flex items-center gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm">
-                      <input 
-                        type="text"
-                        value={homePrompt}
-                        onChange={(e) => setHomePrompt(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleHomeChat()}
-                        placeholder="Diga algo para o OSONE..."
-                        className="flex-1 bg-transparent px-5 py-2.5 focus:outline-none text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
-                      />
-                      <button 
-                        onClick={handleHomeChat}
-                        disabled={!homePrompt.trim()}
-                        className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale"
-                      >
-                        <Send size={18} />
-                      </button>
+                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm">
+                      {attachedFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-2 px-4 pt-2">
+                          {attachedFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full text-[10px] text-her-muted border border-white/5">
+                              <span className="truncate max-w-[100px]">{file.name}</span>
+                              <button onClick={() => removeFile(idx)} className="hover:text-red-400">
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileSelect}
+                          multiple
+                          className="hidden"
+                        />
+                        <button 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="p-2.5 text-her-muted hover:text-her-accent transition-colors ml-1"
+                        >
+                          <Paperclip size={18} />
+                        </button>
+                        <input 
+                          type="text"
+                          value={homePrompt}
+                          onChange={(e) => setHomePrompt(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleHomeChat()}
+                          placeholder="Diga algo para o OSONE..."
+                          className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                        />
+                        <button 
+                          onClick={handleHomeChat}
+                          disabled={!homePrompt.trim() && attachedFiles.length === 0}
+                          className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale mr-1"
+                        >
+                          <Send size={18} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

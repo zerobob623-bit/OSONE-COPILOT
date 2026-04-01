@@ -201,6 +201,40 @@ export const SettingsModal = ({ isOpen, onClose, keys, setKeys, selectedVoice, s
                       />
                     </div>
                   </div>
+
+                  <div className="space-y-4 pt-4 border-t border-white/[0.05]">
+                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-her-accent font-medium">Tuya Smart Home</h3>
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Client ID (Access ID)</label>
+                      <input 
+                        type="text"
+                        value={keys.tuyaClientId}
+                        onChange={(e) => setKeys({ ...keys, tuyaClientId: e.target.value })}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
+                        placeholder="Insira seu Access ID..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Client Secret (Access Secret)</label>
+                      <input 
+                        type="password"
+                        value={keys.tuyaClientSecret}
+                        onChange={(e) => setKeys({ ...keys, tuyaClientSecret: e.target.value })}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
+                        placeholder="Insira seu Access Secret..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Região (ex: us, eu, cn)</label>
+                      <input 
+                        type="text"
+                        value={keys.tuyaRegion}
+                        onChange={(e) => setKeys({ ...keys, tuyaRegion: e.target.value })}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-colors text-sm font-light text-her-ink/80"
+                        placeholder="us"
+                      />
+                    </div>
+                  </div>
                 </>
               )}
             </div>

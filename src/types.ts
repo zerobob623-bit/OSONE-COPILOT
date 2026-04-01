@@ -7,6 +7,9 @@ export interface ApiKeys {
   evolutionApiKey: string;
   evolutionInstanceName: string;
   alexaSkillId: string;
+  tuyaClientId: string;
+  tuyaClientSecret: string;
+  tuyaRegion: string;
 }
 
 export type WorkspaceMode = 'home' | 'writing' | 'folder_construction';
@@ -31,6 +34,7 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  imageUrl?: string;
 }
 
 export interface LiveState {

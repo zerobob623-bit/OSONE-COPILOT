@@ -11,13 +11,14 @@ export const InfinityLogo = ({ active, speaking }: { active: boolean; speaking: 
         active || speaking ? "bg-her-accent/10 blur-[100px] scale-110" : "bg-transparent"
       )} />
       
-      <div className="relative flex items-center gap-2 md:gap-4">
+      <div className="relative flex items-center justify-center">
         {[0, 1, 2].map((i) => (
           <motion.div
             key={i}
             animate={{
               scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
-              opacity: speaking ? [0.2, 0.5, 0.2] : active ? [0.15, 0.3, 0.15] : 0.1,
+              opacity: speaking ? [0.4, 0.8, 0.4] : active ? [0.3, 0.6, 0.3] : 0.2,
+              x: i === 0 ? -20 : i === 2 ? 20 : 0,
               y: speaking ? [0, -5, 0] : 0
             }}
             transition={{
@@ -27,13 +28,13 @@ export const InfinityLogo = ({ active, speaking }: { active: boolean; speaking: 
               ease: "easeInOut"
             }}
             className={cn(
-              "w-8 h-8 md:w-12 md:h-12 rounded-full border border-white/[0.05] flex items-center justify-center",
-              (active || speaking) && "bg-white/[0.02] shadow-[0_0_40px_rgba(255,78,0,0.05)]"
+              "absolute w-16 h-16 md:w-24 md:h-24 rounded-full border border-white/[0.1] flex items-center justify-center mix-blend-screen",
+              (active || speaking) && "bg-her-accent/5 shadow-[0_0_40px_rgba(255,78,0,0.1)]"
             )}
           >
             <div className={cn(
-              "w-1.5 h-1.5 md:w-2 md:h-2 rounded-full transition-all duration-700",
-              (active || speaking) ? "bg-her-accent/60 scale-110" : "bg-white/10 scale-100"
+              "w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-700",
+              (active || speaking) ? "bg-her-accent scale-110 shadow-[0_0_10px_rgba(242,125,38,0.8)]" : "bg-white/20 scale-100"
             )} />
           </motion.div>
         ))}
