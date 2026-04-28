@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Loader2, Play, Save, Image as ImageIcon, Volume2, BookOpen, Plus, X } from 'lucide-react';
+import { Sparkles, Loader2, Play, Save, Image as ImageIcon, Volume2, BookOpen, Plus, X, Download } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { ApiKeys } from '../types';
 import { cn } from '../lib/utils';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 export interface WebtoonPanel {
   id: string;
@@ -43,6 +45,7 @@ export const WebtoonCreator = ({ apiKeys }: { apiKeys: ApiKeys }) => {
   const [style, setStyle] = useState('Manhwa Vívido');
   const [panels, setPanels] = useState<WebtoonPanel[]>([]);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [currentlySpeaking, setCurrentlySpeaking] = useState<string | null>(null);
   const [savedStories, setSavedStories] = useState<any[]>(() => {
     const saved = localStorage.getItem('osone_webtoons');
@@ -203,12 +206,39 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
     alert("História salva com sucesso na memória do navegador!");
   };
 
+  const exportToPDF = async () => {
+    if (panels.length === 0) return;
+    setIsExportingPDF(true);
+
+    try {
+      const element = document.getElementById('webtoon-preview-container');
+      if (!element) return;
+
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width / 2, canvas.height / 2]
+      });
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width / 2, canvas.height / 2);
+      pdf.save('webtoon.pdf');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Erro ao gerar o PDF da história.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0 mx-auto"
+      className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0 mx-auto overflow-y-auto custom-scrollbar"
     >
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
         <div className="flex flex-col gap-1">
@@ -230,13 +260,21 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
             <Save size={14} />
             Salvar História
           </button>
+          <button 
+            onClick={exportToPDF}
+            disabled={panels.length === 0 || isExportingPDF}
+            className="flex items-center gap-2 px-5 py-2.5 bg-her-accent/10 hover:bg-her-accent/20 rounded-2xl transition-all text-xs font-medium text-her-accent disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {isExportingPDF ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {isExportingPDF ? 'Gerando PDF...' : 'Baixar PDF'}
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 shrink-0 h-max">
         
         {/* Form panel */}
-        <div className="w-full lg:w-96 shrink-0 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-4 md:p-6 flex flex-col gap-6 custom-scrollbar">
+        <div className="w-full lg:w-96 shrink-0 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] p-4 md:p-6 flex flex-col gap-6">
           
           <div className="space-y-4">
             <div>
@@ -373,7 +411,7 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
         </div>
 
         {/* View panel */}
-        <div className="flex-1 bg-black/20 rounded-[2.5rem] border border-white/[0.05] overflow-y-auto custom-scrollbar flex flex-col items-center py-8">
+        <div className="flex-1 bg-black/20 rounded-[2.5rem] border border-white/[0.05] flex flex-col items-center py-8">
           {panels.length === 0 && !isGeneratingStory ? (
             <div className="flex-1 flex flex-col items-center justify-center text-her-muted/50 p-8 text-center max-w-sm">
               <BookOpen size={48} className="opacity-20 mb-6" />
@@ -382,7 +420,7 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
               </p>
             </div>
           ) : (
-            <div className="w-full max-w-[400px] flex flex-col items-center px-4">
+            <div id="webtoon-preview-container" className="w-full max-w-[400px] flex flex-col items-center px-4 pt-4 pb-8 bg-[#0a0a0a]">
               {panels.map((panel, idx) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
@@ -434,6 +472,7 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
 
                   {/* Play audio button */}
                   <button 
+                    data-html2canvas-ignore="true"
                     onClick={() => playTTS(`${panel.narration}. ${panel.dialogue || ''}`, panel.id)}
                     className={cn(
                       "absolute top-4 right-4 p-2 rounded-full backdrop-blur-md transition-all shadow-xl z-20",
