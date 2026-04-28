@@ -3,6 +3,7 @@ export interface ApiKeys {
 }
 
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
+export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
 export type WorkspaceMode = 'home' | 'writing' | 'folder_construction' | 'sounds';
 

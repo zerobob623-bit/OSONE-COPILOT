@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { ApiKeys, OrbStyle } from '../types';
+import { ApiKeys, OrbStyle, AppTheme } from '../types';
 
 export const SettingsModal = ({ 
   isOpen, 
@@ -12,7 +12,9 @@ export const SettingsModal = ({
   selectedVoice, 
   setSelectedVoice,
   orbStyle,
-  setOrbStyle 
+  setOrbStyle,
+  appTheme,
+  setAppTheme
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -22,6 +24,8 @@ export const SettingsModal = ({
   setSelectedVoice: (voice: string) => void;
   orbStyle: OrbStyle;
   setOrbStyle: (style: OrbStyle) => void;
+  appTheme: AppTheme;
+  setAppTheme: (theme: AppTheme) => void;
 }) => {
   return (
     <AnimatePresence>
@@ -97,6 +101,31 @@ export const SettingsModal = ({
                       )}
                     >
                       {style.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-2 font-light">Tema da Interface</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'her', label: 'OSONE (Padrão)' },
+                    { id: 'cyberpunk', label: 'Cyberpunk' },
+                    { id: 'monochrome', label: 'Monochrome' },
+                    { id: 'nature', label: 'Natureza' }
+                  ].map((theme) => (
+                    <button
+                      key={theme.id}
+                      onClick={() => setAppTheme(theme.id as AppTheme)}
+                      className={cn(
+                        "px-3 py-2 rounded-xl text-[10px] sm:text-xs font-light transition-all border",
+                        appTheme === theme.id 
+                          ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                          : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
+                      )}
+                    >
+                      {theme.label}
                     </button>
                   ))}
                 </div>

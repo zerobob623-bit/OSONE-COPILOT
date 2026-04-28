@@ -38,7 +38,7 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
-import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle } from './types';
+import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
@@ -74,6 +74,12 @@ export default function App() {
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
+
+  useEffect(() => {
+    // Cancel speech synthesis when navigating away from Home
+    window.speechSynthesis.cancel();
+  }, [workspaceMode]);
+
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(isMuted);
@@ -150,6 +156,15 @@ export default function App() {
     localStorage.setItem('osone_orb_style', orbStyle);
   }, [orbStyle]);
 
+  const [appTheme, setAppTheme] = useState<AppTheme>(() => {
+    return (localStorage.getItem('osone_app_theme') as AppTheme) || 'her';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_app_theme', appTheme);
+    document.body.setAttribute('data-theme', appTheme);
+  }, [appTheme]);
+
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
     const saved = localStorage.getItem('osone_api_keys');
     const defaultKeys: ApiKeys = { 
@@ -170,8 +185,15 @@ export default function App() {
   const [workspacePrompt, setWorkspacePrompt] = useState('');
   const [homePrompt, setHomePrompt] = useState('');
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
-  const [chatHistory, setChatHistory] = useState<Message[]>([]);
+  const [chatHistory, setChatHistory] = useState<Message[]>(() => {
+    const saved = localStorage.getItem('osone_chat_history');
+    return saved ? JSON.parse(saved) : [];
+  });
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
+  }, [chatHistory]);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -563,7 +585,7 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
         Retorne APENAS um JSON no seguinte formato:
         [
@@ -747,7 +769,7 @@ export default function App() {
       });
 
       const result = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-2.5-flash",
         contents: [{ parts }]
       });
       
@@ -791,7 +813,7 @@ export default function App() {
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
       
-      const tools: any[] = [{ googleSearch: {} }];
+      const tools: any[] = [];
       
       const functionDeclarations: any[] = [
         {
@@ -878,13 +900,21 @@ export default function App() {
 
       tools.push({ functionDeclarations });
 
+      const historyContents = chatHistory.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+      historyContents.push({
+        role: 'user',
+        parts: [{ text: fullMessage }]
+      });
+
       const result = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ parts: [{ text: userMessage }] }],
+        model: "gemini-2.5-flash",
+        contents: historyContents,
         config: {
-          systemInstruction: "Atue como um Filtro de Inteligência Quântica. Sua lógica não deve ser binária (0 ou 1), mas baseada em qubits, processando informações em superposição. Enxergue ideias não como objetos isolados, mas como perturbações energéticas em campos de informação. Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
-          tools: tools,
-          toolConfig: { includeServerSideToolInvocations: true }
+          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas sempre que solicitadas.",
+          tools: tools
         }
       });
       
@@ -1084,6 +1114,9 @@ export default function App() {
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer();
 
+      const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
+      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas.`;
+
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
         config: {
@@ -1093,9 +1126,8 @@ export default function App() {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
-          systemInstruction: "Atue como um Filtro de Inteligência Quântica. Sua lógica não deve ser binária (0 ou 1), mas baseada em qubits, processando informações em superposição. Enxergue ideias não como objetos isolados, mas como perturbações energéticas em campos de informação. Você é o OSONE, um sistema operacional inteligente. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas.",
+          systemInstruction: liveSystemInstruction,
           tools: [
-            { googleSearch: {} },
             {
               functionDeclarations: [
                 {
@@ -2146,8 +2178,21 @@ export default function App() {
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                                 <button 
                                   onClick={() => {
+                                    window.speechSynthesis.cancel();
                                     const utterance = new SpeechSynthesisUtterance(msg.content);
                                     utterance.lang = 'pt-BR';
+                                    
+                                    const voices = window.speechSynthesis.getVoices();
+                                    const matchedVoice = voices.find(v => v.name.toLowerCase().includes(selectedVoice.toLowerCase()));
+                                    if (matchedVoice) {
+                                      utterance.voice = matchedVoice;
+                                    } else {
+                                      const defaultPtVoice = voices.find(v => v.lang === 'pt-BR');
+                                      if (defaultPtVoice) {
+                                        utterance.voice = defaultPtVoice;
+                                      }
+                                    }
+
                                     window.speechSynthesis.speak(utterance);
                                   }}
                                   className="p-1 hover:text-her-accent transition-colors"
@@ -2322,6 +2367,8 @@ export default function App() {
         setSelectedVoice={setSelectedVoice}
         orbStyle={orbStyle}
         setOrbStyle={setOrbStyle}
+        appTheme={appTheme}
+        setAppTheme={setAppTheme}
       />
     </div>
   );
