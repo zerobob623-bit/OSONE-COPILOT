@@ -81,6 +81,48 @@ export default function App() {
   }, [workspaceMode]);
 
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.lang = 'pt-BR';
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setHomePrompt((prev) => prev ? prev + ' ' + transcript : transcript);
+        setIsTranscribing(false);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error('Speech recognition error', event.error);
+        setIsTranscribing(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsTranscribing(false);
+      };
+    }
+  }, []);
+
+  const handleTranscriptionToggle = () => {
+    if (isTranscribing) {
+      recognitionRef.current?.stop();
+      setIsTranscribing(false);
+    } else {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        setIsTranscribing(true);
+      } else {
+        alert('Seu navegador não suporta a API de reconhecimento de voz.');
+      }
+    }
+  };
+
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(isMuted);
 
@@ -385,6 +427,7 @@ export default function App() {
     return dataToUse;
   });
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem('osone_file_system', JSON.stringify(fileSystem));
@@ -913,7 +956,7 @@ export default function App() {
         model: "gemini-2.5-flash",
         contents: historyContents,
         config: {
-          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas sempre que solicitadas.",
+          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Se o usuário pedir para você cantar, CANTE ativamente usando métrica, rimas, melodia na voz e pausas teatrais. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas sempre que solicitadas.",
           tools: tools
         }
       });
@@ -1115,7 +1158,7 @@ export default function App() {
       audioPlayerRef.current = new AudioPlayer();
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
-      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas.`;
+      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Se eu (o usuário) pedir para você cantar, CANTE com entusiasmo (use tom musical, ritmo poético e inflexões de voz). Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos, gerar estruturas de pastas e gerar IMAGENS (conforme solicitado e usando suas ferramentas).`;
 
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -1297,6 +1340,18 @@ export default function App() {
                       }
                     },
                     required: ["sound_name"]
+                  }
+                },
+                {
+                  name: "generate_image",
+                  description: "Gera uma imagem baseada em uma descrição (prompt).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      prompt: { type: Type.STRING, description: "A descrição detalhada da imagem a ser gerada." },
+                      aspectRatio: { type: Type.STRING, description: "A proporção da imagem (ex: '1:1', '16:9', '9:16'). Padrão: '1:1'." }
+                    },
+                    required: ["prompt"]
                   }
                 }
               ]
@@ -1574,6 +1629,54 @@ export default function App() {
                       id: call.id,
                       response: { result: `Estilo do orb alterado para ${style}.` }
                     });
+                  } else if (call.name === "generate_image") {
+                    const prompt = call.args.prompt as string;
+                    const aspectRatio = (call.args.aspectRatio as string) || '1:1';
+                    
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Imagem está sendo gerada assincronamente.` }
+                    });
+                    
+                    setChatHistory(prev => [...prev, { 
+                      id: Math.random().toString(36).substr(2, 9), 
+                      role: 'assistant' as const, 
+                      content: `Gerando imagem para: "${prompt}"...` 
+                    }]);
+                    
+                    const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
+                    genAI.models.generateContent({
+                      model: 'gemini-2.5-flash-image',
+                      contents: { parts: [{ text: prompt }] },
+                      config: {
+                        imageConfig: { aspectRatio }
+                      }
+                    }).then(imageResult => {
+                      let imageUrl = '';
+                      for (const part of imageResult.candidates?.[0]?.content?.parts || []) {
+                        if (part.inlineData) {
+                          const base64EncodeString = part.inlineData.data;
+                          imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
+                          break;
+                        }
+                      }
+                      
+                      if (imageUrl) {
+                        setChatHistory(prev => [...prev, { 
+                          id: Math.random().toString(36).substr(2, 9), 
+                          role: 'assistant' as const, 
+                          content: `Aqui está a imagem gerada para: "${prompt}"`,
+                          imageUrl: imageUrl
+                        }]);
+                      }
+                    }).catch(err => {
+                      setChatHistory(prev => [...prev, { 
+                        id: Math.random().toString(36).substr(2, 9), 
+                        role: 'assistant' as const, 
+                        content: `Problema ao gerar imagem: ${err.message}` 
+                      }]);
+                    });
                   } else if (call.name === "play_sound_effect") {
                     const name = call.args.sound_name as string;
                     const sound = soundLibrary.find(s => s.name.toLowerCase() === name.toLowerCase());
@@ -1708,7 +1811,7 @@ export default function App() {
                 className="text-center px-4 max-w-2xl"
               >
                 <div 
-                  className="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-xl md:text-2xl font-medium leading-[1.8] tracking-tight text-white/90 px-4 font-serif italic selection:bg-her-accent/30 scrollbar-hide"
+                  className="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-xl md:text-2xl font-medium leading-[1.8] tracking-tight text-white/90 px-4 font-serif italic selection:bg-her-accent/30"
                   style={{
                     WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
                     maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'
@@ -1875,7 +1978,7 @@ export default function App() {
                     <textarea 
                       value={workspaceText}
                       onChange={(e) => setWorkspaceText(e.target.value)}
-                      className="workspace-textarea flex-1 focus:outline-none p-8 font-light leading-relaxed text-base md:text-sm scrollbar-hide"
+                      className="workspace-textarea flex-1 focus:outline-none p-8 font-light leading-relaxed text-base md:text-sm"
                       placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
                     />
                   </div>
@@ -1982,7 +2085,7 @@ export default function App() {
 
               <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
                 {/* File Explorer */}
-                <div className="w-full lg:w-80 shrink-0 h-1/2 lg:h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6 min-h-[150px] scrollbar-hide">
+                <div className="w-full lg:w-80 shrink-0 h-1/2 lg:h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6 min-h-[150px]">
                   <div className="flex items-center justify-between mb-2 shrink-0">
                     <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Arquivos</span>
                     <button 
@@ -2155,7 +2258,7 @@ export default function App() {
                       <p>Manifeste sua intenção...</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto scrollbar-hide py-2 md:py-4">
+                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto py-2 md:py-4 pr-1">
                       {chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
@@ -2215,8 +2318,17 @@ export default function App() {
                           <div className="max-w-[90%]">
                             {msg.content}
                             {msg.imageUrl && (
-                              <div className="mt-4 rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
+                              <div className="mt-4 relative group rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
                                 <img src={msg.imageUrl} alt="Generated" className="w-full h-auto object-cover" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <button 
+                                    onClick={() => setFullScreenImage(msg.imageUrl!)}
+                                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all transform hover:scale-110"
+                                    title="Tela cheia"
+                                  >
+                                    <Maximize size={24} />
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </div>
@@ -2261,20 +2373,47 @@ export default function App() {
                       onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
                     />
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <button 
-                      onClick={handleVoiceToggle}
+                      onClick={handleTranscriptionToggle}
                       className={cn(
-                        "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
-                        liveState.status === 'connected' 
+                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
+                        isTranscribing 
                           ? "bg-her-accent/20 text-her-accent border border-her-accent/30 mic-glow" 
                           : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
                       )}
+                      title={isTranscribing ? "Parar Transcrição" : "Transcrever Áudio"}
                     >
-                      {liveState.status === 'connected' ? <MicOff size={20} /> : <Mic size={20} />}
+                      {isTranscribing ? <MicOff size={18} /> : <Mic size={18} />}
+                    </button>
+                    
+                    <button 
+                      onClick={handleMuteToggle}
+                      className={cn(
+                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
+                        isMuted 
+                          ? "bg-red-500/10 text-red-500 border border-red-500/20" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                      )}
+                      title={isMuted ? "Desativar Silêncio" : "Silenciar OS"}
+                    >
+                      {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                     </button>
 
-                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm">
+                    <button 
+                      onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
+                      className={cn(
+                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
+                        isScreenSharing 
+                          ? "bg-her-accent/10 text-her-accent border border-her-accent/20" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                      )}
+                      title={isScreenSharing ? "Parar Compartilhamento" : "Compartilhar Tela"}
+                    >
+                      {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                    </button>
+
+                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm ml-1">
                       {attachedFiles.length > 0 && (
                         <div className="flex flex-wrap gap-2 px-4 pt-2">
                           {attachedFiles.map((file, idx) => (
@@ -2326,31 +2465,6 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* Footer Controls */}
-      <footer className="relative z-30 p-2 md:p-6 flex justify-center items-center gap-8 bg-her-bg md:bg-transparent">
-        <button 
-          onClick={handleMuteToggle}
-          className={cn(
-            "p-4 rounded-full transition-all duration-300",
-            isMuted ? "bg-red-500/10 text-red-500 border border-red-500/20" : "hover:bg-white/[0.03] text-her-muted border border-transparent"
-          )}
-          title={isMuted ? "Desativar Silêncio" : "Silenciar OS"}
-        >
-          {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} />}
-        </button>
-
-        <button 
-          onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
-          className={cn(
-            "p-4 rounded-full transition-all duration-300",
-            isScreenSharing ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.03] text-her-muted border border-transparent"
-          )}
-          title={isScreenSharing ? "Parar Compartilhamento" : "Compartilhar Tela"}
-        >
-          {isScreenSharing ? <MonitorOff size={22} /> : <Monitor size={22} />}
-        </button>
-      </footer>
-
       {/* Modals & Overlays */}
       <Sidebar 
         isOpen={isSidebarOpen} 
@@ -2370,6 +2484,35 @@ export default function App() {
         appTheme={appTheme}
         setAppTheme={setAppTheme}
       />
+
+      <AnimatePresence>
+        {fullScreenImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            onClick={() => setFullScreenImage(null)}
+          >
+            <button 
+              onClick={() => setFullScreenImage(null)}
+              className="absolute top-6 right-6 p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <motion.img 
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              src={fullScreenImage} 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+              alt="Fullscreen generated" 
+              referrerPolicy="no-referrer"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

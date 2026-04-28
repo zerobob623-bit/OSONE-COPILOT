@@ -131,7 +131,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
               className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl py-2.5 pl-10 pr-4 text-sm font-light focus:outline-none focus:border-her-accent/30 transition-all"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+          <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
             {categories.map(cat => (
               <button
                 key={cat}
