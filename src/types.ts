@@ -1,18 +1,17 @@
 export interface ApiKeys {
   gemini: string;
-  openai: string;
-  groq: string;
-  whatsappNumbers: string[];
-  evolutionApiUrl: string;
-  evolutionApiKey: string;
-  evolutionInstanceName: string;
-  alexaSkillId: string;
-  tuyaClientId: string;
-  tuyaClientSecret: string;
-  tuyaRegion: string;
 }
 
-export type WorkspaceMode = 'home' | 'writing' | 'folder_construction';
+export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
+
+export type WorkspaceMode = 'home' | 'writing' | 'folder_construction' | 'sounds';
+
+export interface SoundEffect {
+  id: string;
+  name: string;
+  category: string;
+  url: string;
+}
 
 export interface VirtualFile {
   id: string;

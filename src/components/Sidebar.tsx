@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -34,19 +34,31 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode }: {
             </button>
           </div>
 
-          <div className="space-y-10 flex-1">
+          <div className="space-y-10 flex-1 overflow-y-auto pr-2 custom-scrollbar">
             <div>
               <h3 className="text-[9px] uppercase tracking-[0.3em] text-her-muted mb-6 font-light">Navegação</h3>
-              <button 
-                onClick={() => { setMode('home'); onClose(); }}
-                className={cn(
-                  "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                  mode === 'home' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
-                )}
-              >
-                <Volume2 size={18} />
-                <span>Início</span>
-              </button>
+              <div className="space-y-3">
+                <button 
+                  onClick={() => { setMode('home'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'home' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Volume2 size={18} />
+                  <span>Início</span>
+                </button>
+                <button 
+                  onClick={() => { setMode('sounds'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'sounds' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Music size={18} />
+                  <span>Biblioteca</span>
+                </button>
+              </div>
             </div>
 
             <div>

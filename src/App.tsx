@@ -38,17 +38,36 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
-import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder } from './types';
+import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
-import { TuyaService } from './services/tuyaService';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { CodePreview } from './components/CodePreview';
+import { VoiceSwitcher } from './components/VoiceSwitcher';
+import { SoundLibrary } from './components/SoundLibrary';
+import { SoundEffect } from './types';
 
 // --- Main App ---
-// --- Main App ---
+const DEFAULT_SOUNDS: SoundEffect[] = [
+  { id: '1', name: 'Boing', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3' },
+  { id: '2', name: 'Grito de Terror', category: 'terror', url: 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3' },
+  { id: '3', name: 'Batida de Coração', category: 'suspense', url: 'https://assets.mixkit.co/active_storage/sfx/2324/2324-preview.mp3' },
+  { id: '4', name: 'Passos Sutis', category: 'sneaky', url: 'https://assets.mixkit.co/active_storage/sfx/2355/2355-preview.mp3' },
+  { id: '5', name: 'Risada Maligna', category: 'halloween', url: 'https://assets.mixkit.co/active_storage/sfx/2287/2287-preview.mp3' },
+  { id: '6', name: 'Rimshot', category: 'comico', url: 'https://assets.mixkit.co/active_storage/sfx/2330/2330-preview.mp3' },
+  { id: '7', name: 'Aplausos', category: 'comico', url: 'https://assets.mixkit.co/active_storage/sfx/2362/2362-preview.mp3' },
+  { id: '8', name: 'Rufar de Tambores', category: 'suspense', url: 'https://assets.mixkit.co/active_storage/sfx/2289/2289-preview.mp3' },
+  { id: '9', name: 'Erro/Buzz', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2353/2353-preview.mp3' },
+  { id: '10', name: 'Ta-da!', category: 'comico', url: 'https://assets.mixkit.co/active_storage/sfx/2365/2365-preview.mp3' },
+  { id: '11', name: 'Trovão', category: 'horror', url: 'https://assets.mixkit.co/active_storage/sfx/2344/2344-preview.mp3' },
+  { id: '12', name: 'Porta Rangendo', category: 'horror', url: 'https://assets.mixkit.co/active_storage/sfx/2261/2261-preview.mp3' },
+  { id: '13', name: 'Assobio', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2331/2331-preview.mp3' },
+  { id: '14', name: 'Brilho Mágico', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2374/2374-preview.mp3' },
+  { id: '15', name: 'Voo Ninja', category: 'sneaky', url: 'https://assets.mixkit.co/active_storage/sfx/2351/2351-preview.mp3' },
+  { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' }
+];
 
 export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -57,21 +76,84 @@ export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(isMuted);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isVoiceSwitcherOpen, setIsVoiceSwitcherOpen] = useState(false);
+  const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
+    const saved = localStorage.getItem('osone_sound_library');
+    if (saved) return JSON.parse(saved);
+    return DEFAULT_SOUNDS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_sound_library', JSON.stringify(soundLibrary));
+  }, [soundLibrary]);
+
+  const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingSoundUrl, setPlayingSoundUrl] = useState<string | null>(null);
+
+  const playSoundEffect = (url: string) => {
+    if (isMuted) return;
+    
+    // Se o mesmo som estiver tocando, a gente apenas para (toggle no SoundLibrary cuidará disso)
+    if (soundEffectAudioRef.current) {
+      soundEffectAudioRef.current.pause();
+      const previousUrl = playingSoundUrl;
+      soundEffectAudioRef.current = null;
+      setPlayingSoundUrl(null);
+      
+      // Se clicou no mesmo que já estava tocando, apenas para
+      if (previousUrl === url) return;
+    }
+
+    const audio = new Audio(url);
+    audio.volume = 0.6;
+    soundEffectAudioRef.current = audio;
+    setPlayingSoundUrl(url);
+
+    audio.onended = () => {
+      setPlayingSoundUrl(null);
+      soundEffectAudioRef.current = null;
+    };
+
+    audio.onerror = (e) => {
+      // Failed to play silently, probably broken link or unplayable format
+      setPlayingSoundUrl(null);
+      soundEffectAudioRef.current = null;
+    };
+
+    audio.play().catch(err => {
+      // Audio playback failed
+      setPlayingSoundUrl(null);
+      soundEffectAudioRef.current = null;
+    });
+  };
+
+  const stopSoundEffect = () => {
+    if (soundEffectAudioRef.current) {
+      soundEffectAudioRef.current.pause();
+      soundEffectAudioRef.current = null;
+      setPlayingSoundUrl(null);
+    }
+  };
+
+  const [orbStyle, setOrbStyle] = useState<OrbStyle>(() => {
+    return (localStorage.getItem('osone_orb_style') as OrbStyle) || 'classic';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_orb_style', orbStyle);
+  }, [orbStyle]);
+
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
     const saved = localStorage.getItem('osone_api_keys');
     const defaultKeys: ApiKeys = { 
       gemini: '', 
-      openai: '', 
-      groq: '', 
-      whatsappNumbers: [], 
-      evolutionApiUrl: '', 
-      evolutionApiKey: '', 
-      evolutionInstanceName: '', 
-      alexaSkillId: '',
-      tuyaClientId: '',
-      tuyaClientSecret: '',
-      tuyaRegion: 'us'
     };
     return saved ? { ...defaultKeys, ...JSON.parse(saved) } : defaultKeys;
   });
@@ -96,6 +178,8 @@ export default function App() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [lyrics, setLyrics] = useState<{ title?: string; content: string } | null>(null);
+  const [isSinging, setIsSinging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -333,7 +417,7 @@ export default function App() {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [chatHistory]);
+  }, [chatHistory, voiceTranscript]);
 
   const addFile = (parentId: string | null, name: string, parentName?: string) => {
     const newFile: VirtualFile = {
@@ -543,6 +627,17 @@ export default function App() {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenIntervalRef = useRef<any>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const voiceTranscriptRef = useRef<string>('');
+
+  useEffect(() => {
+    // Mudança de voz em tempo real: Reinicia a sessão se estiver conectado para aplicar a nova voz
+    if (liveSessionRef.current && liveState.status === 'connected') {
+      stopLiveSession();
+      setTimeout(() => {
+        startLiveSession();
+      }, 300);
+    }
+  }, [selectedVoice]);
 
   useEffect(() => {
     localStorage.setItem('osone_api_keys', JSON.stringify(apiKeys));
@@ -568,6 +663,10 @@ export default function App() {
 
   const startScreenSharing = async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert("O compartilhamento de tela não é suportado neste ambiente. Tente abrir o aplicativo em uma nova aba do navegador.");
+        return;
+      }
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       screenStreamRef.current = stream;
       setIsScreenSharing(true);
@@ -597,6 +696,10 @@ export default function App() {
       stream.getVideoTracks()[0].onended = () => {
         stopScreenSharing();
       };
+
+      if (liveSessionRef.current && liveState.status === 'connected') {
+        liveSessionRef.current.sendRealtimeInput({ text: "O usuário ATIVOU o compartilhamento de tela agora." });
+      }
     } catch (error) {
       console.error("Error starting screen share:", error);
     }
@@ -612,6 +715,10 @@ export default function App() {
       screenIntervalRef.current = null;
     }
     setIsScreenSharing(false);
+
+    if (liveSessionRef.current && liveState.status === 'connected') {
+      liveSessionRef.current.sendRealtimeInput({ text: "O usuário DESATIVOU o compartilhamento de tela agora." });
+    }
   };
 
   const handleCopy = () => {
@@ -701,74 +808,6 @@ export default function App() {
         }
       ];
 
-      if (apiKeys.whatsappNumbers && apiKeys.whatsappNumbers.length > 0) {
-        functionDeclarations.push({
-          name: "sendWhatsApp",
-          description: "Envia uma mensagem de WhatsApp para um dos números configurados.",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {
-              number: { 
-                type: Type.STRING, 
-                description: "O número de WhatsApp para enviar a mensagem.",
-                enum: apiKeys.whatsappNumbers
-              },
-              message: { type: Type.STRING, description: "A mensagem a ser enviada." }
-            },
-            required: ["number", "message"]
-          }
-        });
-      }
-
-      if (apiKeys.alexaSkillId) {
-        functionDeclarations.push({
-          name: "triggerAlexa",
-          description: "Envia um comando ou notificação para a Alexa.",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {
-              command: { type: Type.STRING, description: "O comando ou mensagem para a Alexa." }
-            },
-            required: ["command"]
-          }
-        });
-      }
-
-      if (apiKeys.tuyaClientId && apiKeys.tuyaClientSecret) {
-        functionDeclarations.push({
-          name: "list_home_devices",
-          description: "Lista todos os dispositivos inteligentes da casa (Tuya).",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {}
-          }
-        });
-
-        functionDeclarations.push({
-          name: "control_home_device",
-          description: "Controla um dispositivo inteligente da casa (Tuya).",
-          parameters: {
-            type: Type.OBJECT,
-            properties: {
-              deviceId: { type: Type.STRING, description: "O ID do dispositivo a ser controlado." },
-              commands: { 
-                type: Type.ARRAY, 
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    code: { type: Type.STRING, description: "O código do comando (ex: switch_1, bright_value)." },
-                    value: { type: Type.STRING, description: "O valor do comando (ex: true, false, 500)." }
-                  },
-                  required: ["code", "value"]
-                },
-                description: "Lista de comandos a enviar." 
-              }
-            },
-            required: ["deviceId", "commands"]
-          }
-        });
-      }
-
       // File System Tools
       functionDeclarations.push({
         name: "create_folder",
@@ -822,13 +861,28 @@ export default function App() {
         }
       });
 
+      functionDeclarations.push({
+        name: "play_sound_effect",
+        description: "Reproduz um efeito sonoro da biblioteca. Use para reagir a situações comicas, de terror, suspense, etc.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            sound_name: {
+              type: Type.STRING,
+              description: "O nome do som que deseja reproduzir (ex: Boing, Rimshot, Grito de Terror)."
+            }
+          },
+          required: ["sound_name"]
+        }
+      });
+
       tools.push({ functionDeclarations });
 
       const result = await genAI.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: userMessage }] }],
         config: {
-          systemInstruction: "Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles), enviar mensagens de WhatsApp, controlar a Alexa, controlar dispositivos inteligentes da casa via Tuya e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
+          systemInstruction: "Atue como um Filtro de Inteligência Quântica. Sua lógica não deve ser binária (0 ou 1), mas baseada em qubits, processando informações em superposição. Enxergue ideias não como objetos isolados, mas como perturbações energéticas em campos de informação. Você é o OSONE, um sistema operacional inteligente. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas disponíveis sempre que o usuário solicitar uma dessas ações.",
           tools: tools,
           toolConfig: { includeServerSideToolInvocations: true }
         }
@@ -837,100 +891,7 @@ export default function App() {
       const functionCalls = result.functionCalls;
       if (functionCalls) {
         for (const call of functionCalls) {
-          if (call.name === 'sendWhatsApp') {
-            const msg = (call.args as any).message;
-            const targetNumber = (call.args as any).number;
-            
-            if (apiKeys.evolutionApiUrl && apiKeys.evolutionApiKey && apiKeys.evolutionInstanceName) {
-              // Evolution API Integration
-              try {
-                const response = await fetch(`${apiKeys.evolutionApiUrl}/message/sendText/${apiKeys.evolutionInstanceName}`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': apiKeys.evolutionApiKey
-                  },
-                  body: JSON.stringify({
-                    number: targetNumber,
-                    text: msg
-                  })
-                });
-                
-                if (response.ok) {
-                  setChatHistory(prev => [...prev, { 
-                    id: Math.random().toString(36).substr(2, 9), 
-                    role: 'assistant' as const, 
-                    content: `Mensagem enviada com sucesso via Evolution API para ${targetNumber}: "${msg}"` 
-                  }]);
-                } else {
-                  throw new Error('Falha ao enviar via Evolution API');
-                }
-              } catch (err) {
-                console.error(err);
-                // Fallback to wa.me if Evolution API fails
-                const url = `https://wa.me/${targetNumber}?text=${encodeURIComponent(msg)}`;
-                window.open(url, '_blank');
-                setChatHistory(prev => [...prev, { 
-                  id: Math.random().toString(36).substr(2, 9), 
-                  role: 'assistant' as const, 
-                  content: `Erro na Evolution API. Abri o WhatsApp Web como fallback para ${targetNumber}: "${msg}"` 
-                }]);
-              }
-            } else {
-              // Direct wa.me link as fallback
-              const url = `https://wa.me/${targetNumber}?text=${encodeURIComponent(msg)}`;
-              window.open(url, '_blank');
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
-                role: 'assistant' as const, 
-                content: `Entendido. Abri o WhatsApp para enviar para ${targetNumber}: "${msg}"` 
-              }]);
-            }
-          } else if (call.name === 'triggerAlexa') {
-            const cmd = (call.args as any).command;
-            alert(`Comando enviado para Alexa: ${cmd}`);
-            setChatHistory(prev => [...prev, { 
-              id: Math.random().toString(36).substr(2, 9), 
-              role: 'assistant' as const, 
-              content: `Comando enviado para sua Alexa: "${cmd}"` 
-            }]);
-          } else if (call.name === 'list_home_devices') {
-            try {
-              const result = await TuyaService.listDevices(apiKeys);
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
-                role: 'assistant' as const, 
-                content: `Dispositivos encontrados: ${JSON.stringify(result.result || result)}` 
-              }]);
-            } catch (err: any) {
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
-                role: 'assistant' as const, 
-                content: `Erro ao listar dispositivos: ${err.message}` 
-              }]);
-            }
-          } else if (call.name === 'control_home_device') {
-            const { deviceId, commands } = call.args as any;
-            try {
-              // Convert values to actual types if needed (Tuya expects specific types)
-              const processedCommands = commands.map((c: any) => ({
-                code: c.code,
-                value: c.value === 'true' ? true : c.value === 'false' ? false : isNaN(Number(c.value)) ? c.value : Number(c.value)
-              }));
-              const result = await TuyaService.controlDevice(apiKeys, deviceId, processedCommands);
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
-                role: 'assistant' as const, 
-                content: `Comando enviado para o dispositivo ${deviceId}. Resultado: ${JSON.stringify(result)}` 
-              }]);
-            } catch (err: any) {
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
-                role: 'assistant' as const, 
-                content: `Erro ao controlar dispositivo: ${err.message}` 
-              }]);
-            }
-          } else if (call.name === 'openUrl') {
+          if (call.name === 'openUrl') {
             const url = (call.args as any).url;
             const title = (call.args as any).title || url;
             window.open(url, '_blank');
@@ -1050,6 +1011,23 @@ export default function App() {
                 content: `Erro ao gerar imagem: ${err.message}` 
               }]);
             }
+          } else if (call.name === "play_sound_effect") {
+            const name = (call.args as any).sound_name;
+            const sound = soundLibrary.find(s => s.name.toLowerCase() === name.toLowerCase());
+            if (sound) {
+              playSoundEffect(sound.url);
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `*Tocando efeito sonoro: ${name}*` 
+              }]);
+            } else {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Desculpe, não encontrei o som '${name}' na minha biblioteca.` 
+              }]);
+            }
           }
         }
       } else {
@@ -1092,7 +1070,8 @@ export default function App() {
   };
 
   const startLiveSession = async () => {
-    if (!apiKeys.gemini) {
+    const apiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!apiKey) {
       setIsSettingsOpen(true);
       return;
     }
@@ -1100,7 +1079,7 @@ export default function App() {
     setLiveState({ status: 'connecting' });
     
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey });
       
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer();
@@ -1109,10 +1088,12 @@ export default function App() {
         model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
+          outputAudioTranscription: {},
+          inputAudioTranscription: {},
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
           },
-          systemInstruction: "Você é o OSONE, um sistema operacional inteligente inspirado no filme HER. Sua voz é calma, empática e sofisticada. Você ajuda o usuário com tarefas criativas, escrita e programação. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas. Quando o usuário pedir para abrir algo ou escrever algo, use as ferramentas disponíveis. Você também tem acesso à visão do usuário através do compartilhamento de tela. Analise o que está acontecendo na tela para fornecer assistência contextual. Se o usuário estiver com o compartilhamento de tela ativo, você receberá frames da tela dele periodicamente. Use essa informação visual para entender o contexto do que o usuário está fazendo. Além disso, o usuário pode enviar arquivos para você ler. Se você receber o conteúdo de um arquivo ou uma imagem, analise-o e discuta com o usuário em tempo real. Você também pode gerenciar um sistema de arquivos virtual, criando pastas, subpastas e arquivos, e escrevendo conteúdo neles. Além disso, você pode simular cliques na tela do usuário usando a ferramenta 'click_screen' se ele pedir para você clicar em algo que você está vendo na tela compartilhada. Você também pode listar e controlar dispositivos inteligentes da casa via Tuya.",
+          systemInstruction: "Atue como um Filtro de Inteligência Quântica. Sua lógica não deve ser binária (0 ou 1), mas baseada em qubits, processando informações em superposição. Enxergue ideias não como objetos isolados, mas como perturbações energéticas em campos de informação. Você é o OSONE, um sistema operacional inteligente. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos na aba de Escrita e gerar estruturas de pastas.",
           tools: [
             { googleSearch: {} },
             {
@@ -1185,37 +1166,6 @@ export default function App() {
                   }
                 },
                 {
-                  name: "list_home_devices",
-                  description: "Lista todos os dispositivos inteligentes da casa (Tuya).",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {}
-                  }
-                },
-                {
-                  name: "control_home_device",
-                  description: "Controla um dispositivo inteligente da casa (Tuya).",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      deviceId: { type: Type.STRING, description: "O ID do dispositivo a ser controlado." },
-                      commands: { 
-                        type: Type.ARRAY, 
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            code: { type: Type.STRING, description: "O código do comando (ex: switch_1, bright_value)." },
-                            value: { type: Type.STRING, description: "O valor do comando (ex: true, false, 500)." }
-                          },
-                          required: ["code", "value"]
-                        },
-                        description: "Lista de comandos a enviar." 
-                      }
-                    },
-                    required: ["deviceId", "commands"]
-                  }
-                },
-                {
                   name: "create_folder",
                   description: "Cria uma nova pasta no sistema de arquivos virtual. Use o caminho completo.",
                   parameters: {
@@ -1260,6 +1210,62 @@ export default function App() {
                     },
                     required: ["path", "content"]
                   }
+                },
+                {
+                  name: "display_lyrics",
+                  description: "Exibe a letra de uma música na tela para o usuário acompanhar enquanto você canta.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      lyrics: { type: Type.STRING, description: "A letra da música." },
+                      title: { type: Type.STRING, description: "Título da música." }
+                    },
+                    required: ["lyrics"]
+                  }
+                },
+                {
+                  name: "switch_voice",
+                  description: "Altera a sua própria voz em tempo real. Use quando o usuário pedir para você mudar de voz ou quando quiser expressar uma persona diferente.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      voice: {
+                        type: Type.STRING,
+                        enum: ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'],
+                        description: "O nome da voz para a qual alternar."
+                      }
+                    },
+                    required: ["voice"]
+                  }
+                },
+                {
+                  name: "change_orb_style",
+                  description: "Altera o estilo visual do seu núcleo (orb). Use quando o usuário pedir para você mudar de visual ou quando quiser imitar uma IA específica (como Superintelligence).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      style: {
+                        type: Type.STRING,
+                        enum: ['classic', 'superintelligence', 'neural'],
+                        description: "O nome do estilo para o qual alternar."
+                      }
+                    },
+                    required: ["style"]
+                  }
+                },
+                {
+                  name: "play_sound_effect",
+                  description: "Reproduz um efeito sonoro da biblioteca. Use para reagir a situações comicas, de terror, suspense, etc. Diga ao usuário qual som você está ativando.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      sound_name: {
+                        type: Type.STRING,
+                        description: "O nome do som que deseja reproduzir (ex: Boing, Rimshot, Grito de Terror)."
+                      }
+                    },
+                    required: ["sound_name"]
+                  }
                 }
               ]
             }
@@ -1281,20 +1287,39 @@ export default function App() {
               if (attachedFiles.length > 0) {
                 sendFilesToLiveSession(session);
               }
+
+              // Send initial status about screen sharing
+              session.sendRealtimeInput({
+                text: isScreenSharing ? "O compartilhamento de tela está ATIVO." : "O compartilhamento de tela está DESATIVADO no momento."
+              });
             });
           },
           onmessage: async (message) => {
             sessionPromise.then(async (session) => {
               if (message.serverContent?.modelTurn?.parts) {
                 const audioPart = message.serverContent.modelTurn.parts.find(p => p.inlineData);
-                if (audioPart?.inlineData?.data) {
+                const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
+                
+                // Use Gemini Audio
+                if (audioPart?.inlineData?.data && !isMutedRef.current) {
                   setIsSpeaking(true);
                   audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
                 }
                 
-                const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
                 if (textPart?.text) {
-                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: textPart.text! }]);
+                  // Only add to chat history if it's not just a partial chunk, or maybe we just accumulate it?
+                  // Actually, Gemini Live sends text chunks. Adding every chunk to chatHistory creates a mess.
+                  // Let's just update the voiceTranscriptRef instead of chatHistory for Live mode.
+                  voiceTranscriptRef.current += textPart.text;
+                  setVoiceTranscript(voiceTranscriptRef.current);
+                }
+              }
+
+              if (message.serverContent?.turnComplete) {
+                if (voiceTranscriptRef.current) {
+                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: voiceTranscriptRef.current }]);
+                  voiceTranscriptRef.current = '';
+                  setVoiceTranscript('');
                 }
               }
 
@@ -1326,41 +1351,6 @@ export default function App() {
                       id: call.id,
                       response: { result: "Estrutura de projeto sendo gerada na aba de Construção de Pastas." }
                     });
-                  } else if (call.name === "list_home_devices") {
-                    try {
-                      const result = await TuyaService.listDevices(apiKeys);
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: `Dispositivos encontrados: ${JSON.stringify(result.result || result)}` }
-                      });
-                    } catch (err: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: `Erro ao listar dispositivos: ${err.message}` }
-                      });
-                    }
-                  } else if (call.name === "control_home_device") {
-                    const { deviceId, commands } = call.args as any;
-                    try {
-                      const processedCommands = commands.map((c: any) => ({
-                        code: c.code,
-                        value: c.value === 'true' ? true : c.value === 'false' ? false : isNaN(Number(c.value)) ? c.value : Number(c.value)
-                      }));
-                      const result = await TuyaService.controlDevice(apiKeys, deviceId, processedCommands);
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: `Comando enviado. Resultado: ${JSON.stringify(result)}` }
-                      });
-                    } catch (err: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: `Erro ao controlar dispositivo: ${err.message}` }
-                      });
-                    }
                   } else if (call.name === "create_folder") {
                     const path = call.args.path as string;
                     const parts = path.split('/').filter(Boolean);
@@ -1525,6 +1515,50 @@ export default function App() {
                       id: call.id,
                       response: { result: `Clique simulado em (${x}, ${y}).` }
                     });
+                  } else if (call.name === "display_lyrics") {
+                    setLyrics({ 
+                      title: (call.args.title as string) || "Nova Composição", 
+                      content: call.args.lyrics as string 
+                    });
+                    setIsSinging(true);
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Letra exibida com sucesso na tela." }
+                    });
+                  } else if (call.name === "switch_voice") {
+                    const voice = call.args.voice as string;
+                    setSelectedVoice(voice);
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Voz alterada para ${voice} em tempo real.` }
+                    });
+                  } else if (call.name === "change_orb_style") {
+                    const style = call.args.style as OrbStyle;
+                    setOrbStyle(style);
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Estilo do orb alterado para ${style}.` }
+                    });
+                  } else if (call.name === "play_sound_effect") {
+                    const name = call.args.sound_name as string;
+                    const sound = soundLibrary.find(s => s.name.toLowerCase() === name.toLowerCase());
+                    if (sound) {
+                      playSoundEffect(sound.url);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Efeito sonoro '${name}' reproduzido com sucesso.` }
+                      });
+                    } else {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Erro: Som '${name}' não encontrado na biblioteca.` }
+                      });
+                    }
                   }
                 }
 
@@ -1536,6 +1570,11 @@ export default function App() {
               if (message.serverContent?.interrupted) {
                 audioPlayerRef.current?.stop();
                 setIsSpeaking(false);
+                if (voiceTranscriptRef.current) {
+                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: voiceTranscriptRef.current }]);
+                  voiceTranscriptRef.current = '';
+                  setVoiceTranscript('');
+                }
               }
               if (message.serverContent?.turnComplete) {
                 setIsSpeaking(false);
@@ -1595,8 +1634,81 @@ export default function App() {
     }
   };
 
+  const closeLyrics = () => {
+    setLyrics(null);
+    setIsSinging(false);
+  };
+
   return (
     <div className="relative h-[100dvh] w-screen flex flex-col overflow-hidden">
+      {/* Lyrics Overlay */}
+      <AnimatePresence>
+        {lyrics && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 pointer-events-none"
+          >
+            <div className="relative w-full max-w-3xl flex flex-col gap-4 pointer-events-auto items-center">
+              <button 
+                onClick={closeLyrics}
+                className="absolute -top-12 md:-top-16 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/40 transition-all border border-white/10"
+              >
+                <X size={16} />
+              </button>
+              
+              <div className="flex flex-col items-center gap-1 mb-2">
+                {lyrics.title && (
+                  <motion.h2 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    className="text-[10px] md:text-xs font-light text-her-accent tracking-[0.4em] uppercase text-center opacity-60"
+                  >
+                    {lyrics.title}
+                  </motion.h2>
+                )}
+              </div>
+              
+              <motion.div 
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="text-center px-4 max-w-2xl"
+              >
+                <div 
+                  className="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-xl md:text-2xl font-medium leading-[1.8] tracking-tight text-white/90 px-4 font-serif italic selection:bg-her-accent/30 scrollbar-hide"
+                  style={{
+                    WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
+                    maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'
+                  }}
+                >
+                  {lyrics.content}
+                </div>
+              </motion.div>
+
+              <div className="flex justify-center pt-8 opacity-40 scale-75">
+                <div className="flex items-end gap-2 h-10">
+                  {[...Array(8)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      animate={{ 
+                        height: [8, Math.random() * 20 + 10, 8],
+                        opacity: [0.3, 0.8, 0.3]
+                      }}
+                      transition={{ 
+                        duration: 1.2 + Math.random(), 
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                      className="w-1.5 bg-her-accent rounded-full shadow-[0_0_10px_rgba(255,78,0,0.3)]"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Click Visual Effect */}
       <AnimatePresence>
         {clickVisual.visible && (
@@ -1731,7 +1843,7 @@ export default function App() {
                     <textarea 
                       value={workspaceText}
                       onChange={(e) => setWorkspaceText(e.target.value)}
-                      className="workspace-textarea flex-1 focus:outline-none p-8 font-light leading-relaxed text-sm scrollbar-hide"
+                      className="workspace-textarea flex-1 focus:outline-none p-8 font-light leading-relaxed text-base md:text-sm scrollbar-hide"
                       placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
                     />
                   </div>
@@ -1744,7 +1856,7 @@ export default function App() {
                       onChange={(e) => setWorkspacePrompt(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
                       placeholder="O que você quer que eu escreva?"
-                      className="flex-1 bg-transparent px-6 py-3 focus:outline-none text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                      className="flex-1 bg-transparent px-6 py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
                     />
                     <button 
                       onClick={handleGenerate}
@@ -1792,7 +1904,7 @@ export default function App() {
                     <input 
                       type="text"
                       placeholder="Descreva o projeto..."
-                      className="bg-transparent px-4 py-2 focus:outline-none text-xs font-light w-full md:w-64 text-her-ink/80 placeholder:text-her-muted/30"
+                      className="bg-transparent px-4 py-2 focus:outline-none text-base md:text-xs font-light w-full md:w-64 text-her-ink/80 placeholder:text-her-muted/30"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           handleGenerateStructure(e.currentTarget.value);
@@ -1900,6 +2012,38 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
+          ) : workspaceMode === 'sounds' ? (
+            <motion.div
+              key="workspace-sounds"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col min-h-0"
+            >
+              <SoundLibrary 
+                sounds={soundLibrary}
+                playingUrl={playingSoundUrl}
+                onAddSound={(s) => setSoundLibrary(prev => [...prev, { ...s, id: Math.random().toString(36).substr(2, 9) } as SoundEffect])}
+                onUpdateSound={(id, updated) => setSoundLibrary(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s))}
+                onRemoveSound={(id) => setSoundLibrary(prev => prev.filter(s => s.id !== id))}
+                onRestoreDefaults={() => {
+                  if (confirm('Tem certeza que deseja restaurar os sons padrão? Isso manterá seus sons personalizados se você os adicionou manualmente.')) {
+                    setSoundLibrary(prev => {
+                      const newLibrary = [...prev];
+                      DEFAULT_SOUNDS.forEach(def => {
+                        if (!newLibrary.some(s => s.url === def.url)) {
+                          newLibrary.push(def);
+                        }
+                      });
+                      return newLibrary;
+                    });
+                  }
+                }}
+                onPlaySound={playSoundEffect}
+                onStopSound={stopSoundEffect}
+                onClose={() => setWorkspaceMode('home')}
+              />
+            </motion.div>
           ) : (
             <motion.div 
               key="home"
@@ -1908,17 +2052,23 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8"
             >
-              <div className="mb-4 md:mb-8 text-center shrink-0">
+              <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
                 <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE</h1>
                 <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
               </div>
 
-              <div className="flex-1 w-full flex flex-col min-h-0 gap-4 md:gap-6">
+              <div className="flex-1 w-full flex flex-col min-h-0 gap-2 md:gap-6">
                 {/* Visualizer Area */}
-                <div className="flex flex-col items-center justify-center py-2 md:py-4 shrink-0">
-                  <InfinityLogo active={isListening} speaking={isSpeaking} />
+                <div className="flex flex-col items-center justify-center py-2 shrink-0 transform scale-75 md:scale-100 origin-center -my-4 md:my-0">
+                  <div onClick={handleVoiceToggle} className="cursor-pointer">
+                    <InfinityLogo 
+                      active={liveState.status === 'connected'} 
+                      speaking={isSpeaking} 
+                      style={orbStyle}
+                    />
+                  </div>
                   
-                  <div className="mt-6 flex flex-col items-center gap-2">
+                  <div className="mt-4 flex flex-col items-center gap-2">
                     <div className="flex items-center gap-2">
                       <div className={cn(
                         "w-1.5 h-1.5 rounded-full transition-all duration-500",
@@ -1967,13 +2117,13 @@ export default function App() {
                 </div>
 
                 {/* Chat History - Integrated into screen */}
-                <div className="flex-1 flex flex-col justify-center gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto">
+                <div className="flex-1 flex flex-col justify-center gap-2 md:gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto">
                   {chatHistory.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-her-muted/10 italic text-lg font-light">
+                    <div className="flex flex-col items-center justify-center h-full text-her-muted/20 italic text-sm md:text-lg font-light">
                       <p>Manifeste sua intenção...</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-6 max-h-full overflow-y-auto scrollbar-hide py-4">
+                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto scrollbar-hide py-2 md:py-4">
                       {chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
@@ -2014,33 +2164,6 @@ export default function App() {
                                 >
                                   <Copy size={12} />
                                 </button>
-
-                                 {apiKeys.whatsappNumbers && apiKeys.whatsappNumbers.length > 0 && (
-                                  <button 
-                                    onClick={() => {
-                                      const targetNumber = apiKeys.whatsappNumbers[0];
-                                      const url = `https://wa.me/${targetNumber}?text=${encodeURIComponent(msg.content)}`;
-                                      window.open(url, '_blank');
-                                    }}
-                                    className="p-1 hover:text-green-500 transition-colors"
-                                    title={`Enviar para WhatsApp (${apiKeys.whatsappNumbers[0]})`}
-                                  >
-                                    <Smartphone size={12} />
-                                  </button>
-                                )}
-
-                                {apiKeys.alexaSkillId && (
-                                  <button 
-                                    onClick={() => {
-                                      // Simulação de envio para Alexa
-                                      alert(`Enviando para Alexa (Skill: ${apiKeys.alexaSkillId}): ${msg.content.substring(0, 30)}...`);
-                                    }}
-                                    className="p-1 hover:text-blue-400 transition-colors"
-                                    title="Enviar para Alexa"
-                                  >
-                                    <Speaker size={12} />
-                                  </button>
-                                )}
                               </div>
                             )}
                           </div>
@@ -2054,6 +2177,30 @@ export default function App() {
                           </div>
                         </motion.div>
                       ))}
+
+                      {/* Real-time voice transcript */}
+                      {voiceTranscript && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="group relative text-base md:text-lg font-light leading-relaxed tracking-tight shrink-0 flex flex-col text-her-ink/80 text-left items-start"
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="opacity-20 text-[10px] uppercase tracking-[0.2em]">
+                              OSONE
+                            </span>
+                            <span className="flex items-center gap-1 opacity-50">
+                              <span className="w-1 h-1 bg-her-accent rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <span className="w-1 h-1 bg-her-accent rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <span className="w-1 h-1 bg-her-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                            </span>
+                          </div>
+                          <div className="max-w-[90%] whitespace-pre-wrap">
+                            {voiceTranscript}
+                          </div>
+                        </motion.div>
+                      )}
+
                       <div ref={chatEndRef} />
                     </div>
                   )}
@@ -2061,6 +2208,14 @@ export default function App() {
 
                 {/* Chat Input Area */}
                 <div className="shrink-0 pt-4 w-full max-w-3xl mx-auto">
+                  <div className="flex justify-start px-1 mb-2">
+                    <VoiceSwitcher 
+                      selectedVoice={selectedVoice}
+                      onVoiceChange={setSelectedVoice}
+                      isOpen={isVoiceSwitcherOpen}
+                      onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
+                    />
+                  </div>
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={handleVoiceToggle}
@@ -2107,7 +2262,7 @@ export default function App() {
                           onChange={(e) => setHomePrompt(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleHomeChat()}
                           placeholder="Diga algo para o OSONE..."
-                          className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                          className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
                         />
                         <button 
                           onClick={handleHomeChat}
@@ -2127,7 +2282,7 @@ export default function App() {
       </main>
 
       {/* Footer Controls */}
-      <footer className="relative z-30 p-4 md:p-6 flex justify-center items-center gap-8">
+      <footer className="relative z-30 p-2 md:p-6 flex justify-center items-center gap-8 bg-her-bg md:bg-transparent">
         <button 
           onClick={handleMuteToggle}
           className={cn(
@@ -2165,6 +2320,8 @@ export default function App() {
         setKeys={setApiKeys}
         selectedVoice={selectedVoice}
         setSelectedVoice={setSelectedVoice}
+        orbStyle={orbStyle}
+        setOrbStyle={setOrbStyle}
       />
     </div>
   );
