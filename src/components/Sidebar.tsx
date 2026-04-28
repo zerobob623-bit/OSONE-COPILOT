@@ -75,14 +75,14 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode }: {
                   <span>Escrita</span>
                 </button>
                 <button 
-                  onClick={() => { setMode('folder_construction'); onClose(); }}
+                  onClick={() => { setMode('webtoon'); onClose(); }}
                   className={cn(
                     "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                    mode === 'folder_construction' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                    mode === 'webtoon' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
                   )}
                 >
                   <Folder size={18} />
-                  <span>Estrutura</span>
+                  <span>Criação de Webtoon</span>
                 </button>
               </div>
             </div>

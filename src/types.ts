@@ -5,13 +5,30 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'folder_construction' | 'sounds';
+export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds';
 
 export interface SoundEffect {
   id: string;
   name: string;
   category: string;
   url: string;
+}
+
+export interface WebtoonPanel {
+  id: string;
+  imageUrl?: string;
+  dialogue: string;
+  narration: string;
+}
+
+export interface WebtoonProject {
+  id: string;
+  title: string;
+  idea: string;
+  characters: string;
+  style: string;
+  panels: WebtoonPanel[];
+  createdAt: number;
 }
 
 export interface VirtualFile {

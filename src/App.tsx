@@ -47,6 +47,7 @@ import { Sidebar } from './components/Sidebar';
 import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
+import { WebtoonCreator } from './components/WebtoonCreator';
 import { SoundEffect } from './types';
 
 // --- Main App ---
@@ -828,6 +829,17 @@ export default function App() {
     }
   };
 
+  const playSpeech = (text: string) => {
+    if (isMuted) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pt-BR';
+    const voices = window.speechSynthesis.getVoices();
+    const ptVoice = voices.find(v => v.lang === 'pt-BR');
+    if (ptVoice) utterance.voice = ptVoice;
+    window.speechSynthesis.speak(utterance);
+  };
+
   const handleHomeChat = async () => {
     if ((!homePrompt.trim() && attachedFiles.length === 0) || !apiKeys.gemini) {
       if (!apiKeys.gemini) setIsSettingsOpen(true);
@@ -977,7 +989,7 @@ export default function App() {
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
             addFolder(null, name, parentName);
-            setWorkspaceMode('folder_construction');
+            setWorkspaceMode('webtoon');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -987,7 +999,7 @@ export default function App() {
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
             addFile(null, name, parentName);
-            setWorkspaceMode('folder_construction');
+            setWorkspaceMode('webtoon');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -1028,7 +1040,7 @@ export default function App() {
               return prev;
             });
             
-            setWorkspaceMode('folder_construction');
+            setWorkspaceMode('webtoon');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -1199,13 +1211,13 @@ export default function App() {
                 },
                 {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Construção de Pastas ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias) ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "folder_construction"],
+                        enum: ["home", "writing", "webtoon"],
                         description: "O modo para o qual alternar."
                       }
                     },
@@ -1432,7 +1444,7 @@ export default function App() {
                     });
                   } else if (call.name === "generate_project_structure") {
                     handleGenerateStructure(call.args.description as string);
-                    setWorkspaceMode('folder_construction');
+                    setWorkspaceMode('webtoon');
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -1468,7 +1480,7 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('folder_construction');
+                    setWorkspaceMode('webtoon');
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -1504,7 +1516,7 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('folder_construction');
+                    setWorkspaceMode('webtoon');
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -1574,7 +1586,7 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('folder_construction');
+                    setWorkspaceMode('webtoon');
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -2014,139 +2026,8 @@ export default function App() {
                 )}
               </div>
             </motion.div>
-          ) : workspaceMode === 'folder_construction' ? (
-            <motion.div 
-              key="workspace-folder"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
-            >
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => setWorkspaceMode('home')}
-                    className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
-                  >
-                    <ChevronRight size={18} className="rotate-180" />
-                  </button>
-                  <h2 className="text-xl font-serif italic font-light">Arquitetura</h2>
-                  <div className="h-4 w-[1px] bg-white/[0.05]" />
-                  <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Estrutura de Projeto</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                  <div className="flex flex-1 md:flex-none gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[1.5rem] border border-white/[0.05] md:mr-4">
-                    <input 
-                      type="text"
-                      placeholder="Descreva o projeto..."
-                      className="bg-transparent px-4 py-2 focus:outline-none text-base md:text-xs font-light w-full md:w-64 text-her-ink/80 placeholder:text-her-muted/30"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleGenerateStructure(e.currentTarget.value);
-                          e.currentTarget.value = '';
-                        }
-                      }}
-                    />
-                    <button 
-                      onClick={(e) => {
-                        const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-                        handleGenerateStructure(input.value);
-                        input.value = '';
-                      }}
-                      disabled={isGenerating}
-                      className="p-2 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-xl hover:bg-her-accent/20 transition-all disabled:opacity-20"
-                    >
-                      {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    </button>
-                  </div>
-                  <button 
-                    onClick={copyFileSystem}
-                    className="flex items-center gap-2 px-5 py-2.5 hover:bg-white/[0.03] rounded-2xl transition-colors text-xs font-light text-her-muted border border-transparent"
-                  >
-                    <Copy size={14} />
-                    Copiar Tudo
-                  </button>
-                  <button 
-                    onClick={resetFileSystem}
-                    className="flex items-center gap-2 px-5 py-2.5 hover:bg-red-500/10 text-red-400 rounded-2xl transition-colors text-xs font-light border border-transparent"
-                  >
-                    <Trash2 size={14} />
-                    Resetar
-                  </button>
-                  <button 
-                    onClick={downloadFileSystem}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-2xl transition-all text-xs font-light shadow-sm hover:bg-her-accent/20"
-                  >
-                    <Download size={14} />
-                    Baixar ZIP
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
-                {/* File Explorer */}
-                <div className="w-full lg:w-80 shrink-0 h-1/2 lg:h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6 min-h-[150px]">
-                  <div className="flex items-center justify-between mb-2 shrink-0">
-                    <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Arquivos</span>
-                    <button 
-                      onClick={() => {
-                        const name = prompt('Nome da pasta:');
-                        if (name) addFolder(null, name);
-                      }}
-                      className="p-2 hover:bg-white/[0.03] rounded-xl text-her-accent transition-colors"
-                      title="Nova Pasta Raiz"
-                    >
-                      <FolderPlus size={16} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-1">
-                    {fileSystem.map(item => (
-                      <FileTreeItem 
-                        key={item.id}
-                        item={item}
-                        depth={0}
-                        selectedFileId={selectedFileId}
-                        setSelectedFileId={setSelectedFileId}
-                        onAddFile={addFile}
-                        onAddFolder={addFolder}
-                        onDelete={deleteItem}
-                        onRename={renameItem}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Editor */}
-                <div className="flex-1 bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 overflow-hidden flex flex-col min-h-[150px]">
-                  {selectedFileId ? (
-                    <textarea 
-                      value={(() => {
-                        const getFileById = (items: FileSystemItem[], id: string): VirtualFile | null => {
-                          for (const item of items) {
-                            if (item.type === 'file' && item.id === id) return item;
-                            if (item.type === 'folder') {
-                              const found = getFileById(item.children || [], id);
-                              if (found) return found;
-                            }
-                          }
-                          return null;
-                        };
-                        return getFileById(fileSystem, selectedFileId)?.content || '';
-                      })()}
-                      onChange={(e) => updateFileContent(selectedFileId, e.target.value)}
-                      className="workspace-textarea flex-1 focus:outline-none"
-                      placeholder="Escreva o conteúdo do arquivo aqui..."
-                    />
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-her-muted">
-                      <FileText size={48} className="opacity-10 mb-4" />
-                      <p className="text-sm italic">Selecione um arquivo para editar</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+          ) : workspaceMode === 'webtoon' ? (
+            <WebtoonCreator key="workspace-webtoon" apiKeys={apiKeys} />
           ) : workspaceMode === 'sounds' ? (
             <motion.div
               key="workspace-sounds"
