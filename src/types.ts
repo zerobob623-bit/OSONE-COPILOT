@@ -5,7 +5,7 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds';
+export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow';
 
 export interface SoundEffect {
   id: string;

@@ -43,6 +43,8 @@ export const WebtoonCreator = ({ apiKeys }: { apiKeys: ApiKeys }) => {
   const [idea, setIdea] = useState('');
   const [characters, setCharacters] = useState<CharacterItem[]>([{ id: Math.random().toString(36).substr(2, 9), name: '', appearance: '' }]);
   const [style, setStyle] = useState('Manhwa Vívido');
+  const [language, setLanguage] = useState('Português');
+  const [panelCount, setPanelCount] = useState<number>(6);
   const [panels, setPanels] = useState<WebtoonPanel[]>([]);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -64,7 +66,7 @@ export const WebtoonCreator = ({ apiKeys }: { apiKeys: ApiKeys }) => {
     setCharacters(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
-  const generateStory = async () => {
+  const generateStory = async (isNextChapter: boolean = false) => {
     if (!apiKeys.gemini) {
       alert("Por favor, configure sua chave de API do Gemini nas configurações.");
       return;
@@ -72,23 +74,30 @@ export const WebtoonCreator = ({ apiKeys }: { apiKeys: ApiKeys }) => {
     if (!idea) return;
 
     setIsGeneratingStory(true);
-    setPanels([]);
+    if (!isNextChapter) {
+      setPanels([]);
+    }
     
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
       
       const charactersText = characters.map(c => `${c.name}: ${c.appearance}`).join('\n');
+
+      const previousStoryContext = isNextChapter && panels.length > 0 
+        ? `\nHistória até agora (Painéis Anteriores para contexto):\n${panels.map((p, i) => `Painel ${i+1}: Narrativa: ${p.narration} | Diálogo: ${p.dialogue || ''}`).join('\n')}\nContinue a história a partir destes acontecimentos.`
+        : '';
       
       const prompt = `Você é um roteirista especializado em Webtoons.
 Ideia Principal: ${idea}
 Personagens (Nomes e Aparências): ${charactersText}
 Estilo da Arte: ${style}
+Idioma da História: ${language}${previousStoryContext}
 
-Crie um storyboard / script de webtoon contendo até 6 painéis (painéis em um episódio de webtoon).
+Crie um storyboard / script de webtoon contendo exatamente ${panelCount} painéis (o próximo capítulo / continuação da história).
 Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no array:
-- imagePrompt: Um prompt detalhado em inglês para o gerador de imagens. Deve incluir o estilo visual pedido (${style}), descrever bem o ambiente, os personagens e a ação.
-- narration: Narração do painel escrito para o leitor. Em português.
-- dialogue: Fala dos personagens (se houver), ou deixe vazio. Em português.`;
+- imagePrompt: Um prompt detalhado em inglês para o gerador de imagens. Deve incluir o estilo visual pedido (${style}), descrever bem o ambiente e a ação. MANTENHA A CONSISTÊNCIA DOS PERSONAGENS: Inclua as características de aparência exatas definidas acima (${charactersText}) toda vez que um personagem aparecer no painel.
+- narration: Narração do painel escrito para o leitor. Em ${language}.
+- dialogue: Fala dos personagens (se houver), ou deixe vazio. Em ${language}.`;
 
       const response = await genAI.models.generateContent({
         model: "gemini-2.5-flash",
@@ -126,7 +135,11 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
         isGeneratingImage: false
       }));
 
-      setPanels(initialPanels);
+      if (isNextChapter) {
+        setPanels(prev => [...prev, ...initialPanels]);
+      } else {
+        setPanels(initialPanels);
+      }
       
       // Auto-generate images iteratively
       for (let i = 0; i < initialPanels.length; i++) {
@@ -191,7 +204,7 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
 
   const saveStory = () => {
     if (panels.length === 0) return;
-    const storyData = JSON.stringify({ idea, characters, style, panels });
+    const storyData = JSON.stringify({ idea, characters, style, language, panels });
     const saved = localStorage.getItem('osone_webtoons');
     const parsedSaved = saved ? JSON.parse(saved) : [];
     const newStory = {
@@ -355,16 +368,70 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
                 className="w-full bg-black/10 border border-white/[0.05] rounded-xl p-4 py-3 text-sm focus:outline-none focus:border-her-accent/30 text-her-ink/80 transition-colors"
               />
             </div>
+
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-her-muted mb-3 ml-1">Idioma dos Diálogos</label>
+              
+              <div className="flex flex-wrap gap-2">
+                {["Português", "Inglês", "Espanhol", "Japonês", "Coreano"].map(lang => (
+                  <button
+                    key={lang}
+                    onClick={() => setLanguage(lang)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl text-[11px] transition-all border",
+                      language === lang 
+                        ? "bg-her-accent/20 border-her-accent/40 text-her-accent" 
+                        : "bg-black/10 border-white/[0.05] text-her-muted hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-her-muted mb-3 ml-1">Painéis por Capítulo</label>
+              <div className="flex gap-2">
+                {[2, 4, 6, 8, 10].map(count => (
+                  <button
+                    key={count}
+                    onClick={() => setPanelCount(count)}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[12px] font-medium transition-all border flex-1",
+                      panelCount === count
+                        ? "bg-her-accent/20 border-her-accent/40 text-her-accent"
+                        : "bg-black/10 border-white/[0.05] text-her-muted hover:bg-white/[0.05]"
+                    )}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           
-          <button 
-            onClick={generateStory}
-            disabled={isGeneratingStory || !idea}
-            className="w-full flex items-center justify-center gap-2 py-4 bg-her-accent/10 text-her-accent rounded-2xl hover:bg-her-accent/20 transition-all font-medium disabled:opacity-30 disabled:grayscale"
-          >
-            {isGeneratingStory ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-            {isGeneratingStory ? "Escrevendo..." : "Gerar Webtoon"}
-          </button>
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={() => generateStory(false)}
+              disabled={isGeneratingStory || !idea}
+              className="w-full flex items-center justify-center gap-2 py-4 bg-her-accent/10 text-her-accent rounded-2xl hover:bg-her-accent/20 transition-all font-medium disabled:opacity-30 disabled:grayscale"
+            >
+              {isGeneratingStory ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+              {isGeneratingStory ? "Escrevendo..." : (panels.length > 0 ? "Gerar Nova História" : "Gerar Webtoon")}
+            </button>
+
+            {panels.length > 0 && (
+              <button 
+                onClick={() => generateStory(true)}
+                disabled={isGeneratingStory || !idea}
+                className="w-full flex items-center justify-center gap-2 py-4 bg-white/5 text-white/90 rounded-2xl hover:bg-white/10 transition-all font-medium disabled:opacity-30 disabled:grayscale border border-white/[0.05]"
+              >
+                {isGeneratingStory ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                {isGeneratingStory ? "Escrevendo Continuação..." : "Gerar Próximo Capítulo"}
+              </button>
+            )}
+          </div>
 
           {savedStories.length > 0 && (
             <div className="mt-8">
@@ -385,6 +452,7 @@ Retorne os dados em formato JSON usando as seguintes chaves para cada objeto no 
                           }
                           
                           setStyle(parsed.style);
+                          setLanguage(parsed.language || 'Português');
                           setPanels(parsed.panels || []);
                         } catch (e) { console.error(e); }
                       }}

@@ -37,6 +37,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import * as xlsx from 'xlsx';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { cn } from './lib/utils';
 import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
@@ -48,6 +50,7 @@ import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
+import { ViralFlow } from './components/ViralFlow';
 import { SoundEffect } from './types';
 
 // --- Main App ---
@@ -953,6 +956,40 @@ export default function App() {
         }
       });
 
+      functionDeclarations.push({
+        name: "export_to_excel",
+        description: "Gera um arquivo Excel (.xlsx) para o usuário baixar a partir de dados estruturados em formato JSON, a partir da edição ou criação que o usuário pedir. Use para tabelas, planilhas, relatórios baseados em grade.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .xlsx." },
+            data: { 
+              type: Type.ARRAY, 
+              items: { type: Type.OBJECT },
+              description: "Array de objetos representando as linhas da planilha. As chaves devem ser as colunas."
+            }
+          },
+          required: ["fileName", "data"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "export_to_word",
+        description: "Gera um arquivo Word (.docx) para o usuário baixar a partir de múltiplos parágrafos, formatando com títulos, listas, textos de uma edição ou criação que o usuário solicitar.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .docx." },
+            content: { 
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "O conteúdo a ser adicionado ao docx, onde cada elemento do array é um parágrafo. Se for um título, prefira não colocar a marcação markdown, apenas o texto, a não ser que gere uma string mais crua."
+            }
+          },
+          required: ["fileName", "content"]
+        }
+      });
+
       tools.push({ functionDeclarations });
 
       const historyContents = chatHistory.map(msg => ({
@@ -968,7 +1005,7 @@ export default function App() {
         model: "gemini-2.5-flash",
         contents: historyContents,
         config: {
-          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Se o usuário pedir para você cantar, CANTE ativamente usando métrica, rimas, melodia na voz e pausas teatrais. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Use as ferramentas sempre que solicitadas.",
+          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Se o usuário pedir para você cantar, CANTE ativamente usando métrica, rimas, melodia na voz e pausas teatrais. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Você também pode gerar planilhas e documentos Word a partir de imagens. Use as ferramentas sempre que o usuário pedir.",
           tools: tools
         }
       });
@@ -1113,6 +1150,48 @@ export default function App() {
                 content: `Desculpe, não encontrei o som '${name}' na minha biblioteca.` 
               }]);
             }
+          } else if (call.name === 'export_to_excel') {
+            const { fileName, data } = call.args as any;
+            try {
+              const worksheet = xlsx.utils.json_to_sheet(data);
+              const workbook = xlsx.utils.book_new();
+              xlsx.utils.book_append_sheet(workbook, worksheet, "Planilha");
+              const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+              const blob = new Blob([excelBuffer], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8'});
+              saveAs(blob, `${fileName}.xlsx`);
+              
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Gerei e iniciei o download da planilha '${fileName}.xlsx'.` 
+              }]);
+            } catch (e: any) {
+              console.error(e);
+            }
+          } else if (call.name === 'export_to_word') {
+            const { fileName, content } = call.args as any;
+            try {
+              let textContent = Array.isArray(content) ? content : [String(content)];
+              const doc = new Document({
+                sections: [{
+                  children: textContent.map((text: string) => new Paragraph({
+                    children: [new TextRun(text)]
+                  }))
+                }]
+              });
+              
+              Packer.toBlob(doc).then(blob => {
+                saveAs(blob, `${fileName}.docx`);
+                
+                setChatHistory(prev => [...prev, { 
+                  id: Math.random().toString(36).substr(2, 9), 
+                  role: 'assistant' as const, 
+                  content: `Gerei e iniciei o download do documento '${fileName}.docx'.` 
+                }]);
+              });
+            } catch (e: any) {
+              console.error(e);
+            }
           }
         }
       } else {
@@ -1170,7 +1249,7 @@ export default function App() {
       audioPlayerRef.current = new AudioPlayer();
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
-      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Se eu (o usuário) pedir para você cantar, CANTE com entusiasmo (use tom musical, ritmo poético e inflexões de voz). Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos, gerar estruturas de pastas e gerar IMAGENS (conforme solicitado e usando suas ferramentas).`;
+      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Se eu (o usuário) pedir para você cantar, CANTE com entusiasmo (use tom musical, ritmo poético e inflexões de voz). Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos, gerar planilhas e documentos a partir de imagens ou descrições, gerar estruturas de pastas e gerar IMAGENS (conforme solicitado e usando suas ferramentas).`;
 
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -1352,6 +1431,38 @@ export default function App() {
                       }
                     },
                     required: ["sound_name"]
+                  }
+                },
+                {
+                  name: "export_to_excel",
+                  description: "Gera um arquivo Excel (.xlsx) para o usuário baixar a partir de dados estruturados em formato JSON, a partir da edição ou criação que o usuário pedir. Use para tabelas, planilhas, relatórios baseados em grade.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .xlsx." },
+                      data: { 
+                        type: Type.ARRAY, 
+                        items: { type: Type.OBJECT },
+                        description: "Array de objetos representando as linhas da planilha. As chaves devem ser as colunas."
+                      }
+                    },
+                    required: ["fileName", "data"]
+                  }
+                },
+                {
+                  name: "export_to_word",
+                  description: "Gera um arquivo Word (.docx) para o usuário baixar a partir de múltiplos parágrafos, formatando com títulos, listas, textos de uma edição ou criação que o usuário solicitar.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .docx." },
+                      content: { 
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "O conteúdo a ser adicionado ao docx, onde cada elemento do array é um parágrafo. Se for um título, prefira não colocar a marcação markdown, apenas o texto, a não ser que gere uma string mais crua."
+                      }
+                    },
+                    required: ["fileName", "content"]
                   }
                 },
                 {
@@ -1706,6 +1817,56 @@ export default function App() {
                         response: { result: `Erro: Som '${name}' não encontrado na biblioteca.` }
                       });
                     }
+                  } else if (call.name === 'export_to_excel') {
+                    const { fileName, data } = call.args as any;
+                    try {
+                      const worksheet = xlsx.utils.json_to_sheet(data);
+                      const workbook = xlsx.utils.book_new();
+                      xlsx.utils.book_append_sheet(workbook, worksheet, "Planilha");
+                      const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+                      const blob = new Blob([excelBuffer], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8'});
+                      saveAs(blob, `${fileName}.xlsx`);
+                      
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Planilha enviada para o usuário baixar." }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Erro ao gerar arquivo Excel: " + e.message }
+                      });
+                    }
+                  } else if (call.name === 'export_to_word') {
+                    const { fileName, content } = call.args as any;
+                    try {
+                      let textContent = Array.isArray(content) ? content : [String(content)];
+                      const doc = new Document({
+                        sections: [{
+                          children: textContent.map((text: string) => new Paragraph({
+                            children: [new TextRun(text)]
+                          }))
+                        }]
+                      });
+                      
+                      Packer.toBlob(doc).then(blob => {
+                        saveAs(blob, `${fileName}.docx`);
+                      });
+
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Documento Word enviado para o usuário baixar." }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Erro ao gerar arquivo Word: " + e.message }
+                      });
+                    }
                   }
                 }
 
@@ -1904,7 +2065,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative z-20 flex flex-col items-center justify-center overflow-hidden w-full">
+      <main className="flex-1 relative z-20 flex flex-col items-center justify-center overflow-hidden w-full min-h-0">
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -2028,6 +2189,8 @@ export default function App() {
             </motion.div>
           ) : workspaceMode === 'webtoon' ? (
             <WebtoonCreator key="workspace-webtoon" apiKeys={apiKeys} />
+          ) : workspaceMode === 'viralflow' ? (
+            <ViralFlow key="workspace-viralflow" apiKeys={apiKeys} />
           ) : workspaceMode === 'sounds' ? (
             <motion.div
               key="workspace-sounds"
