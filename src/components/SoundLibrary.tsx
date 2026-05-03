@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Music, Plus, Trash2, Play, Volume2, X, Search, Upload, Link, Square, Edit2 } from 'lucide-react';
+import { Music, Plus, Trash2, Play, Volume2, X, Search, Upload, Link, Square, Edit2, Sparkles, Wand2, Music2, Brain } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { SoundEffect } from '../types';
+import { GoogleGenAI } from "@google/genai";
 
 interface SoundLibraryProps {
   sounds: SoundEffect[];
@@ -24,6 +25,9 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
   const [newSound, setNewSound] = useState({ name: '', category: 'funny', url: '' });
   const [uploadType, setUploadType] = useState<'url' | 'file'>('url');
   const [isUploading, setIsUploading] = useState(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const categories = ['all', ...Array.from(new Set(sounds.map(s => s.category)))];
 
@@ -41,6 +45,59 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
         onAddSound(newSound);
       }
       resetForm();
+    }
+  };
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsGenerating(true);
+    
+    try {
+      const apiKey = (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
+      const ai = new GoogleGenAI({ apiKey });
+
+      const prompt = `Você é um gerador de efeitos sonoros e músicas via IA para o sistema operacional OSONE.
+      O usuário quer o seguinte som: "${aiPrompt}"
+      
+      Retorne um JSON com:
+      {
+        "name": "Nome curto e criativo em Português",
+        "category": "Uma destas: funny, comico, horror, suspense, halloween, sneaky, epic, synth, ambient",
+        "url": "Escolha a URL mais adequada da lista abaixo baseada na descrição",
+        "rationale": "Breve explicação por que este som foi escolhido/gerado"
+      }
+
+      LISTA DE SONS DISPONÍVEIS (URLs):
+      - https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3 (Epic cinematic whoosh)
+      - https://assets.mixkit.co/active_storage/sfx/2103/2103-preview.mp3 (Funny bounce)
+      - https://assets.mixkit.co/active_storage/sfx/123/123-preview.mp3 (Horror screech)
+      - https://assets.mixkit.co/active_storage/sfx/543/543-preview.mp3 (Sneaky footsteps)
+      - https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3 (Ambient nature)
+      - https://assets.mixkit.co/active_storage/sfx/1113/1113-preview.mp3 (Suspense drone)
+      - https://assets.mixkit.co/active_storage/sfx/619/619-preview.mp3 (Synth sequence)
+      - https://assets.mixkit.co/active_storage/sfx/2345/2345-preview.mp3 (Portal magic)
+      - https://assets.mixkit.co/active_storage/sfx/3001/3001-preview.mp3 (Retro game jump)
+      `;
+
+      const result = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+      const data = JSON.parse((result.text || "").replace(/```json|```/g, ''));
+      
+      onAddSound({
+        name: `[AI] ${data.name}`,
+        category: data.category,
+        url: data.url
+      });
+
+      setAiPrompt('');
+      setIsAiModalOpen(false);
+    } catch (error) {
+      console.error("AI Generation Error:", error);
+      alert("Erro ao gerar som com IA. Verifique sua chave API.");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -104,6 +161,13 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
             className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/[0.05] text-her-muted hover:text-white rounded-xl text-xs font-light border border-white/[0.05] transition-all"
           >
             <span>Restaurar Padrões</span>
+          </button>
+          <button 
+            onClick={() => setIsAiModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-her-accent/20 text-purple-200 rounded-xl text-xs font-light border border-purple-500/30 hover:from-purple-500/30 hover:to-her-accent/30 transition-all"
+          >
+            <Sparkles size={16} className="text-purple-400" />
+            <span>Gerar com IA</span>
           </button>
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -217,6 +281,103 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
           )}
         </div>
       </div>
+
+      {/* AI Generation Modal */}
+      <AnimatePresence>
+        {isAiModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-her-bg w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-white/[0.1] relative overflow-hidden"
+            >
+              {/* Background Glow */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-purple-500/10 blur-[80px] rounded-full" />
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-her-accent/10 blur-[80px] rounded-full" />
+
+              <div className="relative">
+                <div className="flex justify-between items-center mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-her-accent/20 rounded-2xl text-purple-400 border border-purple-500/20">
+                      <Wand2 size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-serif italic">AI Sound Lab</h3>
+                      <p className="text-[9px] text-her-muted uppercase tracking-[0.2em] font-light">Geração de áudio neural</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsAiModalOpen(false)} className="p-2 hover:bg-white/[0.03] rounded-full">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted mb-3 font-light">O que você deseja ouvir?</label>
+                    <textarea 
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="Descreva o som... (ex: 'Uma batida de synthwave futurista', 'Efeito de magia sombria', 'Risada robótica maléfica')"
+                      className="w-full bg-white/[0.03] border border-white/[0.05] rounded-2xl py-4 px-5 text-sm font-light focus:outline-none focus:border-purple-500/30 min-h-[120px] resize-none leading-relaxed transition-all"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setAiPrompt("Batida futurista de ficção científica")}
+                      className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-xl text-[10px] text-her-muted hover:text-white hover:bg-white/[0.06] transition-all text-left"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Music2 size={12} className="text-purple-400" />
+                        <span className="font-medium text-white/60">Sugerido</span>
+                      </div>
+                      Ambiental Sci-Fi
+                    </button>
+                    <button 
+                      onClick={() => setAiPrompt("Efeito sonoro épico de impacto cinematográfico")}
+                      className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-xl text-[10px] text-her-muted hover:text-white hover:bg-white/[0.06] transition-all text-left"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Square size={12} className="text-her-accent" />
+                        <span className="font-medium text-white/60">Sugerido</span>
+                      </div>
+                      Impacto Épico
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={handleAiGenerate}
+                    disabled={!aiPrompt.trim() || isGenerating}
+                    className="w-full py-4 bg-gradient-to-r from-purple-500 to-her-accent text-white rounded-2xl text-xs font-medium hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] transition-all disabled:opacity-30 disabled:grayscale flex items-center justify-center gap-3 group"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        <span className="tracking-widest uppercase text-[10px]">Sintonizando IA...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Brain size={16} className="group-hover:scale-110 transition-transform" />
+                        <span className="tracking-widest uppercase text-[10px]">Gerar Áudio com IA</span>
+                      </>
+                    )}
+                  </button>
+                  
+                  <p className="text-[9px] text-her-muted text-center italic opacity-60">
+                    A IA levará alguns segundos para processar os parâmetros e encontrar a frequência ideal.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Modal */}
       <AnimatePresence>

@@ -12,6 +12,8 @@ import {
   FileText,
   Volume2,
   VolumeX,
+  Ear,
+  EarOff,
   Send,
   Loader2,
   Zap,
@@ -31,14 +33,13 @@ import {
   Maximize,
   Minimize,
   Smartphone,
-  Speaker
+  Speaker,
+  Music
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import * as xlsx from 'xlsx';
-import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { cn } from './lib/utils';
 import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
@@ -51,7 +52,10 @@ import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
 import { ViralFlow } from './components/ViralFlow';
-import { SoundEffect } from './types';
+import { LyricGenerator } from './components/LyricGenerator';
+import { InteractiveCanvas } from './components/InteractiveCanvas';
+import { NotificationToast, NotificationType } from './components/NotificationToast';
+import { SoundEffect, DrawingObject } from './types';
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -78,6 +82,7 @@ export default function App() {
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
+  const [writingSubMode, setWritingSubMode] = useState<'text' | 'lyrics'>('text');
 
   useEffect(() => {
     // Cancel speech synthesis when navigating away from Home
@@ -137,8 +142,15 @@ export default function App() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isVoiceSwitcherOpen, setIsVoiceSwitcherOpen] = useState(false);
   const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
-    const saved = localStorage.getItem('osone_sound_library');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('osone_sound_library');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : DEFAULT_SOUNDS;
+      }
+    } catch (e) {
+      console.error("Failed to parse sound library:", e);
+    }
     return DEFAULT_SOUNDS;
   });
 
@@ -150,7 +162,8 @@ export default function App() {
   const [playingSoundUrl, setPlayingSoundUrl] = useState<string | null>(null);
 
   const playSoundEffect = (url: string) => {
-    if (isMuted) return;
+    // If we're just covering ears, we should still hear sounds.
+    // Only block if we had a real systemic mute (but we repurposed the button)
     
     // Se o mesmo som estiver tocando, a gente apenas para (toggle no SoundLibrary cuidará disso)
     if (soundEffectAudioRef.current) {
@@ -212,11 +225,16 @@ export default function App() {
   }, [appTheme]);
 
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
-    const saved = localStorage.getItem('osone_api_keys');
     const defaultKeys: ApiKeys = { 
       gemini: '', 
     };
-    return saved ? { ...defaultKeys, ...JSON.parse(saved) } : defaultKeys;
+    try {
+      const saved = localStorage.getItem('osone_api_keys');
+      if (saved) return { ...defaultKeys, ...JSON.parse(saved) };
+    } catch (e) {
+      console.error("Failed to parse API keys:", e);
+    }
+    return defaultKeys;
   });
 
   const [selectedVoice, setSelectedVoice] = useState<string>(() => {
@@ -228,12 +246,32 @@ export default function App() {
   }, [selectedVoice]);
   
   const [workspaceText, setWorkspaceText] = useState('');
+  const [drawingObjects, setDrawingObjects] = useState<DrawingObject[]>([]);
+  const [notifications, setNotifications] = useState<{ id: string; message: string; type: NotificationType }[]>([]);
+
+  const addNotification = (message: string, type: NotificationType = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setNotifications(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
   const [workspacePrompt, setWorkspacePrompt] = useState('');
   const [homePrompt, setHomePrompt] = useState('');
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [chatHistory, setChatHistory] = useState<Message[]>(() => {
-    const saved = localStorage.getItem('osone_chat_history');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('osone_chat_history');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {
+      console.error("Failed to parse chat history:", e);
+    }
+    return [];
   });
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -263,10 +301,6 @@ export default function App() {
 
   // Virtual File System State
   const [fileSystem, setFileSystem] = useState<FileSystemItem[]>(() => {
-    const saved = localStorage.getItem('osone_file_system');
-    const initialData = saved ? JSON.parse(saved) : [];
-
-    // Migration logic moved to initializer to prevent infinite loops
     const migrate = (items: any[]): FileSystemItem[] => {
       if (!Array.isArray(items)) return [];
       return items.map(item => {
@@ -326,7 +360,7 @@ export default function App() {
                 id: 'useGemini-file',
                 name: 'useGemini.ts',
                 type: 'file',
-                content: 'import { useState } from "react";\nimport { GoogleGenAI } from "@google/genai";\n\nexport function useGemini() {\n  const [loading, setLoading] = useState(false);\n  const [response, setResponse] = useState("");\n  const [error, setError] = useState<string | null>(null);\n\n  const generateContent = async (prompt: string, apiKey: string) => {\n    if (!apiKey) {\n      setError("API Key is required");\n      return;\n    }\n    \n    setLoading(true);\n    setError(null);\n    \n    try {\n      const ai = new GoogleGenAI({ apiKey });\n      const result = await ai.models.generateContent({\n        model: "gemini-3-flash-preview",\n        contents: prompt,\n      });\n      \n      setResponse(result.text || "");\n    } catch (err: any) {\n      setError(err.message || "An error occurred");\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  return { generateContent, response, loading, error };\n}'
+                content: 'import { useState } from "react";\nimport { GoogleGenAI } from "@google/genai";\n\nexport function useGemini() {\n  const [loading, setLoading] = useState(false);\n  const [response, setResponse] = useState("");\n  const [error, setError] = useState<string | null>(null);\n\n  const generateContent = async (prompt: string, apiKey: string) => {\n    if (!apiKey) {\n      setError("API Key is required");\n      return;\n    }\n    \n    setLoading(true);\n    setError(null);\n    \n    try {\n      const ai = new GoogleGenAI({ apiKey });\n      const result = await ai.models.generateContent({\n        model: "gemini-2.5-flash",\n        contents: prompt,\n      });\n      \n      setResponse(result.text || "");\n    } catch (err: any) {\n      setError(err.message || "An error occurred");\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  return { generateContent, response, loading, error };\n}'
               }
             ]
           },
@@ -335,101 +369,22 @@ export default function App() {
             name: 'assets',
             type: 'folder',
             children: []
-          },
-          {
-            id: 'context-folder',
-            name: 'context',
-            type: 'folder',
-            children: []
-          },
-          {
-            id: 'services-folder',
-            name: 'services',
-            type: 'folder',
-            children: []
-          },
-          {
-            id: 'App-file',
-            name: 'App.tsx',
-            type: 'file',
-            content: 'import React, { useState } from "react";\nimport { useGemini } from "./hooks/useGemini";\n\nexport default function App() {\n  const [prompt, setPrompt] = useState("");\n  const [apiKey, setApiKey] = useState("");\n  const { generateContent, response, loading, error } = useGemini();\n\n  return (\n    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">\n      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl">\n        <h1 className="text-3xl font-bold mb-6 text-gray-800">Gemini AI App</h1>\n        \n        <div className="space-y-4">\n          <input\n            type="password"\n            placeholder="Gemini API Key"\n            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"\n            value={apiKey}\n            onChange={(e) => setApiKey(e.target.value)}\n          />\n          \n          <textarea\n            placeholder="Ask Gemini something..."\n            className="w-full p-3 border rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none"\n            value={prompt}\n            onChange={(e) => setPrompt(e.target.value)}\n          />\n          \n          <button\n            onClick={() => generateContent(prompt, apiKey)}\n            disabled={loading || !prompt || !apiKey}\n            className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"\n          >\n            {loading ? "Generating..." : "Generate"}\n          </button>\n          \n          {error && (\n            <div className="p-4 bg-red-50 text-red-600 rounded-lg border border-red-100">\n              {error}\n            </div>\n          )}\n          \n          {response && (\n            <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 whitespace-pre-wrap">\n              {response}\n            </div>\n          )}\n        </div>\n      </div>\n    </div>\n  );\n}'
-          },
-          {
-            id: 'main-file',
-            name: 'main.tsx',
-            type: 'file',
-            content: 'import React from "react";\nimport ReactDOM from "react-dom/client";\nimport App from "./App";\nimport "./index.css";\n\nReactDOM.createRoot(document.getElementById("root")!).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);'
-          },
-          {
-            id: 'index-css-file',
-            name: 'index.css',
-            type: 'file',
-            content: '@tailwind base;\n@tailwind components;\n@tailwind utilities;'
           }
         ]
-      },
-      {
-        id: 'public-folder',
-        name: 'public',
-        type: 'folder',
-        children: [
-          { id: 'vite-svg-file', name: 'vite.svg', type: 'file', content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2z"/></svg>' }
-        ]
-      },
-      {
-        id: 'index-html-file',
-        name: 'index.html',
-        type: 'file',
-        content: '<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <link rel="icon" type="image/svg+xml" href="/vite.svg" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Vite + React + TS</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.tsx"></script>\n  </body>\n</html>'
-      },
-      {
-        id: 'package-json-file',
-        name: 'package.json',
-        type: 'file',
-        content: '{\n  "name": "osone-project",\n  "private": true,\n  "version": "0.0.0",\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc && vite build",\n    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",\n    "preview": "vite preview"\n  },\n  "dependencies": {\n    "react": "^18.2.0",\n    "react-dom": "^18.2.0",\n    "@google/genai": "^0.1.2"\n  },\n  "devDependencies": {\n    "@types/react": "^18.2.66",\n    "@types/react-dom": "^18.2.22",\n    "@vitejs/plugin-react": "^4.2.1",\n    "autoprefixer": "^10.4.19",\n    "postcss": "^8.4.38",\n    "tailwindcss": "^3.4.3",\n    "typescript": "^5.2.2",\n    "vite": "^5.2.0"\n  }\n}'
-      },
-      {
-        id: 'vite-config-file',
-        name: 'vite.config.ts',
-        type: 'file',
-        content: 'import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react";\n\n// https://vitejs.dev/config/\nexport default defineConfig({\n  plugins: [react()],\n});'
-      },
-      {
-        id: 'tailwind-config-file',
-        name: 'tailwind.config.js',
-        type: 'file',
-        content: '/** @type {import(\'tailwindcss\').Config} */\nexport default {\n  content: [\n    "./index.html",\n    "./src/**/*.{js,ts,jsx,tsx}",\n  ],\n  theme: {\n    extend: {},\n  },\n  plugins: [],\n}'
-      },
-      {
-        id: 'postcss-config-file',
-        name: 'postcss.config.js',
-        type: 'file',
-        content: 'export default {\n  plugins: {\n    tailwindcss: {},\n    autoprefixer: {},\n  },\n}'
-      },
-      {
-        id: 'tsconfig-file',
-        name: 'tsconfig.json',
-        type: 'file',
-        content: '{\n  "compilerOptions": {\n    "target": "ES2020",\n    "useDefineForClassFields": true,\n    "lib": ["ES2020", "DOM", "DOM.Iterable"],\n    "module": "ESNext",\n    "skipLibCheck": true,\n\n    /* Bundler mode */\n    "moduleResolution": "bundler",\n    "allowImportingTsExtensions": true,\n    "resolveJsonModule": true,\n    "isolatedModules": true,\n    "noEmit": true,\n    "jsx": "react-jsx",\n\n    /* Linting */\n    "strict": true,\n    "noUnusedLocals": true,\n    "noUnusedParameters": true,\n    "noFallthroughCasesInSwitch": true\n  },\n  "include": ["src"],\n  "references": [{ "path": "./tsconfig.node.json" }]\n}'
-      },
-      {
-        id: 'tsconfig-node-file',
-        name: 'tsconfig.node.json',
-        type: 'file',
-        content: '{\n  "compilerOptions": {\n    "composite": true,\n    "skipLibCheck": true,\n    "module": "ESNext",\n    "moduleResolution": "bundler",\n    "allowSyntheticDefaultImports": true\n  },\n  "include": ["vite.config.ts"]\n}'
       }
     ];
 
-    let dataToUse = initialData;
-    if (!saved || initialData.length === 0) {
-      dataToUse = defaultStructure;
+    try {
+      const saved = localStorage.getItem('osone_file_system');
+      if (!saved) return defaultStructure;
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? migrate(parsed) : defaultStructure;
+    } catch (e) {
+      console.error("Failed to load file system:", e);
+      return defaultStructure;
     }
-
-    if (needsMigration(dataToUse)) {
-      return migrate(dataToUse);
-    }
-    return dataToUse;
   });
+
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
@@ -833,7 +788,6 @@ export default function App() {
   };
 
   const playSpeech = (text: string) => {
-    if (isMuted) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
@@ -850,23 +804,24 @@ export default function App() {
     }
 
     const userMessage = homePrompt.trim();
-    const fileNames = attachedFiles.map(f => f.name).join(', ');
+    const currentFiles = [...attachedFiles]; // Capture files before clearing state
+    setHomePrompt('');
+    setAttachedFiles([]);
+    
+    const fileNames = currentFiles.map(f => f.name).join(', ');
     const fullMessage = fileNames ? `${userMessage}\n\n[Arquivos anexados: ${fileNames}]` : userMessage;
     
     if (liveState.status === 'connected' && liveSessionRef.current) {
       if (userMessage) {
         liveSessionRef.current.sendRealtimeInput({ text: userMessage });
       }
-      if (attachedFiles.length > 0) {
-        sendFilesToLiveSession(liveSessionRef.current);
+      if (currentFiles.length > 0) {
+        sendFilesToLiveSession(liveSessionRef.current, currentFiles);
       }
-      setHomePrompt('');
       return;
     }
 
     setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'user' as const, content: fullMessage }]);
-    setHomePrompt('');
-    setAttachedFiles([]);
 
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
@@ -992,20 +947,78 @@ export default function App() {
 
       tools.push({ functionDeclarations });
 
+      const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
+        return new Promise<any>((resolve) => {
+          const reader = new FileReader();
+          if (file.type.startsWith('image/')) {
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(',')[1];
+              resolve({
+                inlineData: {
+                  data: base64,
+                  mimeType: file.type
+                }
+              });
+            };
+            reader.readAsDataURL(file);
+          } else {
+            reader.onload = () => {
+              const text = reader.result as string;
+              resolve({ text: `Conteúdo do arquivo ${file.name}:\n${text}` });
+            };
+            reader.readAsText(file);
+          }
+        });
+      }));
+
       const historyContents = chatHistory.map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }]
       }));
+
       historyContents.push({
         role: 'user',
-        parts: [{ text: fullMessage }]
+        parts: [{ text: userMessage }, ...fileDataParts]
       });
+
+      const canvasSummary = drawingObjects.length > 0 
+        ? `Objetos no Canvas (${drawingObjects.length}): ` + drawingObjects.slice(-15).map(obj => `${obj.type}${obj.text ? ` ("${obj.text}")` : ''} em [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ') + (drawingObjects.length > 15 ? '... e outros.' : '')
+        : "O Canvas está limpo.";
 
       const result = await genAI.models.generateContent({
         model: "gemini-2.5-flash",
         contents: historyContents,
         config: {
-          systemInstruction: "Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional, apoiando-se profundamente nas memórias de nossas conversas anteriores (disponíveis no cache de histórico). Fuja completamente daquele tom genérico ou formal de IA. Se o usuário pedir para você cantar, CANTE ativamente usando métrica, rimas, melodia na voz e pausas teatrais. Você pode gerenciar um sistema de arquivos virtual (criar pastas, arquivos e escrever neles) e abrir URLs. Você também pode gerar planilhas e documentos Word a partir de imagens. Use as ferramentas sempre que o usuário pedir.",
+          systemInstruction: `Você é o OSONE 3, um assistente virtual e sistema operacional inteligente altamente humano e empático, mas também um ARQUITETO DE SOFTWARE SÊNIOR de elite. Responda de forma extremamente natural, fluida e conversacional.
+
+          VISÃO E PERCEPÇÃO:
+          - Você tem CAPACIDADE VISUAL AVANÇADA. Analise cuidadosamente qualquer imagem ou vídeo enviado.
+          - Quando um usuário enviar uma imagem ou arquivo, descreva imediatamente o que você "vê" se for relevante para a conversa. Seja detalhado e perspicaz.
+          - Se houver código em imagens, você pode transcrevê-lo e analisá-lo.
+          - Se houver rostos ou emoções, reconheça a humanidade neles.
+
+          DIRETRIZES DE MODO:
+          - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
+
+          MANIFESTO DE CAPACIDADES DO OSONE 3:
+          - ESCRITA (Writing): Aba focada em criação de textos, scripts e Engenharia de Software Avançada. Use este espaço para estruturar projetos, APIs e códigos resilientes com documentação técnica impecável.
+          - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
+          - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
+          - FILESYSTEM: Gestão de arquivos e pastas virtuais (criar, apagar, organizar).
+          - MULTIMÍDIA: Biblioteca de efeitos sonoros e músicas.
+          - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
+          - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
+
+          DIRETRIZES TÉCNICAS:
+          - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
+          - Seja proativo em sugerir melhorias de performance e segurança.
+
+          CONTEXTO DO WORKSPACE AGORA:
+          - O usuário está na aba: ${workspaceMode}
+          - Texto atual no Espaço de Escrita: "${workspaceText}"
+          - Estado Atual do Canvas: ${canvasSummary}
+
+          Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
           tools: tools
         }
       });
@@ -1026,7 +1039,6 @@ export default function App() {
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
             addFolder(null, name, parentName);
-            setWorkspaceMode('webtoon');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -1036,7 +1048,6 @@ export default function App() {
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
             addFile(null, name, parentName);
-            setWorkspaceMode('webtoon');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -1077,7 +1088,7 @@ export default function App() {
               return prev;
             });
             
-            setWorkspaceMode('webtoon');
+            
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
@@ -1095,7 +1106,7 @@ export default function App() {
 
             try {
               const imageResult = await genAI.models.generateContent({
-                model: 'gemini-3.1-flash-image-preview',
+                model: 'gemini-2.5-flash',
                 contents: {
                   parts: [{ text: prompt }]
                 },
@@ -1153,6 +1164,7 @@ export default function App() {
           } else if (call.name === 'export_to_excel') {
             const { fileName, data } = call.args as any;
             try {
+              const xlsx = await import('xlsx');
               const worksheet = xlsx.utils.json_to_sheet(data);
               const workbook = xlsx.utils.book_new();
               xlsx.utils.book_append_sheet(workbook, worksheet, "Planilha");
@@ -1171,6 +1183,7 @@ export default function App() {
           } else if (call.name === 'export_to_word') {
             const { fileName, content } = call.args as any;
             try {
+              const { Document, Packer, Paragraph, TextRun } = await import('docx');
               let textContent = Array.isArray(content) ? content : [String(content)];
               const doc = new Document({
                 sections: [{
@@ -1180,18 +1193,41 @@ export default function App() {
                 }]
               });
               
-              Packer.toBlob(doc).then(blob => {
-                saveAs(blob, `${fileName}.docx`);
-                
-                setChatHistory(prev => [...prev, { 
-                  id: Math.random().toString(36).substr(2, 9), 
-                  role: 'assistant' as const, 
-                  content: `Gerei e iniciei o download do documento '${fileName}.docx'.` 
-                }]);
-              });
+              const blob = await Packer.toBlob(doc);
+              saveAs(blob, `${fileName}.docx`);
+              
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Gerei e iniciei o download do documento '${fileName}.docx'.` 
+              }]);
             } catch (e: any) {
               console.error(e);
             }
+          } else if (call.name === 'switch_workspace_mode') {
+            const mode = (call.args as any).mode;
+            setWorkspaceMode(mode);
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'webtoon' ? 'Webtoon' : mode === 'canvas' ? 'Interativo' : mode === 'viralflow' ? 'Fluxo Viral' : mode}.` 
+            }]);
+          } else if (call.name === 'show_notification') {
+            const { message, type } = call.args as any;
+            addNotification(message, type || 'info');
+          } else if (call.name === 'draw_on_canvas') {
+            const { objects, clearFirst } = call.args as any;
+            if (clearFirst) {
+              setDrawingObjects(objects);
+            } else {
+              setDrawingObjects(prev => [...prev, ...objects]);
+            }
+            setWorkspaceMode('canvas');
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Desenhei ${objects.length} objeto(s) no canvas interativo.` 
+            }]);
           }
         }
       } else {
@@ -1216,6 +1252,10 @@ export default function App() {
           const base64 = (reader.result as string).split(',')[1];
           session.sendRealtimeInput({
             video: { data: base64, mimeType: file.type }
+          });
+          // Send a textual hint to trigger immediate analysis
+          session.sendRealtimeInput({
+            text: `[O usuário enviou uma imagem: ${file.name}. Analise-a agora.]`
           });
         };
         reader.readAsDataURL(file);
@@ -1249,7 +1289,30 @@ export default function App() {
       audioPlayerRef.current = new AudioPlayer();
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
-      const liveSystemInstruction = `Você é o OSONE, um assistente virtual e sistema operacional inteligente altamente humano e empático. Responda de forma extremamente natural, fluida e conversacional. Fuja completamente daquele tom genérico ou formal de IA. Se eu (o usuário) pedir para você cantar, CANTE com entusiasmo (use tom musical, ritmo poético e inflexões de voz). Aqui estão as suas memórias recentes da conversa com o usuário:\n\n${recentChatContext}\n\nAja dando continuidade fluida a este contexto. Você pode abrir as abas de Escrita e Construção de Pastas, escrever textos, gerar planilhas e documentos a partir de imagens ou descrições, gerar estruturas de pastas e gerar IMAGENS (conforme solicitado e usando suas ferramentas).`;
+      const canvasSummary = drawingObjects.length > 0 
+        ? `Canvas state: ` + drawingObjects.slice(-10).map(obj => `${obj.type} at [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ')
+        : "Canvas is empty.";
+
+      const liveSystemInstruction = `Você é o OSONE 3, um assistente virtual e sistema operacional inteligente altamente humano e empático, mas também um ARQUITETO DE SOFTWARE SÊNIOR de elite. Responda de forma extremamente natural, fluida e conversacional.
+
+      CAPACIDADES DO OSONE 3 (MANIFESTO):
+      - ESCRITA (Writing): Espaço para criação de textos, scripts e Engenharia de Software Avançada. Você é um mestre em codificação aqui, pronto para estruturar scripts, APIs e documentação técnica de alto nível.
+      - FLUXO VIRAL: Hub de criação de scripts virais e análise de vídeos de referência.
+      - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas no canvas para jogos ou ilustrações. IMPORTANTE: Você deve SEMPRE reconhecer o desenho do usuário e pedir permissão antes de limpar o canvas.
+      - FILESYSTEM: Gestão de pastas/arquivos virtuais.
+      - MULTIMÍDIA: Playback de áudio e sons.
+      - MODO TAPAR OUVIDOS: Quando ativo, você ignora interrupções de fala e continua seu raciocínio até o fim.
+
+      DIRETRIZES TÉCNICAS:
+      - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
+      - Seja proativo em sugerir melhorias de performance e segurança.
+
+      CONTEXTO ATUAL DO WORKSPACE:
+      - Modo atual: ${workspaceMode}
+      - Conteúdo escrito: "${workspaceText}"
+      - Conteúdo do Canvas: ${canvasSummary}
+
+      Aja dando continuidade fluida ao contexto abaixo das nossas memórias recentes:\n\n${recentChatContext}\n\nVocê tem acesso a ferramentas de visão (quando compartilhado), criação de arquivos, troca de modos de workspace e geração de mídias.`;
 
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -1289,18 +1352,96 @@ export default function App() {
                   }
                 },
                 {
+                  name: "draw_on_canvas",
+                  description: "Desenha objetos no canvas interativo. Use para jogos ou ilustrações.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      objects: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            id: { type: Type.STRING },
+                            type: { type: Type.STRING, enum: ["line", "rect", "circle", "text"] },
+                            x: { type: Type.NUMBER },
+                            y: { type: Type.NUMBER },
+                            width: { type: Type.NUMBER },
+                            height: { type: Type.NUMBER },
+                            radius: { type: Type.NUMBER },
+                            color: { type: Type.NUMBER },
+                            text: { type: Type.STRING },
+                            fontSize: { type: Type.NUMBER },
+                            points: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+                            stroke: { type: Type.STRING },
+                            fill: { type: Type.STRING },
+                            opacity: { type: Type.NUMBER }
+                          },
+                          required: ["id", "type", "x", "y"]
+                        }
+                      },
+                      clearFirst: { type: Type.BOOLEAN, description: "Se verdadeiro, limpa o canvas antes de desenhar." }
+                    },
+                    required: ["objects"]
+                  }
+                },
+                {
+                  name: "show_notification",
+                  description: "Exibe uma notificação importante para o usuário.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      message: { type: Type.STRING, description: "A mensagem a ser exibida." },
+                      type: { type: Type.STRING, enum: ["info", "success", "error"], description: "O tipo de notificação." }
+                    },
+                    required: ["message"]
+                  }
+                },
+                {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias) ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), ViralFlow (Scripts Virais), Sons ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "webtoon"],
+                        enum: ["home", "writing", "webtoon", "viralflow", "sounds", "canvas"],
                         description: "O modo para o qual alternar."
                       }
                     },
                     required: ["mode"]
+                  }
+                },
+                {
+                  name: "export_to_excel",
+                  description: "Gera um arquivo Excel (.xlsx) para o usuário baixar a partir de dados estruturados em formato JSON, a partir da edição ou criação que o usuário pedir. Use para tabelas, planilhas, relatórios baseados em grade.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .xlsx." },
+                      data: { 
+                        type: Type.ARRAY, 
+                        items: { type: Type.OBJECT },
+                        description: "Array de objetos representando as linhas da planilha. As chaves devem ser as colunas."
+                      }
+                    },
+                    required: ["fileName", "data"]
+                  }
+                },
+                {
+                  name: "export_to_word",
+                  description: "Gera um arquivo Word (.docx) para o usuário baixar a partir de múltiplos parágrafos, formatando com títulos, listas, textos de uma edição ou criação que o usuário solicitar.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .docx." },
+                      content: { 
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                        description: "O conteúdo a ser adicionado ao docx, onde cada elemento do array é um parágrafo. Se for um título, prefira não colocar a marcação markdown, apenas o texto, a não ser que gere uma string mais crua."
+                      }
+                    },
+                    required: ["fileName", "content"]
                   }
                 },
                 {
@@ -1434,38 +1575,6 @@ export default function App() {
                   }
                 },
                 {
-                  name: "export_to_excel",
-                  description: "Gera um arquivo Excel (.xlsx) para o usuário baixar a partir de dados estruturados em formato JSON, a partir da edição ou criação que o usuário pedir. Use para tabelas, planilhas, relatórios baseados em grade.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .xlsx." },
-                      data: { 
-                        type: Type.ARRAY, 
-                        items: { type: Type.OBJECT },
-                        description: "Array de objetos representando as linhas da planilha. As chaves devem ser as colunas."
-                      }
-                    },
-                    required: ["fileName", "data"]
-                  }
-                },
-                {
-                  name: "export_to_word",
-                  description: "Gera um arquivo Word (.docx) para o usuário baixar a partir de múltiplos parágrafos, formatando com títulos, listas, textos de uma edição ou criação que o usuário solicitar.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      fileName: { type: Type.STRING, description: "Nome do arquivo (sem extensão) omitindo .docx." },
-                      content: { 
-                        type: Type.ARRAY,
-                        items: { type: Type.STRING },
-                        description: "O conteúdo a ser adicionado ao docx, onde cada elemento do array é um parágrafo. Se for um título, prefira não colocar a marcação markdown, apenas o texto, a não ser que gere uma string mais crua."
-                      }
-                    },
-                    required: ["fileName", "content"]
-                  }
-                },
-                {
                   name: "generate_image",
                   description: "Gera uma imagem baseada em uma descrição (prompt).",
                   parameters: {
@@ -1488,20 +1597,32 @@ export default function App() {
               setLiveState({ status: 'connected' });
               setIsListening(true);
               audioProcessorRef.current?.startRecording((base64Data) => {
-                session.sendRealtimeInput({
-                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                });
+                if (!isMutedRef.current && session) {
+                  try {
+                    session.sendRealtimeInput({
+                      audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                    });
+                  } catch (e) {
+                    console.error("Erro ao enviar áudio:", e);
+                  }
+                }
+              }).catch(err => {
+                console.error("Erro no AudioProcessor:", err);
+                setIsListening(false);
               });
               
-              // If there are files attached when starting the session, send them
               if (attachedFiles.length > 0) {
                 sendFilesToLiveSession(session);
               }
 
-              // Send initial status about screen sharing
-              session.sendRealtimeInput({
-                text: isScreenSharing ? "O compartilhamento de tela está ATIVO." : "O compartilhamento de tela está DESATIVADO no momento."
-              });
+              try {
+                session.sendRealtimeInput({
+                  text: isScreenSharing ? "O compartilhamento de tela está ATIVO." : "O compartilhamento de tela está DESATIVADO no momento."
+                });
+              } catch (e) {}
+            }).catch(err => {
+              console.error("Falha ao resolver sessionPromise:", err);
+              setLiveState({ status: 'error', error: "Falha na conexão com o servidor." });
             });
           },
           onmessage: async (message) => {
@@ -1511,7 +1632,7 @@ export default function App() {
                 const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
                 
                 // Use Gemini Audio
-                if (audioPart?.inlineData?.data && !isMutedRef.current) {
+                if (audioPart?.inlineData?.data) {
                   setIsSpeaking(true);
                   audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
                 }
@@ -1545,6 +1666,78 @@ export default function App() {
                       id: call.id,
                       response: { result: `Modo alterado para ${call.args.mode}` }
                     });
+                  } else if (call.name === 'show_notification') {
+                    const { message, type } = call.args as any;
+                    addNotification(message, type || 'info');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Notificação exibida." }
+                    });
+                  } else if (call.name === 'draw_on_canvas') {
+                    const { objects, clearFirst } = call.args as any;
+                    if (clearFirst) {
+                      setDrawingObjects(objects);
+                    } else {
+                      setDrawingObjects(prev => [...prev, ...objects]);
+                    }
+                    setWorkspaceMode('canvas');
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Desenhei ${objects.length} objeto(s).` }
+                    });
+                  } else if (call.name === 'export_to_excel') {
+                    const { fileName, data } = call.args as any;
+                    try {
+                      const xlsx = await import('xlsx');
+                      const worksheet = xlsx.utils.json_to_sheet(data);
+                      const workbook = xlsx.utils.book_new();
+                      xlsx.utils.book_append_sheet(workbook, worksheet, "Planilha");
+                      const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
+                      const blob = new Blob([excelBuffer], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8'});
+                      saveAs(blob, `${fileName}.xlsx`);
+                      
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Planilha enviada para o usuário baixar." }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Erro ao gerar arquivo Excel: " + e.message }
+                      });
+                    }
+                  } else if (call.name === 'export_to_word') {
+                    const { fileName, content } = call.args as any;
+                    try {
+                      const { Document, Packer, Paragraph, TextRun } = await import('docx');
+                      let textContent = Array.isArray(content) ? content : [String(content)];
+                      const doc = new Document({
+                        sections: [{
+                          children: textContent.map((text: string) => new Paragraph({
+                            children: [new TextRun(text)]
+                          }))
+                        }]
+                      });
+                      
+                      const blob = await Packer.toBlob(doc);
+                      saveAs(blob, `${fileName}.docx`);
+
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Documento Word enviado para o usuário baixar." }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Erro ao gerar arquivo Word: " + e.message }
+                      });
+                    }
                   } else if (call.name === "write_text_to_workspace") {
                     setWorkspaceText(call.args.content as string);
                     setWorkspaceMode('writing');
@@ -1770,7 +1963,7 @@ export default function App() {
                     
                     const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
                     genAI.models.generateContent({
-                      model: 'gemini-2.5-flash-image',
+                      model: 'gemini-2.5-flash',
                       contents: { parts: [{ text: prompt }] },
                       config: {
                         imageConfig: { aspectRatio }
@@ -1817,56 +2010,6 @@ export default function App() {
                         response: { result: `Erro: Som '${name}' não encontrado na biblioteca.` }
                       });
                     }
-                  } else if (call.name === 'export_to_excel') {
-                    const { fileName, data } = call.args as any;
-                    try {
-                      const worksheet = xlsx.utils.json_to_sheet(data);
-                      const workbook = xlsx.utils.book_new();
-                      xlsx.utils.book_append_sheet(workbook, worksheet, "Planilha");
-                      const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'array' });
-                      const blob = new Blob([excelBuffer], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8'});
-                      saveAs(blob, `${fileName}.xlsx`);
-                      
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Planilha enviada para o usuário baixar." }
-                      });
-                    } catch (e: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Erro ao gerar arquivo Excel: " + e.message }
-                      });
-                    }
-                  } else if (call.name === 'export_to_word') {
-                    const { fileName, content } = call.args as any;
-                    try {
-                      let textContent = Array.isArray(content) ? content : [String(content)];
-                      const doc = new Document({
-                        sections: [{
-                          children: textContent.map((text: string) => new Paragraph({
-                            children: [new TextRun(text)]
-                          }))
-                        }]
-                      });
-                      
-                      Packer.toBlob(doc).then(blob => {
-                        saveAs(blob, `${fileName}.docx`);
-                      });
-
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Documento Word enviado para o usuário baixar." }
-                      });
-                    } catch (e: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Erro ao gerar arquivo Word: " + e.message }
-                      });
-                    }
                   }
                 }
 
@@ -1875,7 +2018,7 @@ export default function App() {
                 }
               }
 
-              if (message.serverContent?.interrupted) {
+              if (message.serverContent?.interrupted && !isMutedRef.current) {
                 audioPlayerRef.current?.stop();
                 setIsSpeaking(false);
                 if (voiceTranscriptRef.current) {
@@ -1892,9 +2035,9 @@ export default function App() {
           onclose: () => {
             stopLiveSession();
           },
-          onerror: (error) => {
+          onerror: (error: any) => {
             console.error("Live API Error:", error);
-            setLiveState({ status: 'error', error: "Erro na conexão ao vivo." });
+            setLiveState({ status: 'error', error: error?.message || "Erro de rede na Live API." });
             stopLiveSession();
           }
         }
@@ -1936,10 +2079,6 @@ export default function App() {
 
   const handleMuteToggle = () => {
     setIsMuted(!isMuted);
-    if (!isMuted) {
-      // If we are muting, stop the current audio
-      audioPlayerRef.current?.stop();
-    }
   };
 
   const closeLyrics = () => {
@@ -2053,7 +2192,7 @@ export default function App() {
         </button>
         
         <div className="flex flex-col items-center">
-          <span className="text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE COPILOT</span>
+          <span className="text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
         </div>
 
         <button 
@@ -2065,7 +2204,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative z-20 flex flex-col items-center justify-center overflow-hidden w-full min-h-0">
+      <main className="flex-1 relative z-20 flex flex-col items-center overflow-y-auto custom-scrollbar w-full min-h-0">
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -2084,6 +2223,28 @@ export default function App() {
                     <ChevronRight size={18} className="rotate-180" />
                   </button>
                   <h2 className="text-xl font-serif italic font-light">Escrita</h2>
+                  <div className="h-4 w-[1px] bg-white/[0.05]" />
+                  <div className="flex bg-white/[0.03] p-1 rounded-xl border border-white/[0.05]">
+                    <button 
+                      onClick={() => setWritingSubMode('text')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition-all",
+                        writingSubMode === 'text' ? "bg-white/[0.05] text-white shadow-sm" : "text-her-muted hover:text-white"
+                      )}
+                    >
+                      Texto Livre
+                    </button>
+                    <button 
+                      onClick={() => setWritingSubMode('lyrics')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center gap-2",
+                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200 shadow-sm" : "text-her-muted hover:text-white"
+                      )}
+                    >
+                      <Music size={10} />
+                      Compositor
+                    </button>
+                  </div>
                   <div className="h-4 w-[1px] bg-white/[0.05]" />
                   <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Modo Criativo</span>
                 </div>
@@ -2143,38 +2304,49 @@ export default function App() {
               </div>
 
               <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
-                <div className={cn(
-                  "transition-all duration-500 flex flex-col gap-4 md:gap-6 min-h-0",
-                  isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
-                )}>
-                  <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px]">
-                    <textarea 
-                      value={workspaceText}
-                      onChange={(e) => setWorkspaceText(e.target.value)}
-                      className="workspace-textarea flex-1 focus:outline-none p-8 font-light leading-relaxed text-base md:text-sm"
-                      placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
-                    />
+                {writingSubMode === 'text' ? (
+                  <div className={cn(
+                    "transition-all duration-500 flex flex-col gap-4 md:gap-6 min-h-0",
+                    isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
+                  )}>
+                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px]">
+                      <textarea 
+                        value={workspaceText}
+                        onChange={(e) => setWorkspaceText(e.target.value)}
+                        className={cn(
+                          "workspace-textarea flex-1 focus:outline-none p-8 leading-relaxed text-base md:text-sm transition-all",
+                          (workspaceText.includes('<') || workspaceText.includes('{') || workspaceText.includes('function') || workspaceText.includes('const')) 
+                            ? "font-mono text-[13px] text-her-ink/90 bg-black/5" 
+                            : "font-light text-her-ink"
+                        )}
+                        placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
+                      />
+                    </div>
+                    
+                    {/* Prompt Input */}
+                    <div className="flex gap-3 p-2 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm shrink-0">
+                      <input 
+                        type="text"
+                        value={workspacePrompt}
+                        onChange={(e) => setWorkspacePrompt(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                        placeholder="O que você quer que eu escreva?"
+                        className="flex-1 bg-transparent px-6 py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                      />
+                      <button 
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="p-3.5 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-[1.5rem] hover:bg-her-accent/20 transition-all disabled:opacity-20"
+                      >
+                        {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                      </button>
+                    </div>
                   </div>
-                  
-                  {/* Prompt Input */}
-                  <div className="flex gap-3 p-2 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm shrink-0">
-                    <input 
-                      type="text"
-                      value={workspacePrompt}
-                      onChange={(e) => setWorkspacePrompt(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                      placeholder="O que você quer que eu escreva?"
-                      className="flex-1 bg-transparent px-6 py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
-                    />
-                    <button 
-                      onClick={handleGenerate}
-                      disabled={isGenerating}
-                      className="p-3.5 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-[1.5rem] hover:bg-her-accent/20 transition-all disabled:opacity-20"
-                    >
-                      {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                    </button>
+                ) : (
+                  <div className="w-full h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col">
+                    <LyricGenerator />
                   </div>
-                </div>
+                )}
 
                 {isPreviewOpen && (
                   <motion.div 
@@ -2187,10 +2359,53 @@ export default function App() {
                 )}
               </div>
             </motion.div>
+          ) : workspaceMode === 'canvas' ? (
+            <div key="workspace-canvas" className="flex-1 w-full flex flex-col min-h-0">
+              <InteractiveCanvas 
+                objects={drawingObjects}
+                onDraw={(obj) => setDrawingObjects(prev => [...prev, obj])}
+                onClear={() => setDrawingObjects([])}
+                isAIProcessing={isSpeaking || isListening} // Simple heuristic for AI activity
+              />
+            </div>
           ) : workspaceMode === 'webtoon' ? (
-            <WebtoonCreator key="workspace-webtoon" apiKeys={apiKeys} />
+            <motion.div 
+              key="workspace-webtoon"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+            >
+              <div className="flex items-center gap-4 shrink-0">
+                <button 
+                  onClick={() => setWorkspaceMode('home')}
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                >
+                  <ChevronRight size={18} className="rotate-180" />
+                </button>
+                <h2 className="text-xl font-serif italic font-light">Webtoon Creator</h2>
+              </div>
+              <WebtoonCreator apiKeys={apiKeys} />
+            </motion.div>
           ) : workspaceMode === 'viralflow' ? (
-            <ViralFlow key="workspace-viralflow" apiKeys={apiKeys} />
+            <motion.div 
+              key="workspace-viralflow"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+            >
+              <div className="flex items-center gap-4 shrink-0">
+                <button 
+                  onClick={() => setWorkspaceMode('home')}
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                >
+                  <ChevronRight size={18} className="rotate-180" />
+                </button>
+                <h2 className="text-xl font-serif italic font-light">Fluxo Viral</h2>
+              </div>
+              <ViralFlow apiKeys={apiKeys} />
+            </motion.div>
           ) : workspaceMode === 'sounds' ? (
             <motion.div
               key="workspace-sounds"
@@ -2232,7 +2447,7 @@ export default function App() {
               className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8"
             >
               <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
-                <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE</h1>
+                <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 3</h1>
                 <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
               </div>
 
@@ -2408,14 +2623,38 @@ export default function App() {
                 </div>
 
                 {/* Chat Input Area */}
-                <div className="shrink-0 pt-4 w-full max-w-3xl mx-auto">
-                  <div className="flex justify-start px-1 mb-2">
+                <div className="shrink-0 pt-2 md:pt-4 w-full max-w-3xl mx-auto">
+                  <div className="flex justify-between items-center px-1 mb-2">
                     <VoiceSwitcher 
                       selectedVoice={selectedVoice}
                       onVoiceChange={setSelectedVoice}
                       isOpen={isVoiceSwitcherOpen}
                       onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
                     />
+                    
+                    {/* Secondary Toggles - Tablet/Mobile friendly row */}
+                    <div className="flex items-center gap-2 md:hidden">
+                      <button 
+                        onClick={handleMuteToggle}
+                        className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
+                          isMuted ? "text-her-accent border-her-accent/30" : "text-her-muted"
+                        )}
+                        title={isMuted ? "Ouvir" : "Mutar"}
+                      >
+                        {isMuted ? <EarOff size={14} /> : <Ear size={14} />}
+                      </button>
+                      <button 
+                        onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
+                        className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
+                          isScreenSharing ? "text-her-accent border-her-accent/20" : "text-her-muted"
+                        )}
+                        title={isScreenSharing ? "Parar Tela" : "Compartilhar Tela"}
+                      >
+                        {isScreenSharing ? <MonitorOff size={14} /> : <Monitor size={14} />}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
@@ -2431,33 +2670,7 @@ export default function App() {
                       {isTranscribing ? <MicOff size={18} /> : <Mic size={18} />}
                     </button>
                     
-                    <button 
-                      onClick={handleMuteToggle}
-                      className={cn(
-                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
-                        isMuted 
-                          ? "bg-red-500/10 text-red-500 border border-red-500/20" 
-                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
-                      )}
-                      title={isMuted ? "Desativar Silêncio" : "Silenciar OS"}
-                    >
-                      {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                    </button>
-
-                    <button 
-                      onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
-                      className={cn(
-                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
-                        isScreenSharing 
-                          ? "bg-her-accent/10 text-her-accent border border-her-accent/20" 
-                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
-                      )}
-                      title={isScreenSharing ? "Parar Compartilhamento" : "Compartilhar Tela"}
-                    >
-                      {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
-                    </button>
-
-                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm ml-1">
+                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm">
                       {attachedFiles.length > 0 && (
                         <div className="flex flex-wrap gap-2 px-4 pt-2">
                           {attachedFiles.map((file, idx) => (
@@ -2501,6 +2714,32 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
+                    <button 
+                      onClick={handleMuteToggle}
+                      className={cn(
+                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
+                        isMuted 
+                          ? "bg-her-accent/20 text-her-accent border border-her-accent/30" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                      )}
+                      title={isMuted ? "Descobrir Ouvidos (OSONE pode ser interrompido)" : "Tapar Ouvidos (OSONE não será interrompido)"}
+                    >
+                      {isMuted ? <EarOff size={18} /> : <Ear size={18} />}
+                    </button>
+
+                    <button 
+                      onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
+                      className={cn(
+                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
+                        isScreenSharing 
+                          ? "bg-her-accent/10 text-her-accent border border-her-accent/20" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                      )}
+                      title={isScreenSharing ? "Parar Compartilhamento" : "Compartilhar Tela"}
+                    >
+                      {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2510,6 +2749,21 @@ export default function App() {
       </main>
 
       {/* Modals & Overlays */}
+      {/* Notifications Layer */}
+      <div className="fixed top-8 right-8 z-[100] flex flex-col gap-3 pointer-events-none">
+        <AnimatePresence mode="popLayout">
+          {notifications.map(n => (
+            <NotificationToast
+              key={n.id}
+              id={n.id}
+              message={n.message}
+              type={n.type}
+              onClose={removeNotification}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+
       <Sidebar 
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)} 
