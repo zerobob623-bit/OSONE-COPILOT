@@ -91,31 +91,86 @@ export const InfinityLogo = ({
       default:
         return (
           <div className="relative flex items-center justify-center">
+            {/* The Sphere Atmosphere */}
+            <AnimatePresence>
+              {(active || speaking) && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1.2 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="absolute inset-0 bg-her-accent/10 rounded-full blur-3xl animate-pulse"
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Main Glass Sphere Body */}
+            <motion.div
+              animate={{
+                scale: active ? [1, 1.02, 1] : 1,
+                rotate: active ? [0, 360] : 0
+              }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className={cn(
+                "relative w-24 h-24 md:w-36 md:h-36 rounded-full border border-white/20 overflow-hidden flex items-center justify-center transition-all duration-1000",
+                "backdrop-blur-xl shadow-[inset_0_0_30px_rgba(255,255,255,0.1),0_0_40px_rgba(0,0,0,0.1)]",
+                (active || speaking) ? "bg-white/10 border-her-accent/40 shadow-[0_0_60px_rgba(255,78,0,0.2)]" : "bg-white/5 border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.05)]"
+              )}
+            >
+              {/* Internal Refraction / "Conscious Currents" */}
+              {[0, 1].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{
+                    rotate: i === 0 ? 360 : -360,
+                    scale: active ? [1, 1.2, 1] : 1
+                  }}
+                  transition={{ 
+                    duration: i === 0 ? 15 : 20, 
+                    repeat: Infinity, 
+                    ease: "linear" 
+                  }}
+                  className={cn(
+                    "absolute inset-0 opacity-30",
+                    i === 0 ? "bg-[radial-gradient(circle_at_30%_30%,#fff_0%,transparent_60%)]" : "bg-[radial-gradient(circle_at_70%_70%,var(--color-her-accent)_0%,transparent_60%)]"
+                  )}
+                />
+              ))}
+
+              {/* Central Core (The "Ego") */}
+              <motion.div 
+                animate={{
+                  scale: speaking ? [1, 1.4, 1] : active ? [1, 1.1, 1] : 1,
+                  boxShadow: speaking 
+                    ? ["0 0 20px rgba(255,100,0,0.6)", "0 0 60px rgba(255,100,0,0.9)", "0 0 20px rgba(255,100,0,0.6)"] 
+                    : active ? "0 0 30px rgba(255,255,255,0.4)" : "0 0 10px rgba(255,255,255,0.1)"
+                }}
+                transition={{ duration: speaking ? 1 : 4, repeat: Infinity, ease: "easeInOut" }}
+                className={cn(
+                  "w-4 h-4 md:w-6 md:h-6 rounded-full z-10 transition-all duration-1000",
+                  (active || speaking) ? "bg-white" : "bg-white/40"
+                )} 
+              />
+            </motion.div>
+
+            {/* Orbiting Neural Rings */}
             {[0, 1, 2].map((i) => (
               <motion.div
                 key={i}
                 animate={{
-                  scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
-                  opacity: speaking ? [0.4, 0.8, 0.4] : active ? [0.3, 0.6, 0.3] : 0.2,
-                  x: i === 0 ? -20 : i === 2 ? 20 : 0,
-                  y: speaking ? [0, -5, 0] : 0
+                  rotate: i * 120 + (active ? 360 : 0),
+                  scale: speaking ? [1, 1.15, 1] : 1,
+                  opacity: active ? [0.4, 0.7, 0.4] : 0.2
                 }}
                 transition={{
-                  duration: speaking ? 2 : 4,
+                  duration: active ? (8 - i * 2) : 10,
                   repeat: Infinity,
-                  delay: i * 0.3,
-                  ease: "easeInOut"
+                  ease: "linear"
                 }}
                 className={cn(
-                  "absolute w-16 h-16 md:w-24 md:h-24 rounded-full border border-white/[0.1] flex items-center justify-center mix-blend-screen",
-                  (active || speaking) && "bg-her-accent/5 shadow-[0_0_40px_rgba(255,78,0,0.1)]"
+                  "absolute rounded-[42%] border border-her-accent/20 transition-all duration-1000",
+                  i === 0 ? "w-28 h-28 md:w-44 md:h-44" : i === 1 ? "w-32 h-32 md:w-52 md:h-52" : "w-36 h-36 md:w-60 md:h-60"
                 )}
-              >
-                <div className={cn(
-                  "w-2 h-2 md:w-3 md:h-3 rounded-full transition-all duration-700",
-                  (active || speaking) ? "bg-her-accent scale-110 shadow-[0_0_10px_rgba(242,125,38,0.8)]" : "bg-white/20 scale-100"
-                )} />
-              </motion.div>
+              />
             ))}
           </div>
         );

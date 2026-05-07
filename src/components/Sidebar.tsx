@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, FileSearch } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, FileSearch, Activity } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -93,6 +93,16 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode }: {
                 >
                   <Zap size={18} />
                   <span>Fluxo Viral</span>
+                </button>
+                <button 
+                  onClick={() => { setMode('wellness'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'wellness' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Activity size={18} />
+                  <span>Saúde & Estilo</span>
                 </button>
                 <button 
                   onClick={() => { setMode('canvas'); onClose(); }}

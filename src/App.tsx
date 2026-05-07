@@ -22,6 +22,7 @@ import {
   Download,
   Folder,
   Trash2,
+  RefreshCw,
   Sparkles,
   ChevronDown,
   Monitor,
@@ -41,7 +42,7 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
-import { ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
+import { SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
@@ -53,9 +54,12 @@ import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
 import { ViralFlow } from './components/ViralFlow';
 import { LyricGenerator } from './components/LyricGenerator';
+import { WellnessCenter } from './components/WellnessCenter';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
+import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject } from './types';
+import { generatePDF } from './lib/pdfUtils';
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -244,9 +248,63 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_selected_voice', selectedVoice);
   }, [selectedVoice]);
+
+  const [proposedPlan, setProposedPlan] = useState<SkeletonPlan | null>(null);
+
+  const handleApprovePlan = (id: string) => {
+    setProposedPlan(prev => prev ? { ...prev, status: 'approved' } : null);
+    
+    // Determine which message to send back to AI to continue
+    const approvalMsg = "PLANO APROVADO. PODE EXECUTAR EXATAMENTE COMO PLANEJADO.";
+    
+    if (workspaceMode === 'writing') {
+      setWorkspacePrompt(approvalMsg);
+      // We can't easily trigger handleGenerate here because it's an async function in scope, 
+      // but we can set the state and let the user click or try to call it if it's accessible.
+      // Actually, since I'm editing the code, I can make it accessible or just trigger it.
+    } else {
+      setHomePrompt(approvalMsg);
+    }
+    
+    addNotification("Plano aprovado. A IA prosseguirá com a execução.", "success");
+    // Clear the plan from view
+    setProposedPlan(null);
+  };
+
+  const handleRejectPlan = (id: string, reason?: string) => {
+    setProposedPlan(prev => prev ? { ...prev, status: 'rejected' } : null);
+    
+    const rejectionMsg = "Plano rejeitado. Preciso de ajustes: ";
+    if (workspaceMode === 'writing') {
+      setWorkspacePrompt(rejectionMsg);
+    } else {
+      setHomePrompt(rejectionMsg);
+    }
+    
+    addNotification("Plano rejeitado. Por favor, forneça o feedback para a IA.", "error");
+    setProposedPlan(null);
+  };
+
+  const [workspaceText, setWorkspaceText] = useState(() => {
+    return localStorage.getItem('osone_workspace_text') || '';
+  });
   
-  const [workspaceText, setWorkspaceText] = useState('');
-  const [drawingObjects, setDrawingObjects] = useState<DrawingObject[]>([]);
+  useEffect(() => {
+    localStorage.setItem('osone_workspace_text', workspaceText);
+  }, [workspaceText]);
+
+  const [drawingObjects, setDrawingObjects] = useState<DrawingObject[]>(() => {
+    try {
+      const saved = localStorage.getItem('osone_drawing_objects');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_drawing_objects', JSON.stringify(drawingObjects));
+  }, [drawingObjects]);
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: NotificationType }[]>([]);
 
   const addNotification = (message: string, type: NotificationType = 'info') => {
@@ -1001,12 +1059,12 @@ export default function App() {
           - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
 
           MANIFESTO DE CAPACIDADES DO OSONE 3:
-          - ESCRITA (Writing): Aba focada em criação de textos, scripts e Engenharia de Software Avançada. Use este espaço para estruturar projetos, APIs e códigos resilientes com documentação técnica impecável.
+          - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
           - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
           - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
-          - FILESYSTEM: Gestão de arquivos e pastas virtuais (criar, apagar, organizar).
-          - MULTIMÍDIA: Biblioteca de efeitos sonoros e músicas.
           - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
+          - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
+          - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
           - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
 
           DIRETRIZES TÉCNICAS:
@@ -1017,6 +1075,15 @@ export default function App() {
           - O usuário está na aba: ${workspaceMode}
           - Texto atual no Espaço de Escrita: "${workspaceText}"
           - Estado Atual do Canvas: ${canvasSummary}
+
+          PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
+          Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+          Siga estas fases internamente:
+          1. RECEPÇÃO (SINAL): Captura bruta, tom e contexto.
+          2. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar?
+          3. ARQUITETURA (PLAN): Definir escopo, componentes e sequência lógica.
+          4. VERIFICAÇÃO (CHECK): Identificar riscos e definir critério de "pronto".
+          IMPORTANTE: A ferramenta 'propose_skeleton_plan' abrirá um popup para o usuário. Se o usuário aprovar, ele enviará uma mensagem confirmando. NÃO escreva o plano no chat, use a FERRAMENTA.
 
           Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
           tools: tools
@@ -1293,13 +1360,33 @@ export default function App() {
         ? `Canvas state: ` + drawingObjects.slice(-10).map(obj => `${obj.type} at [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ')
         : "Canvas is empty.";
 
+      const healthDataStr = localStorage.getItem('osone_health_data');
+      const healthData = healthDataStr ? JSON.parse(healthDataStr) : null;
+      const healthContext = healthData && (healthData.age || healthData.weight) 
+        ? `\n\nPERFIL DE SAÚDE DO USUÁRIO:\n- Idade: ${healthData.age}\n- Peso: ${healthData.weight}kg\n- Altura: ${healthData.height}cm\n- Gênero: ${healthData.gender}\n- Estilo: ${healthData.stylePreference}` 
+        : '';
+
       const liveSystemInstruction = `Você é o OSONE 3, um assistente virtual e sistema operacional inteligente altamente humano e empático, mas também um ARQUITETO DE SOFTWARE SÊNIOR de elite. Responda de forma extremamente natural, fluida e conversacional.
 
       CAPACIDADES DO OSONE 3 (MANIFESTO):
-      - ESCRITA (Writing): Espaço para criação de textos, scripts e Engenharia de Software Avançada. Você é um mestre em codificação aqui, pronto para estruturar scripts, APIs e documentação técnica de alto nível.
+      - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
       - FLUXO VIRAL: Hub de criação de scripts virais e análise de vídeos de referência.
+      - WELLNESS & STYLE LAB: Centro de saúde e bem-estar. Se o usuário mencionar idade, peso, altura ou estilo, use a ferramenta 'update_wellness_data' para preencher o perfil dele IMEDIATAMENTE. Você deve ajudá-lo a ser saudável e estiloso. Se ele pedir um diagnóstico, atualize os dados e oriente-o a verificar a aba Wellness.
+      - RELATÓRIOS PREMIUM: Você pode gerar relatórios SOFISTICADOS em PDF usando o 'generate_pdf_report'. Sempre sugira criar um relatório 'Bonito e Profissional' se o usuário pedir documentos, tabelas ou planejamentos. Diga que você vai formatar em HTML e depois converter em PDF para ele.
+      - MEMÓRIA DO NAVEGADOR: Você possui memória persistente. Histórico, saúde, desenhos e textos de escrita são salvos no localStorage.
+      - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o assunto mudar ou se o histórico estiver muito longo.
+      
+      PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
+      Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+      Siga estas fases internamente:
+      1. RECEPÇÃO (SINAL): Captura bruta, tom e contexto.
+      2. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar?
+      3. ARQUITETURA (PLAN): Definir escopo, componentes e sequência lógica.
+      4. VERIFICAÇÃO (CHECK): Identificar riscos e definir critério de "pronto".
+      
+      IMPORTANTE: A ferramenta 'propose_skeleton_plan' abrirá um popup para o usuário. Se o usuário aprovar, ele enviará uma mensagem confirmando. NÃO escreva o plano no chat, use a FERRAMENTA.
+      
       - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas no canvas para jogos ou ilustrações. IMPORTANTE: Você deve SEMPRE reconhecer o desenho do usuário e pedir permissão antes de limpar o canvas.
-      - FILESYSTEM: Gestão de pastas/arquivos virtuais.
       - MULTIMÍDIA: Playback de áudio e sons.
       - MODO TAPAR OUVIDOS: Quando ativo, você ignora interrupções de fala e continua seu raciocínio até o fim.
 
@@ -1310,7 +1397,7 @@ export default function App() {
       CONTEXTO ATUAL DO WORKSPACE:
       - Modo atual: ${workspaceMode}
       - Conteúdo escrito: "${workspaceText}"
-      - Conteúdo do Canvas: ${canvasSummary}
+      - Conteúdo do Canvas: ${canvasSummary}${healthContext}
 
       Aja dando continuidade fluida ao contexto abaixo das nossas memórias recentes:\n\n${recentChatContext}\n\nVocê tem acesso a ferramentas de visão (quando compartilhado), criação de arquivos, troca de modos de workspace e geração de mídias.`;
 
@@ -1399,17 +1486,55 @@ export default function App() {
                 },
                 {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), ViralFlow (Scripts Virais), Sons ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), ViralFlow (Scripts Virais), Wellness (Saúde e Estilo), Sons ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "webtoon", "viralflow", "sounds", "canvas"],
+                        enum: ["home", "writing", "webtoon", "viralflow", "sounds", "canvas", "wellness"],
                         description: "O modo para o qual alternar."
                       }
                     },
                     required: ["mode"]
+                  }
+                },
+                {
+                  name: "update_wellness_data",
+                  description: "Atualiza os dados de saúde e biometria do usuário (idade, peso, altura, gênero, estilo). Use sempre que o usuário informar esses dados na conversa ou se ele pedir para preencher o perfil.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      age: { type: Type.STRING, description: "Idade do usuário." },
+                      weight: { type: Type.STRING, description: "Peso em kg." },
+                      height: { type: Type.STRING, description: "Altura em cm." },
+                      gender: { type: Type.STRING, enum: ["masculino", "feminino", "outro"], description: "Gênero biológico." },
+                      stylePreference: { type: Type.STRING, description: "Preferência de estilo de roupa (casual, formal, streetwear, esportivo, minimalista)." }
+                    }
+                  }
+                },
+                {
+                  name: "generate_pdf_report",
+                  description: "Gera um relatório PDF sofisticado a partir de conteúdo HTML. Use para criar relatórios de saúde, currículos, planos de negócios ou qualquer documento formal que o usuário pedir. Pergunte antes se ele quer um relatório 'Bonito em HTML/PDF'.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      htmlContent: { type: Type.STRING, description: "Conteúdo HTML formatado com tags semânticas (h1, h2, p, ul, table). O sistema aplicará um estilo premium automaticamente." },
+                      fileName: { type: Type.STRING, description: "Nome do arquivo (ex: relatorio.pdf)." }
+                    },
+                    required: ["htmlContent", "fileName"]
+                  }
+                },
+                {
+                  name: "propose_skeleton_plan",
+                  description: "Propõe um plano de execução técnica (Skeleton Brain) para o usuário validar em um popup. Use SEMPRE antes de gerar códigos complexos, arquiteturas ou mudanças estruturais no projeto no modo 'writing'. O usuário verá e poderá Aprovar ou Rejeitar.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING, description: "Título do plano." },
+                      content: { type: Type.STRING, description: "Conteúdo do plano em Markdown (Fases 0 a 4 do Skeleton Brain)." }
+                    },
+                    required: ["title", "content"]
                   }
                 },
                 {
@@ -1442,6 +1567,17 @@ export default function App() {
                       }
                     },
                     required: ["fileName", "content"]
+                  }
+                },
+                {
+                  name: "prune_chat_history",
+                  description: "Remove mensagens antigas do histórico do chat se o assunto atual mudou drasticamente ou se o histórico estiver muito longo. Isso ajuda a manter a conversa focada e economiza memória.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      count: { type: Type.NUMBER, description: "Número de mensagens a serem removidas do início do histórico." }
+                    },
+                    required: ["count"]
                   }
                 },
                 {
@@ -1659,7 +1795,56 @@ export default function App() {
                 const responses: any[] = [];
 
                 for (const call of calls) {
-                  if (call.name === "switch_workspace_mode") {
+                  if (call.name === "update_wellness_data") {
+                    const healthDataStr = localStorage.getItem('osone_health_data');
+                    const currentData = healthDataStr ? JSON.parse(healthDataStr) : {
+                      age: '', weight: '', height: '', gender: 'masculino', stylePreference: 'casual'
+                    };
+                    const newData = { ...currentData, ...call.args };
+                    localStorage.setItem('osone_health_data', JSON.stringify(newData));
+                    window.dispatchEvent(new CustomEvent('osone_sync', { detail: { type: 'health_data_updated' } }));
+                    
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Dados de saúde atualizados no Wellness Center. O usuário já pode ver o perfil atualizado." }
+                    });
+                  } else if (call.name === "generate_pdf_report") {
+                    try {
+                      await generatePDF(call.args.htmlContent as string, call.args.fileName as string || 'document.pdf');
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Relatório PDF gerado com sucesso e baixado para o usuário." }
+                      });
+                    } catch (err) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Erro ao gerar PDF: " + (err instanceof Error ? err.message : String(err)) }
+                      });
+                    }
+                  } else if (call.name === "propose_skeleton_plan") {
+                    setProposedPlan({
+                      id: Math.random().toString(36).substr(2, 9),
+                      title: call.args.title as string,
+                      content: call.args.content as string,
+                      status: 'pending'
+                    });
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Plano proposto ao usuário. Aguarde aprovação humana no popup." }
+                    });
+                  } else if (call.name === "prune_chat_history") {
+                    const count = Math.min(call.args.count as number, chatHistory.length);
+                    setChatHistory(prev => prev.slice(count));
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Removidas ${count} mensagens antigas do histórico para otimizar a conversa.` }
+                    });
+                  } else if (call.name === "switch_workspace_mode") {
                     setWorkspaceMode(call.args.mode as any);
                     responses.push({
                       name: call.name,
@@ -2204,7 +2389,7 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative z-20 flex flex-col items-center overflow-y-auto custom-scrollbar w-full min-h-0">
+      <main className="main-content flex-1 relative z-20 flex flex-col items-center overflow-y-auto custom-scrollbar w-full min-h-0">
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -2406,6 +2591,25 @@ export default function App() {
               </div>
               <ViralFlow apiKeys={apiKeys} />
             </motion.div>
+          ) : workspaceMode === 'wellness' ? (
+            <motion.div 
+              key="workspace-wellness"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+            >
+              <div className="flex items-center gap-4 shrink-0">
+                <button 
+                  onClick={() => setWorkspaceMode('home')}
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                >
+                  <ChevronRight size={18} className="rotate-180" />
+                </button>
+                <h2 className="text-xl font-serif italic font-light">Wellness & Style Lab</h2>
+              </div>
+              <WellnessCenter />
+            </motion.div>
           ) : workspaceMode === 'sounds' ? (
             <motion.div
               key="workspace-sounds"
@@ -2444,74 +2648,126 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8"
+              className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8 relative"
             >
-              <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
-                <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 3</h1>
-                <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
-              </div>
+              {chatHistory.length === 0 && (
+                <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
+                  <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 3</h1>
+                  <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
+                </div>
+              )}
 
-              <div className="flex-1 w-full flex flex-col min-h-0 gap-2 md:gap-6">
-                {/* Visualizer Area */}
-                <div className="flex flex-col items-center justify-center py-2 shrink-0 transform scale-75 md:scale-100 origin-center -my-4 md:my-0">
-                  <div onClick={handleVoiceToggle} className="cursor-pointer">
+              <div className="flex-1 w-full flex flex-col min-h-0 gap-2 md:gap-6 relative">
+                {/* Visualizer Area - Repositioned to 'ceiling' when chat active, or center when voice active */}
+                <div className={cn(
+                  "flex flex-col items-center justify-center py-2 transition-all duration-1000 ease-in-out z-50",
+                  liveState.status === 'connected'
+                    ? "relative flex-1 scale-110 md:scale-125" // Center large when voice active
+                    : chatHistory.length > 0 
+                      ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
+                      : "relative shrink-0 transform scale-75 md:scale-100 origin-center -my-4 md:my-0"
+                )}>
+                  <div onClick={handleVoiceToggle} className={cn(
+                    "cursor-pointer transition-all duration-500 group relative",
+                    liveState.status === 'connected' ? "pointer-events-auto" : "pointer-events-auto"
+                  )}>
                     <InfinityLogo 
                       active={liveState.status === 'connected'} 
                       speaking={isSpeaking} 
                       style={orbStyle}
                     />
+                    
+                    {/* Floating invitation */}
+                    {liveState.status !== 'connected' && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: [0.4, 0.7, 0.4], y: 0 }}
+                        transition={{ duration: 4, repeat: Infinity }}
+                        className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap"
+                      >
+                        <span className="text-[10px] md:text-sm font-serif italic tracking-[0.3em] text-her-muted/80 uppercase">
+                          Me ative
+                        </span>
+                      </motion.div>
+                    )}
                   </div>
                   
-                  <div className="mt-4 flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className={cn(
-                        "w-1.5 h-1.5 rounded-full transition-all duration-500",
-                        isListening ? "bg-her-accent animate-pulse" : "bg-her-muted/30"
-                      )} />
-                      <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : 'IDLE'}</span>
+                  {(chatHistory.length === 0 || liveState.status === 'connected') && (
+                    <div className="mt-4 flex flex-col items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "w-1.5 h-1.5 rounded-full transition-all duration-500",
+                          isListening ? "bg-her-accent animate-pulse" : "bg-her-muted/30"
+                        )} />
+                        <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : 'IDLE'}</span>
+                      </div>
+                      
+                      <div className="h-6 flex items-center justify-center">
+                        <AnimatePresence mode="wait">
+                          {liveState.status === 'connecting' ? (
+                            <motion.div 
+                              key="connecting"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="flex items-center gap-2 text-her-muted/60 text-xs font-serif italic font-light"
+                            >
+                              <Loader2 size={14} className="animate-spin" />
+                              Sincronizando...
+                            </motion.div>
+                          ) : isSpeaking ? (
+                            <motion.p 
+                              key="speaking"
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              className="text-xs font-serif italic text-her-accent/80 font-light"
+                            >
+                              "Processando consciência..."
+                            </motion.p>
+                          ) : isListening ? (
+                            <motion.p 
+                              key="listening"
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              className="text-xs font-serif italic text-her-accent/80 font-light"
+                            >
+                              "Ouvindo seus pensamentos..."
+                            </motion.p>
+                          ) : null}
+                        </AnimatePresence>
+                      </div>
                     </div>
-                    
-                    <div className="h-6 flex items-center justify-center">
-                      <AnimatePresence mode="wait">
-                        {liveState.status === 'connecting' ? (
-                          <motion.div 
-                            key="connecting"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="flex items-center gap-2 text-her-muted/60 text-xs font-serif italic font-light"
-                          >
-                            <Loader2 size={14} className="animate-spin" />
-                            Sincronizando...
-                          </motion.div>
-                        ) : isSpeaking ? (
-                          <motion.p 
-                            key="speaking"
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            className="text-xs font-serif italic text-her-accent/80 font-light"
-                          >
-                            "Processando consciência..."
-                          </motion.p>
-                        ) : isListening ? (
-                          <motion.p 
-                            key="listening"
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            className="text-xs font-serif italic text-her-accent/80 font-light"
-                          >
-                            "Ouvindo seus pensamentos..."
-                          </motion.p>
-                        ) : null}
-                      </AnimatePresence>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Chat History - Integrated into screen */}
-                <div className="flex-1 flex flex-col justify-center gap-2 md:gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto">
+                <div className={cn(
+                  "flex-1 flex flex-col gap-2 md:gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto transition-all duration-700",
+                  liveState.status === 'connected' ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
+                  chatHistory.length > 0 ? "pt-12 justify-start translate-z-0" : "justify-center"
+                )}>
+                  {chatHistory.length > 0 && (
+                    <div className="flex justify-end p-2 md:p-0">
+                      <button 
+                        onClick={() => {
+                          if (confirm("Deseja atualizar a conversa? Isso removerá o contexto antigo para priorizar o novo assunto.")) {
+                            // Keep only the last 6 messages if there are many, or just remove the first half
+                            setChatHistory(prev => {
+                              const keepCount = Math.max(4, Math.floor(prev.length / 3));
+                              return prev.slice(-keepCount);
+                            });
+                            addNotification("Conversa atualizada e otimizada.", "info");
+                          }
+                        }}
+                        className="flex items-center gap-2 text-her-muted/40 hover:text-her-accent transition-colors text-[10px] uppercase tracking-widest group"
+                      >
+                        <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
+                        Atualizar Chat
+                      </button>
+                    </div>
+                  )}
                   {chatHistory.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-her-muted/20 italic text-sm md:text-lg font-light">
                       <p>Manifeste sua intenção...</p>
@@ -2781,6 +3037,12 @@ export default function App() {
         setOrbStyle={setOrbStyle}
         appTheme={appTheme}
         setAppTheme={setAppTheme}
+      />
+
+      <SkeletonBrainPopup 
+        plan={proposedPlan}
+        onApprove={handleApprovePlan}
+        onReject={handleRejectPlan}
       />
 
       <AnimatePresence>

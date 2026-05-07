@@ -67,6 +67,37 @@
   }
 }
 
+.main-content {
+  padding: 20px;
+  margin: 10px;
+  border-radius: 8px;
+}
+
+@keyframes cloud-wave {
+  0% { transform: translateY(0) translateX(0) scale(1); }
+  33% { transform: translateY(5px) translateX(10px) scale(1.02); }
+  66% { transform: translateY(-3px) translateX(-5px) scale(0.98); }
+  100% { transform: translateY(0) translateX(0) scale(1); }
+}
+
+.animate-cloud-wave {
+  animation: cloud-wave 8s ease-in-out infinite;
+}
+
+.markdown-body {
+  @apply space-y-4;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply font-serif italic text-white mt-6 mb-2;
+}
+.markdown-body h1 { @apply text-2xl; }
+.markdown-body h2 { @apply text-xl; }
+.markdown-body h3 { @apply text-lg; }
+.markdown-body p { @apply text-her-ink/80 leading-relaxed; }
+.markdown-body strong { @apply text-her-accent font-medium; }
+.markdown-body ul { @apply list-disc list-inside space-y-2 my-4; }
+.markdown-body li { @apply text-her-ink/70; }
+
 .atmosphere {
   background: 
     radial-gradient(circle at 50% 30%, var(--atmosphere-1, #3a1510) 0%, transparent 60%),

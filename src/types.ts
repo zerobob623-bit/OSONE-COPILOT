@@ -5,7 +5,7 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'canvas';
+export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'canvas' | 'wellness';
 
 export interface DrawingObject {
   id: string;
@@ -79,6 +79,13 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   imageUrl?: string;
+}
+
+export interface SkeletonPlan {
+  id: string;
+  title: string;
+  content: string; // Markdown
+  status: 'pending' | 'approved' | 'rejected';
 }
 
 export interface LiveState {
