@@ -35,7 +35,8 @@ import {
   Minimize,
   Smartphone,
   Speaker,
-  Music
+  Music,
+  Wand2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -95,7 +96,98 @@ export default function App() {
 
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [codeSuggestions, setCodeSuggestions] = useState<string[]>([]);
+  const [isAnalyzingCode, setIsAnalyzingCode] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const wakeWordRecognitionRef = useRef<any>(null);
+  const [isWaitingForWakeWord, setIsWaitingForWakeWord] = useState(true);
+  const [shouldAutoUnmute, setShouldAutoUnmute] = useState(false);
+
+  // Wake Word listener implementation
+  const isWaitingRef = useRef(isWaitingForWakeWord);
+  useEffect(() => {
+    isWaitingRef.current = isWaitingForWakeWord;
+  }, [isWaitingForWakeWord]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    let stoppedManually = false;
+    const wakeWordRec = new SpeechRecognition();
+    wakeWordRec.lang = 'pt-BR';
+    wakeWordRec.continuous = true;
+    wakeWordRec.interimResults = true;
+
+    const startRecognition = () => {
+      if (isWaitingRef.current && !isListening && !stoppedManually) {
+        try {
+          wakeWordRec.start();
+        } catch (e) {
+          // Avoid noise from already started
+        }
+      }
+    };
+
+    wakeWordRec.onresult = (event: any) => {
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      const lowerTranscript = fullTranscript.toLowerCase();
+
+      const wakeWordPatterns = [
+        'ei osone', 'hey osone', 'hey osorne', 'ai osone', 
+        'hey o som', 'ei o som', 'ei o zone', 'hey o zone',
+        'hey ozorne', 'ei ozorne', 'ei o sime', 'hey o sime',
+        'ei o sol', 'hey o sol', 'ei o rone', 'hey o rone',
+        'ei au som', 'hey au som', 'ei o sono', 'hey o sono',
+        'ei o sono de novo', 'osone'
+      ];
+
+      if (wakeWordPatterns.some(pattern => lowerTranscript.includes(pattern))) {
+        console.log('Wake word detected!', lowerTranscript);
+        
+        stoppedManually = true;
+        setIsWaitingForWakeWord(false); 
+        wakeWordRec.stop();
+        
+        addNotification("Osone Ativado via Voz", "success");
+
+        setTimeout(() => {
+          if (liveState.status !== 'connected' && liveState.status !== 'connecting') {
+            startLiveSession();
+          }
+        }, 150);
+      }
+    };
+
+    wakeWordRec.onerror = (event: any) => {
+      if (event.error === 'not-allowed') {
+        setIsWaitingForWakeWord(false);
+        return;
+      }
+      setTimeout(startRecognition, 1000);
+    };
+
+    wakeWordRec.onend = () => {
+      if (!stoppedManually) {
+        setTimeout(startRecognition, 500);
+      }
+    };
+
+    wakeWordRecognitionRef.current = wakeWordRec;
+    
+    if (isWaitingForWakeWord && !isListening) {
+      startRecognition();
+    }
+
+    return () => {
+      stoppedManually = true;
+      wakeWordRec.stop();
+    };
+  }, [isWaitingForWakeWord, isListening]); // Minimal dependencies to ensure stability
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -231,6 +323,8 @@ export default function App() {
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
     const defaultKeys: ApiKeys = { 
       gemini: '', 
+      googleHomeId: '',
+      googleHomeToken: '',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -248,6 +342,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_selected_voice', selectedVoice);
   }, [selectedVoice]);
+
+  // Auto-analyze when entering writing mode if there's code but no suggestions
+  useEffect(() => {
+    if (workspaceMode === 'writing' && writingSubMode === 'text' && workspaceText.length > 50 && codeSuggestions.length === 0) {
+      handleAnalyzeCode();
+    }
+  }, [workspaceMode, writingSubMode]);
 
   const [proposedPlan, setProposedPlan] = useState<SkeletonPlan | null>(null);
 
@@ -741,6 +842,7 @@ export default function App() {
     setIsListening(false);
     setIsSpeaking(false);
     setLiveState({ status: 'idle' });
+    setIsWaitingForWakeWord(true); // Restart wake word listener
   };
 
   const startScreenSharing = async () => {
@@ -807,41 +909,78 @@ export default function App() {
     navigator.clipboard.writeText(workspaceText);
   };
 
-  const handleGenerate = async () => {
-    if (!workspacePrompt.trim() || !apiKeys.gemini) {
+  const handleGenerate = async (explicitPrompt?: string) => {
+    const finalPrompt = explicitPrompt || workspacePrompt;
+    if (!finalPrompt.trim() || !apiKeys.gemini) {
       if (!apiKeys.gemini) setIsSettingsOpen(true);
       return;
     }
 
     setIsGenerating(true);
     try {
-      const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
       
-      const parts: any[] = [{ text: workspacePrompt }];
+      // Se já houver código, trata como edição
+      const isEditing = workspaceText.trim().length > 10;
       
-      referenceImages.forEach(img => {
-        parts.push({
-          inlineData: {
-            data: img.split(',')[1],
-            mimeType: "image/jpeg"
-          }
-        });
-      });
+      const systemInstruction = isEditing 
+        ? "Você é um arquiteto de software sênior de elite. Sua tarefa é MODIFICAR o código existente com base nas instruções do usuário. Retorne APENAS o código completo modificado, formatado corretamente, sem blocos de markdown (```), sem explicações extras e sem comentários desnecessários fora do código."
+        : "Você é um assistente criativo de elite. Gere o conteúdo solicitado (texto ou código) de forma profissional e completa.";
 
-      const result = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ parts }]
+      const contents = isEditing 
+        ? `CÓDIGO ATUAL:\n\n${workspaceText}\n\nINSTRUÇÕES DE MODIFICAÇÃO:\n${finalPrompt}`
+        : finalPrompt;
+
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ parts: [{ text: contents }] }],
+        config: { systemInstruction }
       });
       
       const text = result.text;
       
-      setWorkspaceText(text || "Sem resposta da IA.");
+      if (text) {
+        setWorkspaceText(text);
+        if (explicitPrompt) {
+          addNotification("Sugestão aplicada com sucesso", "success");
+        }
+      }
       setWorkspacePrompt('');
+      
+      // Auto-analisar após gerar se for código
+      if (text && (text.includes('<') || text.includes('function') || text.includes('const'))) {
+        setTimeout(() => handleAnalyzeCode(text), 1500);
+      }
     } catch (error) {
       console.error("Erro ao gerar conteúdo:", error);
-      setWorkspaceText("Erro ao conectar com a IA. Verifique sua chave API.");
+      addNotification("Erro ao conectar com a IA. Verifique sua chave API.", "error");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleAnalyzeCode = async (codeToAnalyze = workspaceText) => {
+    if (!codeToAnalyze.trim() || !apiKeys.gemini || isAnalyzingCode) return;
+
+    setIsAnalyzingCode(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const prompt = `Analise este código e forneça exatamente 3 sugestões CURTAS e acionáveis (uma frase cada) para melhorá-lo (performance, bugs, estilo ou features). Retorne APENAS um array JSON de strings como ["Sugestão 1", "Sugestão 2", "Sugestão 3"]. Code:\n\n${codeToAnalyze}`;
+      
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ parts: [{ text: prompt }] }],
+        config: { responseMimeType: "application/json" }
+      });
+      
+      const json = JSON.parse(result.text);
+      if (Array.isArray(json)) {
+        setCodeSuggestions(json.slice(0, 3));
+      }
+    } catch (error) {
+      console.error("Erro ao analisar código:", error);
+    } finally {
+      setIsAnalyzingCode(false);
     }
   };
 
@@ -1375,6 +1514,7 @@ export default function App() {
       - RELATÓRIOS PREMIUM: Você pode gerar relatórios SOFISTICADOS em PDF usando o 'generate_pdf_report'. Sempre sugira criar um relatório 'Bonito e Profissional' se o usuário pedir documentos, tabelas ou planejamentos. Diga que você vai formatar em HTML e depois converter em PDF para ele.
       - MEMÓRIA DO NAVEGADOR: Você possui memória persistente. Histórico, saúde, desenhos e textos de escrita são salvos no localStorage.
       - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o assunto mudar ou se o histórico estiver muito longo.
+      - CONTROLE DE ÁUDIO (EAR): Se o usuário pedir para 'ativar o mute', 'mutar o ear' ou disser que não quer ser interrompido, utilize a ferramenta 'control_audio_feedback' com a ação 'mute'. Isso silenciará a sua escuta enquanto você fala a resposta completa. Após terminar de falar, o sistema reativará a escuta automaticamente (ativa o ear).
       
       PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
       Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
@@ -1697,6 +1837,21 @@ export default function App() {
                   }
                 },
                 {
+                  name: "control_audio_feedback",
+                  description: "Controla o estado do 'ear' (microfone/escuta) do sistema. Use 'mute' quando o usuário pedir para silenciar ou não ser interrompido, e 'unmute' para voltar a ouvir (ativar o ear).",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: {
+                        type: Type.STRING,
+                        enum: ["mute", "unmute"],
+                        description: "A ação a ser executada: 'mute' para silenciar a escuta, 'unmute' para ativar a escuta."
+                      }
+                    },
+                    required: ["action"]
+                  }
+                },
+                {
                   name: "play_sound_effect",
                   description: "Reproduz um efeito sonoro da biblioteca. Use para reagir a situações comicas, de terror, suspense, etc. Diga ao usuário qual som você está ativando.",
                   parameters: {
@@ -1844,6 +1999,25 @@ export default function App() {
                       id: call.id,
                       response: { result: `Removidas ${count} mensagens antigas do histórico para otimizar a conversa.` }
                     });
+                  } else if (call.name === "control_audio_feedback") {
+                    const { action } = call.args as any;
+                    if (action === 'mute') {
+                      setIsMuted(true);
+                      setShouldAutoUnmute(true);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Modo silencioso ativado. Vou falar sem interrupções e depois reativar sua escuta automaticamente." }
+                      });
+                    } else {
+                      setIsMuted(false);
+                      setShouldAutoUnmute(false);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Escuta reativada." }
+                      });
+                    }
                   } else if (call.name === "switch_workspace_mode") {
                     setWorkspaceMode(call.args.mode as any);
                     responses.push({
@@ -2214,6 +2388,10 @@ export default function App() {
               }
               if (message.serverContent?.turnComplete) {
                 setIsSpeaking(false);
+                if (shouldAutoUnmute) {
+                  setIsMuted(false);
+                  setShouldAutoUnmute(false);
+                }
               }
             });
           },
@@ -2237,7 +2415,9 @@ export default function App() {
   const handleVoiceToggle = () => {
     if (liveState.status === 'connected' || liveState.status === 'connecting') {
       stopLiveSession();
+      setIsWaitingForWakeWord(true); // Re-enable wake word when manually stopping
     } else {
+      setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
       startLiveSession();
     }
   };
@@ -2494,7 +2674,7 @@ export default function App() {
                     "transition-all duration-500 flex flex-col gap-4 md:gap-6 min-h-0",
                     isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
                   )}>
-                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px]">
+                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px] relative group/editor">
                       <textarea 
                         value={workspaceText}
                         onChange={(e) => setWorkspaceText(e.target.value)}
@@ -2506,20 +2686,62 @@ export default function App() {
                         )}
                         placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
                       />
+                      
+                      <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover/editor:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleAnalyzeCode()}
+                          disabled={isAnalyzingCode}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 text-[9px] uppercase tracking-wider text-her-muted transition-all"
+                        >
+                          {isAnalyzingCode ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                          Analisar Código
+                        </button>
+                      </div>
                     </div>
+
+                    {codeSuggestions.length > 0 && (
+                      <div className="px-4 flex flex-wrap gap-2">
+                        <span className="text-[9px] text-her-muted/50 uppercase tracking-[0.2em] w-full mb-1 ml-4 flex items-center gap-2">
+                          <Zap size={10} className="text-her-accent" />
+                          Sugestões do Sistema
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {codeSuggestions.map((suggestion, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handleGenerate(suggestion)}
+                              disabled={isGenerating}
+                              className="px-4 py-2 bg-white/[0.03] hover:bg-her-accent/10 border border-white/5 rounded-full text-[10px] text-her-ink/70 hover:text-her-accent hover:border-her-accent/30 transition-all flex items-center gap-2 group/sug"
+                            >
+                              {suggestion}
+                              <ChevronRight size={10} className="opacity-0 group-hover/sug:opacity-100 translate-x-[-4px] group-hover:translate-x-0 transition-all" />
+                            </button>
+                          ))}
+                          <button 
+                            onClick={() => setCodeSuggestions([])}
+                            className="p-2 hover:bg-red-500/10 text-her-muted hover:text-red-400 rounded-full transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Prompt Input */}
                     <div className="flex gap-3 p-2 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm shrink-0">
+                      <div className="pl-6 flex items-center text-her-accent opacity-50">
+                        <Wand2 size={18} />
+                      </div>
                       <input 
                         type="text"
                         value={workspacePrompt}
                         onChange={(e) => setWorkspacePrompt(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                        placeholder="O que você quer que eu escreva?"
-                        className="flex-1 bg-transparent px-6 py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                        placeholder={workspaceText ? "Instruir IA para editar o código..." : "O que você quer que eu crie?"}
+                        className="flex-1 bg-transparent py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
                       />
                       <button 
-                        onClick={handleGenerate}
+                        onClick={() => handleGenerate()}
                         disabled={isGenerating}
                         className="p-3.5 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-[1.5rem] hover:bg-her-accent/20 transition-all disabled:opacity-20"
                       >
@@ -2697,9 +2919,9 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-1.5 h-1.5 rounded-full transition-all duration-500",
-                          isListening ? "bg-her-accent animate-pulse" : "bg-her-muted/30"
+                          isListening ? "bg-her-accent animate-pulse" : isWaitingForWakeWord ? "bg-her-accent/40 animate-pulse" : "bg-her-muted/30"
                         )} />
-                        <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : 'IDLE'}</span>
+                        <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : isWaitingForWakeWord ? 'VOICE TRIGGER READY' : 'IDLE'}</span>
                       </div>
                       
                       <div className="h-6 flex items-center justify-center">

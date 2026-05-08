@@ -32,6 +32,8 @@ interface ScriptSection {
 interface ViralScript {
   id: string;
   topic: string;
+  suggestedTitle: string;
+  thumbnailStrategy: string;
   sections: ScriptSection[];
   imageUrl?: string;
   isReferenceBased?: boolean;
@@ -73,6 +75,7 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
     { id: 'tiktok', name: 'TikTok' },
     { id: 'shorts', name: 'YouTube Shorts' },
     { id: 'reels', name: 'Instagram Reels' },
+    { id: 'youtube', name: 'YouTube (Long)' },
   ];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,21 +146,32 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
            Crie um NOVO roteiro totalmente original, mas com a mesma 'PEGADA' funcional e estilo de retenção para ${platform}.
            Nicho: ${niche}
            Tom: ${tone}`
-        : `Crie um roteiro viral curto para ${platform}.
+        : `Crie um roteiro viral estratégico para ${platform}.
            Assunto: ${topic}
            Nicho: ${niche}
            Tom: ${tone}`;
       
+      const viralRules = `
+      REGRAS DE VIRALIDADE (Baseadas em análise de 52k canais):
+      1. TÍTULO: Máximo 5 palavras (~30 caracteres). Simples e direto. NÃO use números. Use gatilhos de NEGATIVIDADE ou URGÊNCIA (ex: 'Não faça isso', 'O erro fatal').
+      2. CONTEÚDO: Se for educativo, apresente como ENTRETENIMENTO. Foco total em retenção.
+      3. DURACÃO: Se for YouTube Long, sugira estrutura para 18-24 minutos.
+      4. THUMBNAIL: SEM TEXTO. Deve usar cores vibrantes (Ciano é recomendado).
+      `;
+
       const finalPrompt = `${prompt}
+      ${viralRules}
       O roteiro deve ter 3 partes: GANCHO (Hook), CORPO (Body) e CHAMADA (CTA).
       Responda em formato JSON:
       {
+        "suggestedTitle": "Title here (max 5 words, simple, no numbers, negative/urgent)",
+        "thumbnailStrategy": "Explanations of the thumbnail visual strategy following the rules (cyan colors, no text)",
         "sections": [
           { "title": "GANCHO", "content": "texto...", "visualCue": "sugestão visual em português" },
           { "title": "CORPO", "content": "texto...", "visualCue": "sugestão visual em português" },
           { "title": "CTA", "content": "texto...", "visualCue": "sugestão visual em português" }
         ],
-        "imagePrompt": "A highly detailed image prompt in ENGLISH for AI generation that represents the visual style of this video."
+        "imagePrompt": "A highly detailed image prompt in ENGLISH for AI generation. Must follow: NO TEXT in image, use vibrant cyan and bright lighting, simple composition."
       }`;
 
       const response = await ai.models.generateContent({
@@ -196,6 +210,8 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
       const newScript: ViralScript = {
         id: Math.random().toString(36).substr(2, 9),
         topic: referenceContent ? "Roteiro via Inteligência de Referência" : topic,
+        suggestedTitle: data.suggestedTitle,
+        thumbnailStrategy: data.thumbnailStrategy,
         sections: data.sections,
         imageUrl,
         isReferenceBased: !!referenceContent
@@ -261,6 +277,24 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
         </div>
       </div>
       
+      {/* Viral Intelligence Summary Card */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Otimização de Cliques', value: 'Máximo 5 palavras, zero números.', icon: <Target size={14} />, color: 'text-her-accent' },
+          { label: 'Efeito Viral', value: 'Quebrar padrões: 10x views habituais.', icon: <TrendingUp size={14} />, color: 'text-green-400' },
+          { label: 'Duração Ideal', value: '18-24 minutos (YouTube Long).', icon: <Clock size={14} />, color: 'text-blue-400' },
+          { label: 'Gatilho Psicológico', value: 'Negatividade gera +22% cliques.', icon: <Zap size={14} />, color: 'text-yellow-400' },
+        ].map((stat, i) => (
+          <div key={i} className="bg-white/5 border border-white/10 p-4 rounded-[2rem] flex flex-col gap-2">
+            <div className={cn("flex items-center gap-2 font-bold uppercase tracking-widest text-[9px]", stat.color)}>
+              {stat.icon}
+              {stat.label}
+            </div>
+            <p className="text-xs text-her-ink/80 font-medium italic font-serif">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="flex flex-col gap-8 pb-12 flex-1 min-h-0">
         <AnimatePresence mode="wait">
           {activeTab === 'create' ? (
@@ -408,16 +442,35 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
                       {/* Script Content */}
                       <div className="flex-1 p-8 md:p-12 flex flex-col gap-10">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-serif italic text-3xl text-her-ink mb-1">{script.topic}</h3>
+                          <div className="flex-1 mr-4">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-her-accent mb-2">Título Estratégico (Master-Hack)</p>
+                            <h3 className="font-serif italic text-3xl text-her-ink mb-1">{script.suggestedTitle}</h3>
                             <div className="h-[1px] w-16 bg-her-accent/20" />
                           </div>
                           <button 
-                            onClick={() => copyToClipboard(script.id, script.sections.map(s => `${s.title.toUpperCase()}:\n${s.content}`).join('\n\n'))}
-                            className="p-4 bg-white/5 hover:bg-white/10 rounded-full transition-all text-her-muted hover:text-her-ink"
+                            onClick={() => copyToClipboard(script.id, `TÍTULO: ${script.suggestedTitle}\n\n${script.sections.map(s => `${s.title.toUpperCase()}:\n${s.content}`).join('\n\n')}\n\nESTRATÉGIA THUMB: ${script.thumbnailStrategy}`)}
+                            className="p-4 bg-white/5 hover:bg-white/10 rounded-full transition-all text-her-muted hover:text-her-ink h-fit"
                           >
                             {copiedId === script.id ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
                           </button>
+                        </div>
+
+                        {/* Viral Insights Badges */}
+                        <div className="flex flex-wrap gap-4">
+                          <div className="flex flex-col gap-1.5 p-4 bg-her-accent/5 border border-her-accent/10 rounded-2xl flex-1 min-w-[200px]">
+                            <div className="flex items-center gap-2 text-her-accent">
+                               <ImageIcon size={14} />
+                               <span className="text-[9px] font-bold uppercase tracking-widest">Estratégia de Thumbnail</span>
+                            </div>
+                            <p className="text-[11px] text-her-ink/70 leading-relaxed italic">{script.thumbnailStrategy}</p>
+                          </div>
+                          <div className="flex flex-col gap-1.5 p-4 bg-white/5 border border-white/10 rounded-2xl flex-1 min-w-[200px]">
+                            <div className="flex items-center gap-2 text-her-muted">
+                               <Zap size={14} />
+                               <span className="text-[9px] font-bold uppercase tracking-widest">Algoritmo (52k Study)</span>
+                            </div>
+                            <p className="text-[11px] text-her-ink/70 leading-relaxed italic">Foco em Negatividade/Curiosidade. Zero números no título. Brilho alto.</p>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-12">

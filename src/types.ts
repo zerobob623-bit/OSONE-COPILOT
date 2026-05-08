@@ -1,5 +1,7 @@
 export interface ApiKeys {
   gemini: string;
+  googleHomeId?: string;
+  googleHomeToken?: string;
 }
 
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
