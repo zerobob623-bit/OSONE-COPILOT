@@ -12,6 +12,7 @@ import {
   FileText,
   Volume2,
   VolumeX,
+  Headphones,
   Ear,
   EarOff,
   Send,
@@ -136,9 +137,9 @@ export default function App() {
   const [isAnalyzingCode, setIsAnalyzingCode] = useState(false);
   const recognitionRef = useRef<any>(null);
   const wakeWordRecognitionRef = useRef<any>(null);
-  const [isWaitingForWakeWord, setIsWaitingForWakeWord] = useState(true);
+  const [isWaitingForWakeWord, setIsWaitingForWakeWord] = useState(false);
   const [shouldAutoUnmute, setShouldAutoUnmute] = useState(false);
-  const shouldAutoUnmuteRef = useRef(shouldAutoUnmute);
+  const shouldAutoUnmuteRef = useRef(false);
 
   useEffect(() => {
     shouldAutoUnmuteRef.current = shouldAutoUnmute;
@@ -163,7 +164,7 @@ export default function App() {
 
     const startRecognition = () => {
       // Use the ref to check status instead of state to avoid closure issues
-      if (isWaitingRef.current && !isListening && !stoppedManually) {
+      if (isWaitingRef.current && !isListening && !isTranscribing && !stoppedManually) {
         try {
           wakeWordRec.start();
         } catch (e) {
@@ -173,34 +174,37 @@ export default function App() {
     };
 
     wakeWordRec.onresult = (event: any) => {
-      let fullTranscript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        fullTranscript += event.results[i][0].transcript;
-      }
-      const lowerTranscript = fullTranscript.toLowerCase();
-
+      const resultIndex = event.resultIndex;
+      const transcript = event.results[resultIndex][0].transcript.toLowerCase().trim();
+      
       const wakeWordPatterns = [
-        'ei osone', 'hey osone', 'hey osorne', 'ai osone', 
-        'hey o som', 'ei o som', 'ei o zone', 'hey o zone',
-        'hey ozorne', 'ei ozorne', 'ei o sime', 'hey o sime',
-        'ei o sol', 'hey o sol', 'ei o rone', 'hey o rone',
-        'ei au som', 'hey au som', 'ei o sono', 'hey o sono',
-        'ei o sono de novo', 'osone'
+        'ei osone', 'ei ozone', 'ei osorni', 'ei osorne', 'ei o zone', 'eiosone', 'eiozone',
+        'ei uasone', 'ei uazone', 'hey osone', 'hey ozone', 'ei o sono', 'ei oson',
+        'ei o som', 'ei o sol', 'ei au som', 'oi osone', 'oi ozone', 'osone', 'ozone',
+        'ei ozone', 'ei ozoni', 'ei ozeni', 'ei osoni'
       ];
 
-      if (wakeWordPatterns.some(pattern => lowerTranscript.includes(pattern))) {
-        console.log('Wake word detected!', lowerTranscript);
+      // Verificar se a parte atual da fala contém o comando
+      const isMatch = wakeWordPatterns.some(pattern => transcript.includes(pattern));
+
+      if (isMatch) {
+        console.log('Comando detectado!', transcript);
         
         stoppedManually = true;
-        wakeWordRec.stop();
-        setIsWaitingForWakeWord(false); 
+        try { wakeWordRec.stop(); } catch(e) {}
         
-        addNotification("Osone Ativado via Voz", "success");
+        addNotification("Ativando via voz...", "success");
 
-        // Use a slightly longer delay to ensure mic is released by the wakeWordRec
+        // Disparar o chat com a frase "Ei, Osone"
+        // Isso fará o chat abrir e a IA responder por texto
+        setIsChatExpanded(true);
+        handleHomeChat('Ei, Osone');
+
+        // Ativar o modo de voz (unmute e iniciar sessão) após um pequeno delay para a IA começar a responder
         setTimeout(() => {
+          setIsMuted(false);
           startLiveSession();
-        }, 500);
+        }, 1500);
       }
     };
 
@@ -208,6 +212,9 @@ export default function App() {
       if (event.error === 'not-allowed') {
         setIsWaitingForWakeWord(false);
         return;
+      }
+      if (event.error !== 'aborted') {
+        console.error('Wake word recognition error', event.error);
       }
       setTimeout(startRecognition, 1000);
     };
@@ -220,15 +227,16 @@ export default function App() {
 
     wakeWordRecognitionRef.current = wakeWordRec;
     
-    if (isWaitingForWakeWord && !isListening) {
-      startRecognition();
-    }
+      if (isWaitingForWakeWord && !isListening && !isTranscribing) {
+        stoppedManually = false;
+        startRecognition();
+      }
 
     return () => {
       stoppedManually = true;
-      wakeWordRec.stop();
+      try { wakeWordRec.stop(); } catch(e) {}
     };
-  }, [isWaitingForWakeWord, isListening]); // Minimal dependencies to ensure stability
+  }, [isWaitingForWakeWord, isListening, isTranscribing]); // Added isTranscribing to ensure coordination
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -245,7 +253,10 @@ export default function App() {
       };
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
+        if (event.error !== 'aborted') {
+          console.error('Speech recognition error', event.error);
+          addNotification(`Erro de voz: ${event.error}`, "error");
+        }
         setIsTranscribing(false);
       };
 
@@ -269,8 +280,8 @@ export default function App() {
     }
   };
 
-  const [isMuted, setIsMuted] = useState(false);
-  const isMutedRef = useRef(isMuted);
+  const [isMuted, setIsMuted] = useState(true);
+  const isMutedRef = useRef(true);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -884,7 +895,7 @@ export default function App() {
     setIsListening(false);
     setIsSpeaking(false);
     setLiveState({ status: 'idle' });
-    setIsWaitingForWakeWord(true); // Restart wake word listener
+    setIsWaitingForWakeWord(isHandsFreeActive); // Restart wake word listener only if hands-free is active
   };
 
   const startScreenSharing = async () => {
@@ -1036,16 +1047,18 @@ export default function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleHomeChat = async () => {
-    if ((!homePrompt.trim() && attachedFiles.length === 0) || !apiKeys.gemini) {
+  const handleHomeChat = async (directMessage?: string) => {
+    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !apiKeys.gemini) {
       if (!apiKeys.gemini) setIsSettingsOpen(true);
       return;
     }
 
-    const userMessage = homePrompt.trim();
+    const userMessage = directMessage || homePrompt.trim();
     const currentFiles = [...attachedFiles]; // Capture files before clearing state
-    setHomePrompt('');
-    setAttachedFiles([]);
+    if (!directMessage) {
+      setHomePrompt('');
+      setAttachedFiles([]);
+    }
     
     const fileNames = currentFiles.map(f => f.name).join(', ');
     const fullMessage = fileNames ? `${userMessage}\n\n[Arquivos anexados: ${fileNames}]` : userMessage;
@@ -1700,8 +1713,8 @@ export default function App() {
       - MEMÓRIA DO NAVEGADOR: Você possui memória persistente. Histórico, saúde, desenhos e textos de escrita são salvos no localStorage.
       - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o histórico estiver prejudicando o foco.
       - MEMÓRIA SEMÂNTICA: Use 'search_chat_history' para recordar informações passadas em vez de pesquisar na web o que já foi dito.
-      - CONTROLE DE ÁUDIO (EAR): Se o usuário pedir para 'ativar o mute' ou disser que não quer ser interrompido, utilize 'control_audio_feedback' com a ação 'mute'. Isso silenciá-lo-á enquanto você fala.
-      
+      - CONTROLE DE ÁUDIO (EAR): Você começa mutado por padrão para respeitar a privacidade. Se o usuário quiser falar, ele clicará no ícone do 'Ear' ou usará a Wake Word. Use 'control_audio_feedback' com a ação 'mute' se o usuário pedir para silenciar ou se ele não quiser ser interrompido.
+      - REATIVO, NÃO PROATIVO NO ÁUDIO: Não reive a escuta por conta própria após suas respostas. Deixe o controle na mão do usuário.      
       PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
       Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
       Siga estas fases internamente:
@@ -2730,10 +2743,6 @@ export default function App() {
               }
               if (message.serverContent?.turnComplete) {
                 setIsSpeaking(false);
-                if (shouldAutoUnmuteRef.current) {
-                  setIsMuted(false);
-                  setShouldAutoUnmute(false);
-                }
               }
             });
           },
@@ -2754,12 +2763,27 @@ export default function App() {
     }
   };
 
+  const [isHandsFreeActive, setIsHandsFreeActive] = useState(false);
+  
+  const handleHandsFreeToggle = () => {
+    const newState = !isHandsFreeActive;
+    setIsHandsFreeActive(newState);
+    if (newState) {
+      addNotification("Hands-Free Ativado: 'Ei Osone'", "success");
+      setIsWaitingForWakeWord(true);
+    } else {
+      addNotification("Hands-Free Desativado", "info");
+      setIsWaitingForWakeWord(false);
+    }
+  };
+
   const handleVoiceToggle = () => {
     if (liveState.status === 'connected' || liveState.status === 'connecting') {
       stopLiveSession();
-      setIsWaitingForWakeWord(true); // Re-enable wake word when manually stopping
+      setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
     } else {
       setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
+      setIsMuted(false); // Ativar microfone ao iniciar manualmente
       startLiveSession();
     }
   };
@@ -2898,11 +2922,36 @@ export default function App() {
           <Menu size={22} />
         </button>
         
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center gap-1">
           <span className="text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
+          <div className="hidden md:block">
+            <PersonaSwitcher 
+              selectedPersona={selectedPersona} 
+              onPersonaChange={(p) => {
+                setSelectedPersona(p);
+                localStorage.setItem('osone_selected_persona', p.id);
+              }} 
+              isOpen={isPersonaSwitcherOpen}
+              onToggle={() => setIsPersonaSwitcherOpen(!isPersonaSwitcherOpen)}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
+          <button 
+            onClick={handleHandsFreeToggle}
+            className={cn(
+              "px-3 py-1.5 rounded-full border transition-all text-[10px] font-medium flex items-center gap-2",
+              isHandsFreeActive 
+                ? "bg-her-accent/10 border-her-accent/30 text-her-accent shadow-[0_0_15px_rgba(242,125,38,0.1)]" 
+                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+            )}
+            title={isHandsFreeActive ? "Desativar Mãos Livres" : "Ativar Mãos Livres (Ei Osone)"}
+          >
+            <Headphones size={14} className={isHandsFreeActive ? "animate-pulse" : ""} />
+            <span className="hidden sm:inline">{isHandsFreeActive ? "HANDS-FREE ON" : "VOZ PASSIVA"}</span>
+          </button>
+
           {showInstallButton && (
             <button 
               onClick={handleInstallClick}
@@ -3468,41 +3517,22 @@ export default function App() {
                         isOpen={isVoiceSwitcherOpen}
                         onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
                       />
-                      <PersonaSwitcher
-                        selectedPersona={selectedPersona}
-                        onPersonaChange={(p) => {
-                          setSelectedPersona(p);
-                          localStorage.setItem('osone_selected_persona', p.id);
-                          addNotification(`Personalidade alterada para: ${p.name}`, "info");
-                        }}
-                        isOpen={isPersonaSwitcherOpen}
-                        onToggle={() => setIsPersonaSwitcherOpen(!isPersonaSwitcherOpen)}
-                      />
                     </div>
                     
                     {/* Secondary Toggles - Tablet/Mobile friendly row when expanded */}
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={handleMuteToggle}
-                        className={cn(
-                          "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
-                          isMuted ? "text-her-accent border-her-accent/30" : "text-her-muted"
-                        )}
-                        title={isMuted ? "Ouvir" : "Mutar"}
-                      >
-                        {isMuted ? <EarOff size={14} /> : <Ear size={14} />}
-                      </button>
-                      <button 
-                        onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
-                        className={cn(
-                          "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
-                          isScreenSharing ? "text-her-accent border-her-accent/20" : "text-her-muted"
-                        )}
-                        title={isScreenSharing ? "Parar Tela" : "Compartilhar Tela"}
-                      >
-                        {isScreenSharing ? <MonitorOff size={14} /> : <Monitor size={14} />}
-                      </button>
-                    </div>
+                      {/* Secondary Toggles Removed Ear Duplication */}
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
+                          className={cn(
+                            "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
+                            isScreenSharing ? "text-her-accent border-her-accent/20" : "text-her-muted"
+                          )}
+                          title={isScreenSharing ? "Parar Tela" : "Compartilhar Tela"}
+                        >
+                          {isScreenSharing ? <MonitorOff size={14} /> : <Monitor size={14} />}
+                        </button>
+                      </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
@@ -3612,7 +3642,7 @@ export default function App() {
                             />
                             <div className="flex items-center gap-1">
                               <button 
-                                onClick={handleHomeChat}
+                                onClick={() => handleHomeChat()}
                                 disabled={!homePrompt.trim() && attachedFiles.length === 0}
                                 className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale"
                               >
