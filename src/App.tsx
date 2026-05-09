@@ -13,8 +13,6 @@ import {
   Volume2,
   VolumeX,
   Headphones,
-  Ear,
-  EarOff,
   Send,
   Loader2,
   Zap,
@@ -281,8 +279,8 @@ export default function App() {
     }
   };
 
-  const [isMuted, setIsMuted] = useState(true);
-  const isMutedRef = useRef(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -921,7 +919,6 @@ export default function App() {
     liveSessionRef.current = null;
     setIsListening(false);
     setIsSpeaking(false);
-    setIsMuted(true);
     setLiveState({ status: 'idle' });
     setIsWaitingForWakeWord(isHandsFreeActive); // Restart wake word listener only if hands-free is active
   };
@@ -1713,15 +1710,6 @@ export default function App() {
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer((active) => {
         setIsSpeaking(active);
-        // O usuário quer que o EAR só ative enquanto a IA fala (para interrupções)
-        // E desative sempre que ela silenciar.
-        if (active) {
-          setIsMuted(false);
-          addNotification("EAR Ativado (Escuta Ativa)", "info");
-        } else {
-          setIsMuted(true);
-          addNotification("EAR Desativado (Privacidade)", "info");
-        }
       });
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
@@ -1744,7 +1732,6 @@ export default function App() {
 
       CONCEITOS:
       - SINCERIDADE: Descreva o ambiente de forma técnica e honesta se solicitado.
-      - EAR: Controle de escuta automática sincronizado com sua voz.
       
       CONTEXTO:
       - Workspace: ${workspaceMode}
@@ -2118,21 +2105,6 @@ export default function App() {
                   }
                 },
                 {
-                  name: "control_audio_feedback",
-                  description: "Controla o estado do 'ear' (microfone/escuta) do sistema. Use 'mute' quando o usuário pedir para silenciar ou não ser interrompido, e 'unmute' para voltar a ouvir (ativar o ear).",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      action: {
-                        type: Type.STRING,
-                        enum: ["mute", "unmute"],
-                        description: "A ação a ser executada: 'mute' para silenciar a escuta, 'unmute' para ativar a escuta."
-                      }
-                    },
-                    required: ["action"]
-                  }
-                },
-                {
                   name: "play_sound_effect",
                   description: "Reproduz um efeito sonoro da biblioteca. Use para reagir a situações comicas, de terror, suspense, etc. Diga ao usuário qual som você está ativando.",
                   parameters: {
@@ -2170,7 +2142,7 @@ export default function App() {
               setIsListening(true);
               audioProcessorRef.current?.startRecording(
                 (base64Data) => {
-                  if (!isMutedRef.current && session) {
+                  if (session) {
                     try {
                       session.sendRealtimeInput({
                         audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
@@ -2316,25 +2288,6 @@ export default function App() {
                       id: call.id,
                       response: { result: `Removidas ${count} mensagens antigas do histórico para otimizar a conversa.` }
                     });
-                  } else if (call.name === "control_audio_feedback") {
-                    const { action } = call.args as any;
-                    if (action === 'mute') {
-                      setIsMuted(true);
-                      setShouldAutoUnmute(true);
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Modo silencioso ativado. Vou falar sem interrupções e depois reativar sua escuta automaticamente." }
-                      });
-                    } else {
-                      setIsMuted(false);
-                      setShouldAutoUnmute(false);
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Escuta reativada." }
-                      });
-                    }
                   } else if (call.name === "switch_workspace_mode") {
                     setWorkspaceMode(call.args.mode as any);
                     responses.push({
@@ -2934,10 +2887,6 @@ export default function App() {
 
   const removeImage = (index: number) => {
     setReferenceImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleMuteToggle = () => {
-    setIsMuted(!isMuted);
   };
 
   const closeLyrics = () => {
@@ -3696,19 +3645,6 @@ export default function App() {
                     )}>
                       {!isChatExpanded ? (
                         <div className="flex items-center gap-2">
-                          <button 
-                            onClick={handleMuteToggle}
-                            className={cn(
-                              "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
-                              isMuted 
-                                ? "bg-her-accent/20 text-her-accent border border-her-accent/30" 
-                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
-                            )}
-                            title={isMuted ? "Ouvir" : "Mutar"}
-                          >
-                            {isMuted ? <EarOff size={18} /> : <Ear size={18} />}
-                          </button>
-
                           <button 
                             onClick={() => setIsChatExpanded(true)}
                             className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent hover:border-her-accent/20"
