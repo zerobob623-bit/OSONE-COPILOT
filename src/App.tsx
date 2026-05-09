@@ -38,7 +38,9 @@ import {
   Speaker,
   Music,
   Wand2,
-  User
+  User,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -496,6 +498,10 @@ export default function App() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+  const liveAnimationFrameRef = useRef<number | null>(null);
   const [lyrics, setLyrics] = useState<{ title?: string; content: string } | null>(null);
   const [isSinging, setIsSinging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -887,6 +893,10 @@ export default function App() {
   }, []);
 
   const stopLiveSession = () => {
+    if (liveAnimationFrameRef.current) {
+      cancelAnimationFrame(liveAnimationFrameRef.current);
+      liveAnimationFrameRef.current = null;
+    }
     audioProcessorRef.current?.stopRecording();
     audioPlayerRef.current?.stop();
     stopScreenSharing();
@@ -2164,6 +2174,33 @@ export default function App() {
                 sendFilesToLiveSession(session);
               }
 
+              // Real-time Video Stream
+              const streamFrames = () => {
+                if (liveSessionRef.current && isCameraActive && liveVideoRef.current) {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = 320; // Reduced resolution for performance
+                  canvas.height = 240;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(liveVideoRef.current, 0, 0, canvas.width, canvas.height);
+                    const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                    try {
+                      liveSessionRef.current.sendRealtimeInput({
+                        video: { data: base64Data, mimeType: 'image/jpeg' }
+                      });
+                    } catch (e) {
+                      // Probably session closed
+                      return;
+                    }
+                  }
+                  liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
+                }
+              };
+              
+              if (isCameraActive) {
+                streamFrames();
+              }
+
               try {
                 session.sendRealtimeInput({
                   text: isScreenSharing ? "O compartilhamento de tela está ATIVO." : "O compartilhamento de tela está DESATIVADO no momento."
@@ -2777,6 +2814,36 @@ export default function App() {
     }
   };
 
+  const toggleCamera = async () => {
+    if (isCameraActive) {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+      }
+      setIsCameraActive(false);
+      addNotification("Câmera Desativada", "info");
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } 
+        });
+        cameraStreamRef.current = stream;
+        
+        // Ensure the video element exists. We'll add it hidden in the DOM.
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = stream;
+          liveVideoRef.current.play();
+        }
+        
+        setIsCameraActive(true);
+        addNotification("Visão Ativada em Tempo Real", "success");
+      } catch (err) {
+        console.error("Erro ao acessar câmera:", err);
+        addNotification("Falha ao acessar câmera. Verifique as permissões.", "error");
+      }
+    }
+  };
+
   const handleVoiceToggle = () => {
     if (liveState.status === 'connected' || liveState.status === 'connecting') {
       stopLiveSession();
@@ -2950,6 +3017,20 @@ export default function App() {
           >
             <Headphones size={14} className={isHandsFreeActive ? "animate-pulse" : ""} />
             <span className="hidden sm:inline">{isHandsFreeActive ? "HANDS-FREE ON" : "VOZ PASSIVA"}</span>
+          </button>
+          
+          <button 
+            onClick={toggleCamera}
+            className={cn(
+              "px-3 py-1.5 rounded-full border transition-all text-[10px] font-medium flex items-center gap-2",
+              isCameraActive 
+                ? "bg-her-accent/10 border-her-accent/30 text-her-accent shadow-[0_0_15px_rgba(242,125,38,0.1)] font-bold" 
+                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+            )}
+            title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
+          >
+            {isCameraActive ? <Eye size={14} className="animate-pulse" /> : <EyeOff size={14} />}
+            <span className="hidden sm:inline">{isCameraActive ? "VISION ON" : "PASSIVE VISION"}</span>
           </button>
 
           {showInstallButton && (
@@ -3762,6 +3843,14 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Hidden Video for Camera Session */}
+      <video 
+        ref={liveVideoRef} 
+        className="hidden" 
+        autoPlay 
+        playsInline 
+        muted 
+      />
     </div>
   );
 }
