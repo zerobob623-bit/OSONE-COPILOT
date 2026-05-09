@@ -499,9 +499,18 @@ export default function App() {
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
   const liveAnimationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isCameraActive && cameraStreamRef.current && liveVideoRef.current) {
+      liveVideoRef.current.srcObject = cameraStreamRef.current;
+      liveVideoRef.current.play().catch(e => console.error("Video play error:", e));
+    }
+  }, [isCameraActive]);
+
   const [lyrics, setLyrics] = useState<{ title?: string; content: string } | null>(null);
   const [isSinging, setIsSinging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2175,22 +2184,28 @@ export default function App() {
               }
 
               // Real-time Video Stream
-              const streamFrames = () => {
+              let lastFrameTime = 0;
+              const FRAME_INTERVAL = 1000; // 1 frame por segundo para economizar cota
+
+              const streamFrames = (timestamp: number) => {
                 if (liveSessionRef.current && isCameraActive && liveVideoRef.current) {
-                  const canvas = document.createElement('canvas');
-                  canvas.width = 320; // Reduced resolution for performance
-                  canvas.height = 240;
-                  const ctx = canvas.getContext('2d');
-                  if (ctx) {
-                    ctx.drawImage(liveVideoRef.current, 0, 0, canvas.width, canvas.height);
-                    const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
-                    try {
-                      liveSessionRef.current.sendRealtimeInput({
-                        video: { data: base64Data, mimeType: 'image/jpeg' }
-                      });
-                    } catch (e) {
-                      // Probably session closed
-                      return;
+                  if (timestamp - lastFrameTime >= FRAME_INTERVAL) {
+                    lastFrameTime = timestamp;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 320; // Reduced resolution for performance
+                    canvas.height = 240;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                      ctx.drawImage(liveVideoRef.current, 0, 0, canvas.width, canvas.height);
+                      const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                      try {
+                        liveSessionRef.current.sendRealtimeInput({
+                          video: { data: base64Data, mimeType: 'image/jpeg' }
+                        });
+                      } catch (e) {
+                        // Probably session closed
+                        return;
+                      }
                     }
                   }
                   liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
@@ -2198,7 +2213,7 @@ export default function App() {
               };
               
               if (isCameraActive) {
-                streamFrames();
+                liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
               }
 
               try {
@@ -2825,21 +2840,45 @@ export default function App() {
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } 
+          video: { facingMode: cameraFacingMode, width: { ideal: 640 }, height: { ideal: 480 } } 
         });
         cameraStreamRef.current = stream;
-        
-        // Ensure the video element exists. We'll add it hidden in the DOM.
-        if (liveVideoRef.current) {
-          liveVideoRef.current.srcObject = stream;
-          liveVideoRef.current.play();
-        }
         
         setIsCameraActive(true);
         addNotification("Visão Ativada em Tempo Real", "success");
       } catch (err) {
         console.error("Erro ao acessar câmera:", err);
         addNotification("Falha ao acessar câmera. Verifique as permissões.", "error");
+      }
+    }
+  };
+
+  const switchCamera = async () => {
+    const newMode = cameraFacingMode === 'user' ? 'environment' : 'user';
+    setCameraFacingMode(newMode);
+    
+    if (isCameraActive) {
+      // Re-initialize camera with new mode
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: newMode, width: { ideal: 640 }, height: { ideal: 480 } } 
+        });
+        cameraStreamRef.current = stream;
+        
+        if (liveVideoRef.current) {
+          liveVideoRef.current.srcObject = stream;
+          liveVideoRef.current.play();
+        }
+        
+        addNotification(`Câmera alternada para ${newMode === 'user' ? 'Frontal' : 'Traseira'}`, "info");
+      } catch (err) {
+        console.error("Erro ao alternar câmera:", err);
+        addNotification("Falha ao alternar câmera.", "error");
+        setIsCameraActive(false);
       }
     }
   };
@@ -3843,14 +3882,56 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Hidden Video for Camera Session */}
-      <video 
-        ref={liveVideoRef} 
-        className="hidden" 
-        autoPlay 
-        playsInline 
-        muted 
-      />
+      {/* Camera Preview Overlay */}
+      <AnimatePresence>
+        {isCameraActive && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            className="fixed bottom-20 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md rounded-2xl overflow-hidden border border-white/20 shadow-2xl group"
+          >
+            <video 
+              ref={liveVideoRef} 
+              className={cn(
+                "w-full h-full object-cover",
+                cameraFacingMode === 'user' ? "scale-x-[-1]" : ""
+              )}
+              autoPlay 
+              playsInline 
+              muted 
+            />
+            {/* Analysis Overlay/HUD */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 border-[1px] border-her-accent/30 rounded-2xl m-2 border-dashed animate-[spin_10s_linear_infinite]" />
+              <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 bg-her-accent/80 rounded-lg">
+                <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                <span className="text-[9px] font-bold text-white uppercase tracking-widest font-mono">VISION_ACTIVE</span>
+              </div>
+              <div className="absolute bottom-3 left-3 right-3 text-[8px] text-white/50 font-mono flex justify-between">
+                <span>FPS: 30</span>
+                <span>{cameraFacingMode.toUpperCase()}</span>
+              </div>
+            </div>
+            <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={toggleCamera}
+                className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg flex items-center justify-center backdrop-blur-sm"
+                title="Encerrar Visão"
+              >
+                <X size={12} />
+              </button>
+              <button 
+                onClick={switchCamera}
+                className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm"
+                title="Inverter Câmera"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
