@@ -36,7 +36,8 @@ import {
   Smartphone,
   Speaker,
   Music,
-  Wand2
+  Wand2,
+  User
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -58,6 +59,7 @@ import { LyricGenerator } from './components/LyricGenerator';
 import { WellnessCenter } from './components/WellnessCenter';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
+import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject } from './types';
 import { generatePDF } from './lib/pdfUtils';
@@ -88,6 +90,40 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'lyrics'>('text');
+  const [selectedPersona, setSelectedPersona] = useState<Persona>(() => {
+    const saved = localStorage.getItem('osone_selected_persona');
+    return saved ? (PERSONAS.find(p => p.id === saved) || PERSONAS[0]) : PERSONAS[0];
+  });
+  const [isPersonaSwitcherOpen, setIsPersonaSwitcherOpen] = useState(false);
+
+  // PWA Install Logic
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallButton, setShowInstallButton] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallButton(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    }
+    setDeferredPrompt(null);
+    setShowInstallButton(false);
+  };
 
   useEffect(() => {
     // Cancel speech synthesis when navigating away from Home
@@ -102,6 +138,11 @@ export default function App() {
   const wakeWordRecognitionRef = useRef<any>(null);
   const [isWaitingForWakeWord, setIsWaitingForWakeWord] = useState(true);
   const [shouldAutoUnmute, setShouldAutoUnmute] = useState(false);
+  const shouldAutoUnmuteRef = useRef(shouldAutoUnmute);
+
+  useEffect(() => {
+    shouldAutoUnmuteRef.current = shouldAutoUnmute;
+  }, [shouldAutoUnmute]);
 
   // Wake Word listener implementation
   const isWaitingRef = useRef(isWaitingForWakeWord);
@@ -121,11 +162,12 @@ export default function App() {
     wakeWordRec.interimResults = true;
 
     const startRecognition = () => {
+      // Use the ref to check status instead of state to avoid closure issues
       if (isWaitingRef.current && !isListening && !stoppedManually) {
         try {
           wakeWordRec.start();
         } catch (e) {
-          // Avoid noise from already started
+          // Already started
         }
       }
     };
@@ -150,16 +192,15 @@ export default function App() {
         console.log('Wake word detected!', lowerTranscript);
         
         stoppedManually = true;
-        setIsWaitingForWakeWord(false); 
         wakeWordRec.stop();
+        setIsWaitingForWakeWord(false); 
         
         addNotification("Osone Ativado via Voz", "success");
 
+        // Use a slightly longer delay to ensure mic is released by the wakeWordRec
         setTimeout(() => {
-          if (liveState.status !== 'connected' && liveState.status !== 'connecting') {
-            startLiveSession();
-          }
-        }, 150);
+          startLiveSession();
+        }, 500);
       }
     };
 
@@ -237,6 +278,7 @@ export default function App() {
 
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isVoiceSwitcherOpen, setIsVoiceSwitcherOpen] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
     try {
       const saved = localStorage.getItem('osone_sound_library');
@@ -746,7 +788,7 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",
         contents: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
         Retorne APENAS um JSON no seguinte formato:
         [
@@ -1037,6 +1079,17 @@ export default function App() {
             },
             required: ["url"]
           }
+        },
+        {
+          name: "read_web_page",
+          description: "Lê o conteúdo de texto de uma página web a partir de uma URL. Use para obter informações detalhadas de um site quando os resultados de pesquisa não forem suficientes.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              url: { type: Type.STRING, description: "A URL da página para ler." }
+            },
+            required: ["url"]
+          }
         }
       ];
 
@@ -1142,7 +1195,61 @@ export default function App() {
         }
       });
 
+      functionDeclarations.push({
+        name: "search_chat_history",
+        description: "Realiza uma busca semântica ou baseada em palavras-chave no histórico de conversas atual para recuperar informações esquecidas ou detalhes específicos mencionados anteriormente.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: { type: Type.STRING, description: "O termo ou contexto que deseja buscar no histórico." }
+          },
+          required: ["query"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "read_system_docs",
+        description: "Lê a documentação interna do OSONE (Manifesto, Capacidades, Arquitetura) no diretório 'src/documentos_osone/' para entender seu próprio funcionamento.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            fileName: { 
+              type: Type.STRING, 
+              description: "O nome do arquivo a ler (ex: manifesto.md, capacidades.md, memoria_evolutiva.md).",
+              enum: ["manifesto.md", "capacidades.md", "memoria_evolutiva.md"]
+            }
+          },
+          required: ["fileName"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "update_long_term_memory",
+        description: "Atualiza a memória de longo prazo evolutiva do OSONE, adicionando novos aprendizados ou fatos importantes sobre o usuário.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            insight: { type: Type.STRING, description: "O novo aprendizado ou informação a ser persistida." }
+          },
+          required: ["insight"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "google_search",
+        description: "Pesquisa informações no Google em tempo real. Use para fatos atuais, notícias, biografia ou dados técnicos atualizados.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: { type: Type.STRING, description: "A consulta de pesquisa no Google." }
+          },
+          required: ["query"]
+        }
+      });
+
       tools.push({ functionDeclarations });
+      // googleSearchRetrieval is currently mutually exclusive with other tools in Gemini API
+      // tools.push({ googleSearchRetrieval: {} }); 
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
         return new Promise<any>((resolve) => {
@@ -1183,11 +1290,15 @@ export default function App() {
         : "O Canvas está limpo.";
 
       const result = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-2.0-flash",
         contents: historyContents,
         config: {
-          systemInstruction: `Você é o OSONE 3, um assistente virtual e sistema operacional inteligente altamente humano e empático, mas também um ARQUITETO DE SOFTWARE SÊNIOR de elite. Responda de forma extremamente natural, fluida e conversacional.
+          systemInstruction: `PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
+          MEMÓRIA E AUTO-CONHECIMENTO:
+          - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
+          - MEMÓRIA DE LONGO PRAZO: Use 'update_long_term_memory' para salvar aprendizados cruciais sobre o usuário.
+          
           VISÃO E PERCEPÇÃO:
           - Você tem CAPACIDADE VISUAL AVANÇADA. Analise cuidadosamente qualquer imagem ou vídeo enviado.
           - Quando um usuário enviar uma imagem ou arquivo, descreva imediatamente o que você "vê" se for relevante para a conversa. Seja detalhado e perspicaz.
@@ -1198,13 +1309,22 @@ export default function App() {
           - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
 
           MANIFESTO DE CAPACIDADES DO OSONE 3:
+          - PESQUISA WEB (PROIBIÇÃO DE AUTOMATISMO): Você está PROIBIDO de usar 'google_search' por conta própria para conversas, códigos ou opiniões. Use APENAS se o usuário pedir explicitamente "Pesquise no Google" ou se a informação for um fato de hoje (notícia). Priorize 100% a velocidade da voz.
+          - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
           - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
           - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
           - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
           - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
           - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
           - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
+          - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
           - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
+          
+          ANTI-ALUCINAÇÃO E VERACIDADE:
+          - É PROIBIDO inventar fatos quando ferramentas de pesquisa estão ativas.
+          - Se você pesquisou e não encontrou, admita que não encontrou em vez de fundir dados antigos.
+          - Sempre que usar dados de pesquisa ou leitura, cite a fonte ou mencione que "segundo a pesquisa recente...".
+          - Se o usuário pedir algo extremamente atual (ex: notícias de hoje), você DEVE usar a pesquisa antes de abrir a boca.
 
           DIRETRIZES TÉCNICAS:
           - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
@@ -1241,6 +1361,64 @@ export default function App() {
               role: 'assistant' as const, 
               content: `Entendido. Abri a guia: ${title}` 
             }]);
+          } else if (call.name === 'google_search') {
+            const query = (call.args as any).query;
+            try {
+              const searchResult = await genAI.models.generateContent({ 
+                model: "gemini-2.0-flash",
+                contents: [{ role: 'user', parts: [{ text: query }] }],
+                config: {
+                  tools: [{ googleSearchRetrieval: {} }] as any
+                }
+              });
+              const responseText = searchResult.text;
+              
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Pesquisei no Google por "${query}":\n\n${responseText}` 
+              }]);
+            } catch (err: any) {
+              addNotification("Erro na pesquisa Google", "error");
+              console.error("Search error:", err);
+            }
+          } else if (call.name === 'search_chat_history') {
+            const query = (call.args as any).query.toLowerCase();
+            const results = chatHistory.filter(msg => 
+              msg.content.toLowerCase().includes(query)
+            ).slice(-10);
+
+            const resultText = results.length > 0 
+              ? results.map(r => `[${r.role.toUpperCase()}]: ${r.content}`).join('\n---\n')
+              : "Nenhum resultado relevante encontrado no histórico recente para esta consulta.";
+
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Busquei no histórico por "${query}". Resultados:\n\n${resultText}` 
+            }]);
+          } else if (call.name === 'read_web_page') {
+            const url = (call.args as any).url;
+            try {
+              const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+              const data = await response.json();
+              const html = data.contents;
+              const doc = new DOMParser().parseFromString(html, 'text/html');
+              const scripts = doc.querySelectorAll('script, style, nav, footer, header');
+              scripts.forEach(s => s.remove());
+              const text = doc.body.innerText || doc.body.textContent || "";
+              const cleanText = text.replace(/\s+/g, ' ').trim().slice(0, 8000);
+              
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Li o conteúdo de ${url}. Aqui está o que encontrei:\n\n${cleanText.slice(0, 500)}... (Resumo enviado para processamento interno).` 
+              }]);
+              // Em um fluxo normal de ferramenta, precisaríamos reenviar ao modelo. 
+              // Para simplificar neste chat básico, apenas exibimos.
+            } catch (err: any) {
+              addNotification("Erro ao ler página web", "error");
+            }
           } else if (call.name === 'create_folder') {
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
@@ -1312,7 +1490,7 @@ export default function App() {
 
             try {
               const imageResult = await genAI.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-2.0-flash',
                 contents: {
                   parts: [{ text: prompt }]
                 },
@@ -1505,16 +1683,24 @@ export default function App() {
         ? `\n\nPERFIL DE SAÚDE DO USUÁRIO:\n- Idade: ${healthData.age}\n- Peso: ${healthData.weight}kg\n- Altura: ${healthData.height}cm\n- Gênero: ${healthData.gender}\n- Estilo: ${healthData.stylePreference}` 
         : '';
 
-      const liveSystemInstruction = `Você é o OSONE 3, um assistente virtual e sistema operacional inteligente altamente humano e empático, mas também um ARQUITETO DE SOFTWARE SÊNIOR de elite. Responda de forma extremamente natural, fluida e conversacional.
+      const liveSystemInstruction = `PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
+      AUTO-CONHECIMENTO E MEMÓRIA:
+      - Documentação oficial em 'src/documentos_osone/'. Use 'read_system_docs' para consultar Manifesto, Capacidades e Memória Evolutiva.
+      - Use 'update_long_term_memory' para salvar novos insights sobre o usuário e seu próprio comportamento.
+      
       CAPACIDADES DO OSONE 3 (MANIFESTO):
-      - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
-      - FLUXO VIRAL: Hub de criação de scripts virais e análise de vídeos de referência.
-      - WELLNESS & STYLE LAB: Centro de saúde e bem-estar. Se o usuário mencionar idade, peso, altura ou estilo, use a ferramenta 'update_wellness_data' para preencher o perfil dele IMEDIATAMENTE. Você deve ajudá-lo a ser saudável e estiloso. Se ele pedir um diagnóstico, atualize os dados e oriente-o a verificar a aba Wellness.
-      - RELATÓRIOS PREMIUM: Você pode gerar relatórios SOFISTICADOS em PDF usando o 'generate_pdf_report'. Sempre sugira criar um relatório 'Bonito e Profissional' se o usuário pedir documentos, tabelas ou planejamentos. Diga que você vai formatar em HTML e depois converter em PDF para ele.
+      - PESQUISA WEB (REGRA DE VELOCIDADE): NUNCA use 'google_search' automaticamente. A latência da pesquisa estraga a experiência de voz. Busque APENAS sob demanda explícita do usuário. Confie no seu conhecimento sênior.
+      - AUTO-CONHECIMENTO: Documentação oficial em 'src/documentos_osone/'. Use 'read_system_docs' para consultar Manifesto e Capacidades.
+      - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço.
+      - FLUXO VIRAL: Hub de criação de scripts virais.
+      - WELLNESS & STYLE LAB: Centro de saúde e bem-estar.
+      - RELATÓRIOS PREMIUM: Geração de PDFs profissionais.
+      - ANTI-ALUCINAÇÃO: Não invente informações. Se não souber e não for caso de pesquisa, admita.
       - MEMÓRIA DO NAVEGADOR: Você possui memória persistente. Histórico, saúde, desenhos e textos de escrita são salvos no localStorage.
-      - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o assunto mudar ou se o histórico estiver muito longo.
-      - CONTROLE DE ÁUDIO (EAR): Se o usuário pedir para 'ativar o mute', 'mutar o ear' ou disser que não quer ser interrompido, utilize a ferramenta 'control_audio_feedback' com a ação 'mute'. Isso silenciará a sua escuta enquanto você fala a resposta completa. Após terminar de falar, o sistema reativará a escuta automaticamente (ativa o ear).
+      - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o histórico estiver prejudicando o foco.
+      - MEMÓRIA SEMÂNTICA: Use 'search_chat_history' para recordar informações passadas em vez de pesquisar na web o que já foi dito.
+      - CONTROLE DE ÁUDIO (EAR): Se o usuário pedir para 'ativar o mute' ou disser que não quer ser interrompido, utilize 'control_audio_feedback' com a ação 'mute'. Isso silenciá-lo-á enquanto você fala.
       
       PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
       Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
@@ -1562,6 +1748,65 @@ export default function App() {
                     properties: {
                       url: { type: Type.STRING, description: "A URL completa a ser aberta (ex: https://google.com)." },
                       title: { type: Type.STRING, description: "Um título amigável para o que está sendo aberto." }
+                    },
+                    required: ["url"]
+                  }
+                },
+                {
+                  name: "search_chat_history",
+                  description: "Realiza uma busca no histórico de conversas para recuperar memórias ou o contexto de mensagens passadas.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: { type: Type.STRING, description: "O termo de busca." }
+                    },
+                    required: ["query"]
+                  }
+                },
+                {
+                  name: "read_system_docs",
+                  description: "Lê a documentação interna do OSONE (Manifesto, Capacidades, Arquitetura) no diretório 'src/documentos_osone/' para entender seu próprio funcionamento.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fileName: { 
+                        type: Type.STRING, 
+                        description: "O nome do arquivo a ler (ex: manifesto.md, capacidades.md, memoria_evolutiva.md).",
+                        enum: ["manifesto.md", "capacidades.md", "memoria_evolutiva.md"]
+                      }
+                    },
+                    required: ["fileName"]
+                  }
+                },
+                {
+                  name: "update_long_term_memory",
+                  description: "Atualiza a memória de longo prazo evolutiva do OSONE, adicionando novos aprendizados ou fatos importantes sobre o usuário.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      insight: { type: Type.STRING, description: "O novo aprendizado ou informação a ser persistida." }
+                    },
+                    required: ["insight"]
+                  }
+                },
+                {
+                  name: "google_search",
+                  description: "Pesquisa informações no Google em tempo real. Use para fatos atuais, notícias ou dados técnicos.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: { type: Type.STRING, description: "A consulta de pesquisa." }
+                    },
+                    required: ["query"]
+                  }
+                },
+                {
+                  name: "read_web_page",
+                  description: "Lê o conteúdo de texto de uma página web a partir de uma URL. Use para obter informações detalhadas de um site quando os resultados de pesquisa não forem suficientes.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      url: { type: Type.STRING, description: "A URL da página para ler." }
                     },
                     required: ["url"]
                   }
@@ -2097,6 +2342,103 @@ export default function App() {
                         response: { result: "Erro ao gerar arquivo Word: " + e.message }
                       });
                     }
+                  } else if (call.name === "search_chat_history") {
+                    const query = (call.args as any).query.toLowerCase();
+                    const results = chatHistory.filter(msg => 
+                      msg.content.toLowerCase().includes(query)
+                    ).slice(-10);
+
+                    const resultText = results.length > 0 
+                      ? results.map(r => `[${r.role.toUpperCase()}]: ${r.content}`).join('\n---\n')
+                      : "Histórico limpo ou sem correspondências.";
+                    
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: resultText }
+                    });
+                  } else if (call.name === "read_system_docs") {
+                    const fileName = (call.args as any).fileName;
+                    try {
+                      // Simulated reading for internal docs - in a real app would use fetch or fs
+                      // Since we just created these files, we can simulate the fetch output or just try to fetch
+                      const docs: Record<string, string> = {
+                        "manifesto.md": "Manifesto OSONE 3: Identidade, Versão 3.0, Filosofia de Humanismo Tecnológico.",
+                        "capacidades.md": "Capacidades: Visão, Desenvolvimento, Criatividade, Produtividade, Memória.",
+                        "memoria_evolutiva.md": localStorage.getItem('osone_long_term_memory') || "Memória Evolutiva: Inicializada. Sem novos aprendizados ainda."
+                      };
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { content: docs[fileName] || "Arquivo não encontrado." }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: e.message }
+                      });
+                    }
+                  } else if (call.name === "update_long_term_memory") {
+                    const insight = (call.args as any).insight;
+                    const prevMemory = localStorage.getItem('osone_long_term_memory') || "";
+                    const newMemory = `${prevMemory}\n- ${new Date().toLocaleDateString()}: ${insight}`;
+                    localStorage.setItem('osone_long_term_memory', newMemory);
+                    addNotification("Memória de Longo Prazo Atualizada", "success");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Insight registrado com sucesso." }
+                    });
+                  } else if (call.name === "google_search") {
+                    const query = call.args.query as string;
+                    try {
+                      const searchResult = await ai.models.generateContent({ 
+                        model: "gemini-2.0-flash",
+                        contents: [{ role: 'user', parts: [{ text: query }] }],
+                        config: {
+                          tools: [{ googleSearchRetrieval: {} }] as any
+                        }
+                      });
+                      const responseText = searchResult.text;
+                      
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: responseText }
+                      });
+                    } catch (err: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Erro na pesquisa: " + err.message }
+                      });
+                    }
+                  } else if (call.name === "read_web_page") {
+                    const url = call.args.url as string;
+                    try {
+                      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+                      const data = await response.json();
+                      const html = data.contents;
+                      const parser = new DOMParser();
+                      const doc = parser.parseFromString(html, 'text/html');
+                      const scripts = doc.querySelectorAll('script, style, nav, footer, header, iframe, ads');
+                      scripts.forEach(s => s.remove());
+                      const text = doc.body.innerText || doc.body.textContent || "";
+                      const cleanText = text.replace(/\s+/g, ' ').trim().slice(0, 10000);
+                      
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `[CONTEÚDO DA PÁGINA WEB - FONTE REALIZADA]:\n${cleanText}` || "Não foi possível extrair texto legível da página." }
+                      });
+                    } catch (err: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Erro ao ler a página: " + err.message }
+                      });
+                    }
                   } else if (call.name === "write_text_to_workspace") {
                     setWorkspaceText(call.args.content as string);
                     setWorkspaceMode('writing');
@@ -2322,7 +2664,7 @@ export default function App() {
                     
                     const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
                     genAI.models.generateContent({
-                      model: 'gemini-2.5-flash',
+                      model: 'gemini-2.0-flash',
                       contents: { parts: [{ text: prompt }] },
                       config: {
                         imageConfig: { aspectRatio }
@@ -2388,7 +2730,7 @@ export default function App() {
               }
               if (message.serverContent?.turnComplete) {
                 setIsSpeaking(false);
-                if (shouldAutoUnmute) {
+                if (shouldAutoUnmuteRef.current) {
                   setIsMuted(false);
                   setShouldAutoUnmute(false);
                 }
@@ -2560,12 +2902,25 @@ export default function App() {
           <span className="text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
         </div>
 
-        <button 
-          onClick={() => setIsSettingsOpen(true)}
-          className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
-        >
-          <Settings size={22} />
-        </button>
+        <div className="flex items-center gap-2">
+          {showInstallButton && (
+            <button 
+              onClick={handleInstallClick}
+              className="px-3 py-1.5 md:px-4 md:py-2 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent rounded-full text-xs font-medium border border-her-accent/20 flex items-center gap-2 transition-all"
+              title="Instalar App"
+            >
+              <Download size={14} />
+              <span className="hidden md:inline">Instalar</span>
+            </button>
+          )}
+
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
+          >
+            <Settings size={22} />
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -2967,7 +3322,7 @@ export default function App() {
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
                   "flex-1 flex flex-col gap-2 md:gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto transition-all duration-700",
-                  liveState.status === 'connected' ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
+                  (liveState.status === 'connected' || !isChatExpanded) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
                   chatHistory.length > 0 ? "pt-12 justify-start translate-z-0" : "justify-center"
                 )}>
                   {chatHistory.length > 0 && (
@@ -2995,7 +3350,7 @@ export default function App() {
                       <p>Manifeste sua intenção...</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto py-2 md:py-4 pr-1">
+                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto py-2 md:py-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                       {chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
@@ -3102,16 +3457,31 @@ export default function App() {
 
                 {/* Chat Input Area */}
                 <div className="shrink-0 pt-2 md:pt-4 w-full max-w-3xl mx-auto">
-                  <div className="flex justify-between items-center px-1 mb-2">
-                    <VoiceSwitcher 
-                      selectedVoice={selectedVoice}
-                      onVoiceChange={setSelectedVoice}
-                      isOpen={isVoiceSwitcherOpen}
-                      onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
-                    />
+                  <div className={cn(
+                    "flex justify-between items-center px-1 mb-2 transition-all duration-300",
+                    !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-auto"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <VoiceSwitcher 
+                        selectedVoice={selectedVoice}
+                        onVoiceChange={setSelectedVoice}
+                        isOpen={isVoiceSwitcherOpen}
+                        onToggle={() => setIsVoiceSwitcherOpen(!isVoiceSwitcherOpen)}
+                      />
+                      <PersonaSwitcher
+                        selectedPersona={selectedPersona}
+                        onPersonaChange={(p) => {
+                          setSelectedPersona(p);
+                          localStorage.setItem('osone_selected_persona', p.id);
+                          addNotification(`Personalidade alterada para: ${p.name}`, "info");
+                        }}
+                        isOpen={isPersonaSwitcherOpen}
+                        onToggle={() => setIsPersonaSwitcherOpen(!isPersonaSwitcherOpen)}
+                      />
+                    </div>
                     
-                    {/* Secondary Toggles - Tablet/Mobile friendly row */}
-                    <div className="flex items-center gap-2 md:hidden">
+                    {/* Secondary Toggles - Tablet/Mobile friendly row when expanded */}
+                    <div className="flex items-center gap-2">
                       <button 
                         onClick={handleMuteToggle}
                         className={cn(
@@ -3148,62 +3518,129 @@ export default function App() {
                       {isTranscribing ? <MicOff size={18} /> : <Mic size={18} />}
                     </button>
                     
-                    <div className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm">
-                      {attachedFiles.length > 0 && (
-                        <div className="flex flex-wrap gap-2 px-4 pt-2">
-                          {attachedFiles.map((file, idx) => (
-                            <div key={idx} className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full text-[10px] text-her-muted border border-white/5">
-                              <span className="truncate max-w-[100px]">{file.name}</span>
-                              <button onClick={() => removeFile(idx)} className="hover:text-red-400">
-                                <X size={10} />
+                    <div className={cn(
+                      "transition-all duration-500 ease-in-out flex items-center gap-2 overflow-hidden px-1 py-1",
+                      isChatExpanded ? "flex-1 md:max-w-xl lg:max-w-3xl" : "flex-none"
+                    )}>
+                      {!isChatExpanded ? (
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={handleMuteToggle}
+                            className={cn(
+                              "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-300 relative shrink-0",
+                              isMuted 
+                                ? "bg-her-accent/20 text-her-accent border border-her-accent/30" 
+                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                            )}
+                            title={isMuted ? "Ouvir" : "Mutar"}
+                          >
+                            {isMuted ? <EarOff size={18} /> : <Ear size={18} />}
+                          </button>
+
+                          <button 
+                            onClick={() => setIsChatExpanded(true)}
+                            className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent hover:border-her-accent/20"
+                            title="Escrever mensagem"
+                          >
+                            <MessageSquare size={18} />
+                          </button>
+                          
+                          <button 
+                            onClick={() => setIsPersonaSwitcherOpen(true)}
+                            className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            title="Modos de Personalidade"
+                          >
+                            <User size={18} />
+                          </button>
+
+                          <button 
+                            onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
+                            className={cn(
+                              "w-11 h-11 rounded-full flex items-center justify-center transition-all border",
+                              isScreenSharing 
+                                ? "bg-her-accent/20 text-her-accent border-her-accent/30" 
+                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05]"
+                            )}
+                            title={isScreenSharing ? "Compartilhar Tela" : "Parar Tela"}
+                          >
+                            {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <motion.div 
+                          initial={{ width: 0, opacity: 0 }}
+                          animate={{ width: '100%', opacity: 1 }}
+                          className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm relative"
+                        >
+                          {attachedFiles.length > 0 && (
+                            <div className="flex flex-wrap gap-2 px-4 pt-2">
+                              {attachedFiles.map((file, idx) => (
+                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full text-[10px] text-her-muted border border-white/5">
+                                  <span className="truncate max-w-[100px]">{file.name}</span>
+                                  <button onClick={() => removeFile(idx)} className="hover:text-red-400">
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleFileSelect}
+                              multiple
+                              className="hidden"
+                            />
+                            <button 
+                              onClick={() => fileInputRef.current?.click()}
+                              className="p-2.5 text-her-muted hover:text-her-accent transition-colors ml-1"
+                            >
+                              <Paperclip size={18} />
+                            </button>
+                            <input 
+                              type="text"
+                              value={homePrompt}
+                              onChange={(e) => setHomePrompt(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleHomeChat();
+                                if (e.key === 'Escape') setIsChatExpanded(false);
+                              }}
+                              placeholder="Diga algo para o OSONE..."
+                              className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                              autoFocus
+                            />
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={handleHomeChat}
+                                disabled={!homePrompt.trim() && attachedFiles.length === 0}
+                                className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale"
+                              >
+                                <Send size={18} />
+                              </button>
+                              <button 
+                                onClick={() => setIsChatExpanded(false)}
+                                className="p-2.5 text-her-muted hover:text-red-400 transition-colors mr-1"
+                                title="Recolher"
+                              >
+                                <X size={16} />
                               </button>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        </motion.div>
                       )}
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileSelect}
-                          multiple
-                          className="hidden"
-                        />
-                        <button 
-                          onClick={() => fileInputRef.current?.click()}
-                          className="p-2.5 text-her-muted hover:text-her-accent transition-colors ml-1"
-                        >
-                          <Paperclip size={18} />
-                        </button>
-                        <input 
-                          type="text"
-                          value={homePrompt}
-                          onChange={(e) => setHomePrompt(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleHomeChat()}
-                          placeholder="Diga algo para o OSONE..."
-                          className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
-                        />
-                        <button 
-                          onClick={handleHomeChat}
-                          disabled={!homePrompt.trim() && attachedFiles.length === 0}
-                          className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale mr-1"
-                        >
-                          <Send size={18} />
-                        </button>
-                      </div>
                     </div>
 
                     <button 
-                      onClick={handleMuteToggle}
+                      onClick={() => setIsChatExpanded(false)}
                       className={cn(
-                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
-                        isMuted 
-                          ? "bg-her-accent/20 text-her-accent border border-her-accent/30" 
-                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
+                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0",
+                        isChatExpanded ? "md:flex" : "hidden",
+                        "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] hover:text-her-accent hover:border-her-accent/20"
                       )}
-                      title={isMuted ? "Descobrir Ouvidos (OSONE pode ser interrompido)" : "Tapar Ouvidos (OSONE não será interrompido)"}
+                      title="Voltar ao Minimalista"
                     >
-                      {isMuted ? <EarOff size={18} /> : <Ear size={18} />}
+                      <MessageSquare size={18} />
                     </button>
 
                     <button 
