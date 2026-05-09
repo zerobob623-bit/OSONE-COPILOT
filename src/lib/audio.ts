@@ -24,13 +24,12 @@ export class AudioProcessor {
       
       this.source = this.audioContext.createMediaStreamSource(this.stream);
       
-      // Using ScriptProcessorNode for simplicity in this environment, 
-      // though AudioWorklet is preferred in modern apps.
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
       
       this.processor.onaudioprocess = (e) => {
         if (!this.processor) return;
         const inputData = e.inputBuffer.getChannelData(0);
+        
         // Convert Float32 to Int16 PCM
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -66,8 +65,11 @@ export class AudioProcessor {
 export class AudioPlayer {
   private audioContext: AudioContext | null = null;
   private nextStartTime: number = 0;
+  private onActivityChange?: (active: boolean) => void;
+  private activeSources: Set<AudioBufferSourceNode> = new Set();
 
-  constructor() {
+  constructor(onActivityChange?: (active: boolean) => void) {
+    this.onActivityChange = onActivityChange;
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioContextClass) {
       this.audioContext = new AudioContextClass({ sampleRate: 24000 });
@@ -102,19 +104,40 @@ export class AudioPlayer {
         this.nextStartTime = currentTime;
       }
   
-      source.start(this.nextStartTime);
+      const startTime = this.nextStartTime;
+      source.start(startTime);
       this.nextStartTime += buffer.duration;
+
+      this.activeSources.add(source);
+      if (this.activeSources.size === 1) {
+        this.onActivityChange?.(true);
+      }
+
+      source.onended = () => {
+        this.activeSources.delete(source);
+        if (this.activeSources.size === 0) {
+          // Double check if nextStartTime is significantly ahead
+          if (this.audioContext && this.nextStartTime <= this.audioContext.currentTime + 0.1) {
+            this.onActivityChange?.(false);
+          }
+        }
+      };
     } catch (err) {
       console.error("Erro ao reproduzir chunk de áudio:", err);
     }
   }
 
   stop() {
+    this.activeSources.forEach(s => {
+      try { s.stop(); } catch(e) {}
+    });
+    this.activeSources.clear();
     this.audioContext?.close();
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioContextClass) {
       this.audioContext = new AudioContextClass({ sampleRate: 24000 });
     }
     this.nextStartTime = 0;
+    this.onActivityChange?.(false);
   }
 }

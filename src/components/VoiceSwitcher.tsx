@@ -10,7 +10,10 @@ interface VoiceSwitcherProps {
   onToggle: () => void;
 }
 
-const VOICES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'];
+const VOICES = [
+  'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 
+  'Aoede', 'Orion', 'Atlas', 'Rigel', 'Helios'
+];
 
 export const VoiceSwitcher = ({ selectedVoice, onVoiceChange, isOpen, onToggle }: VoiceSwitcherProps) => {
   return (

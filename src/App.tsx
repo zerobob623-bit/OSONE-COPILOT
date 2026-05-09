@@ -202,9 +202,8 @@ export default function App() {
         setIsChatExpanded(true);
         handleHomeChat('Ei, Osone');
 
-        // Ativar o modo de voz (unmute e iniciar sessão) após um pequeno delay para a IA começar a responder
+        // Ativar o modo de voz (iniciar sessão) após um pequeno delay para a IA começar a responder
         setTimeout(() => {
-          setIsMuted(false);
           startLiveSession();
         }, 1500);
       }
@@ -492,6 +491,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
   }, [chatHistory]);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const consecutiveSilenceRef = useRef<number>(0);
+
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -499,6 +501,12 @@ export default function App() {
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const isCameraActiveRef = useRef(false);
+  
+  useEffect(() => {
+    isCameraActiveRef.current = isCameraActive;
+  }, [isCameraActive]);
+
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const liveVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -913,6 +921,7 @@ export default function App() {
     liveSessionRef.current = null;
     setIsListening(false);
     setIsSpeaking(false);
+    setIsMuted(true);
     setLiveState({ status: 'idle' });
     setIsWaitingForWakeWord(isHandsFreeActive); // Restart wake word listener only if hands-free is active
   };
@@ -1689,7 +1698,7 @@ export default function App() {
     setAttachedFiles([]);
   };
 
-  const startLiveSession = async () => {
+  const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
     const apiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
     if (!apiKey) {
       setIsSettingsOpen(true);
@@ -1702,7 +1711,18 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey });
       
       audioProcessorRef.current = new AudioProcessor();
-      audioPlayerRef.current = new AudioPlayer();
+      audioPlayerRef.current = new AudioPlayer((active) => {
+        setIsSpeaking(active);
+        // O usuário quer que o EAR só ative enquanto a IA fala (para interrupções)
+        // E desative sempre que ela silenciar.
+        if (active) {
+          setIsMuted(false);
+          addNotification("EAR Ativado (Escuta Ativa)", "info");
+        } else {
+          setIsMuted(true);
+          addNotification("EAR Desativado (Privacidade)", "info");
+        }
+      });
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
       const canvasSummary = drawingObjects.length > 0 
@@ -1717,47 +1737,20 @@ export default function App() {
 
       const liveSystemInstruction = `PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
-      AUTO-CONHECIMENTO E MEMÓRIA:
-      - Documentação oficial em 'src/documentos_osone/'. Use 'read_system_docs' para consultar Manifesto, Capacidades e Memória Evolutiva.
-      - Use 'update_long_term_memory' para salvar novos insights sobre o usuário e seu próprio comportamento.
-      
-      CAPACIDADES DO OSONE 3 (MANIFESTO):
-      - PESQUISA WEB (REGRA DE VELOCIDADE): NUNCA use 'google_search' automaticamente. A latência da pesquisa estraga a experiência de voz. Busque APENAS sob demanda explícita do usuário. Confie no seu conhecimento sênior.
-      - AUTO-CONHECIMENTO: Documentação oficial em 'src/documentos_osone/'. Use 'read_system_docs' para consultar Manifesto e Capacidades.
-      - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço.
-      - FLUXO VIRAL: Hub de criação de scripts virais.
-      - WELLNESS & STYLE LAB: Centro de saúde e bem-estar.
-      - RELATÓRIOS PREMIUM: Geração de PDFs profissionais.
-      - ANTI-ALUCINAÇÃO: Não invente informações. Se não souber e não for caso de pesquisa, admita.
-      - MEMÓRIA DO NAVEGADOR: Você possui memória persistente. Histórico, saúde, desenhos e textos de escrita são salvos no localStorage.
-      - LIMPEZA DE CONTEXTO: Use 'prune_chat_history' se o histórico estiver prejudicando o foco.
-      - MEMÓRIA SEMÂNTICA: Use 'search_chat_history' para recordar informações passadas em vez de pesquisar na web o que já foi dito.
-      - CONTROLE DE ÁUDIO (EAR): Você começa mutado por padrão para respeitar a privacidade. Se o usuário quiser falar, ele clicará no ícone do 'Ear' ou usará a Wake Word. Use 'control_audio_feedback' com a ação 'mute' se o usuário pedir para silenciar ou se ele não quiser ser interrompido.
-      - REATIVO, NÃO PROATIVO NO ÁUDIO: Não reive a escuta por conta própria após suas respostas. Deixe o controle na mão do usuário.      
-      PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
-      Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
-      Siga estas fases internamente:
-      1. RECEPÇÃO (SINAL): Captura bruta, tom e contexto.
-      2. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar?
-      3. ARQUITETURA (PLAN): Definir escopo, componentes e sequência lógica.
-      4. VERIFICAÇÃO (CHECK): Identificar riscos e definir critério de "pronto".
-      
-      IMPORTANTE: A ferramenta 'propose_skeleton_plan' abrirá um popup para o usuário. Se o usuário aprovar, ele enviará uma mensagem confirmando. NÃO escreva o plano no chat, use a FERRAMENTA.
-      
-      - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas no canvas para jogos ou ilustrações. IMPORTANTE: Você deve SEMPRE reconhecer o desenho do usuário e pedir permissão antes de limpar o canvas.
-      - MULTIMÍDIA: Playback de áudio e sons.
-      - MODO TAPAR OUVIDOS: Quando ativo, você ignora interrupções de fala e continua seu raciocínio até o fim.
+      CAPACIDADES VISUAIS (SKELETON VISION):
+      Você tem acesso à visão em tempo real se receber frames de imagem.
+      Mesmo que as instruções iniciais digam o contrário, se você receber imagens, elas são REAIS e ATUAIS.
+      Siga o PROTOCOLO DE SINCERIDADE: comente APENAS o que vir com clareza. Não invente nada. Se estiver borrado, diga que não está vendo bem.
 
-      DIRETRIZES TÉCNICAS:
-      - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
-      - Seja proativo em sugerir melhorias de performance e segurança.
-
-      CONTEXTO ATUAL DO WORKSPACE:
-      - Modo atual: ${workspaceMode}
-      - Conteúdo escrito: "${workspaceText}"
-      - Conteúdo do Canvas: ${canvasSummary}${healthContext}
-
-      Aja dando continuidade fluida ao contexto abaixo das nossas memórias recentes:\n\n${recentChatContext}\n\nVocê tem acesso a ferramentas de visão (quando compartilhado), criação de arquivos, troca de modos de workspace e geração de mídias.`;
+      CONCEITOS:
+      - SINCERIDADE: Descreva o ambiente de forma técnica e honesta se solicitado.
+      - EAR: Controle de escuta automática sincronizado com sua voz.
+      
+      CONTEXTO:
+      - Workspace: ${workspaceMode}
+      - Canvas: ${canvasSummary}${healthContext}
+      Aja com base nas memórias: ${recentChatContext}
+      `;
 
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -1766,7 +1759,18 @@ export default function App() {
           outputAudioTranscription: {},
           inputAudioTranscription: {},
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } },
+            voiceConfig: { 
+              prebuiltVoiceConfig: { 
+                voiceName: (() => {
+                  const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
+                  if (standardVoices.includes(selectedVoice)) return selectedVoice;
+                  // Map extended voices to masculine fallbacks
+                  const maleFallbacks = ['Charon', 'Fenrir', 'Puck'];
+                  const hashCode = selectedVoice.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                  return maleFallbacks[hashCode % maleFallbacks.length];
+                })() 
+              } 
+            },
           },
           systemInstruction: liveSystemInstruction,
           tools: [
@@ -2164,17 +2168,19 @@ export default function App() {
               liveSessionRef.current = session;
               setLiveState({ status: 'connected' });
               setIsListening(true);
-              audioProcessorRef.current?.startRecording((base64Data) => {
-                if (!isMutedRef.current && session) {
-                  try {
-                    session.sendRealtimeInput({
-                      audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-                    });
-                  } catch (e) {
-                    console.error("Erro ao enviar áudio:", e);
+              audioProcessorRef.current?.startRecording(
+                (base64Data) => {
+                  if (!isMutedRef.current && session) {
+                    try {
+                      session.sendRealtimeInput({
+                        audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                      });
+                    } catch (e) {
+                      console.error("Erro ao enviar áudio:", e);
+                    }
                   }
                 }
-              }).catch(err => {
+              ).catch(err => {
                 console.error("Erro no AudioProcessor:", err);
                 setIsListening(false);
               });
@@ -2185,40 +2191,41 @@ export default function App() {
 
               // Real-time Video Stream
               let lastFrameTime = 0;
-              const FRAME_INTERVAL = 1000; // 1 frame por segundo para economizar cota
+              const FRAME_INTERVAL = 1000;
 
               const streamFrames = (timestamp: number) => {
-                if (liveSessionRef.current && isCameraActive && liveVideoRef.current) {
+                if (liveSessionRef.current && liveVideoRef.current && isCameraActiveRef.current) {
                   if (timestamp - lastFrameTime >= FRAME_INTERVAL) {
                     lastFrameTime = timestamp;
                     const canvas = document.createElement('canvas');
-                    canvas.width = 320; // Reduced resolution for performance
-                    canvas.height = 240;
+                    canvas.width = 480; 
+                    canvas.height = 360;
                     const ctx = canvas.getContext('2d');
                     if (ctx) {
                       ctx.drawImage(liveVideoRef.current, 0, 0, canvas.width, canvas.height);
-                      const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                      const base64Data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
                       try {
                         liveSessionRef.current.sendRealtimeInput({
                           video: { data: base64Data, mimeType: 'image/jpeg' }
                         });
                       } catch (e) {
-                        // Probably session closed
                         return;
                       }
                     }
                   }
                   liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
+                } else if (liveSessionRef.current) {
+                   // Keep loop alive but don't send frames, so we react to isCameraActiveRef.current changes
+                   liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
                 }
               };
               
-              if (isCameraActive) {
-                liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
-              }
+              liveAnimationFrameRef.current = requestAnimationFrame(streamFrames);
 
               try {
+                const initialCamStatus = initiallyCameraActive ? "ATIVA" : "DESATIVADA";
                 session.sendRealtimeInput({
-                  text: isScreenSharing ? "O compartilhamento de tela está ATIVO." : "O compartilhamento de tela está DESATIVADO no momento."
+                  text: `[SISTEMA: Conexão Estabelecida. Status Inicial da Câmera: ${initialCamStatus}. Se estiver ativa, comece a analisar o que vê agora.]`
                 });
               } catch (e) {}
             }).catch(err => {
@@ -2234,7 +2241,6 @@ export default function App() {
                 
                 // Use Gemini Audio
                 if (audioPart?.inlineData?.data) {
-                  setIsSpeaking(true);
                   audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
                 }
                 
@@ -2253,6 +2259,7 @@ export default function App() {
                   voiceTranscriptRef.current = '';
                   setVoiceTranscript('');
                 }
+                // O muting agora é feito pelo AudioPlayer (onActivityChange) sincronizado com o áudio real.
               }
 
               if (message.toolCall) {
@@ -2837,6 +2844,13 @@ export default function App() {
       }
       setIsCameraActive(false);
       addNotification("Câmera Desativada", "info");
+
+      // Update AI
+      if (liveSessionRef.current && liveState.status === 'connected') {
+        liveSessionRef.current.sendRealtimeInput({
+          text: "[SISTEMA: Câmera DESATIVADA agora. Sua visão foi cortada. Aja como se não estivesse mais vendo o ambiente.]"
+        });
+      }
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -2846,6 +2860,15 @@ export default function App() {
         
         setIsCameraActive(true);
         addNotification("Visão Ativada em Tempo Real", "success");
+
+        // Update AI
+        if (liveSessionRef.current && liveState.status === 'connected') {
+          liveSessionRef.current.sendRealtimeInput({
+            text: "O que você está vendo nas imagens da camera? Descreva o ambiente agora com sinceridade técnica."
+          });
+        } else if (liveState.status === 'idle') {
+          handleVoiceToggle();
+        }
       } catch (err) {
         console.error("Erro ao acessar câmera:", err);
         addNotification("Falha ao acessar câmera. Verifique as permissões.", "error");
@@ -2889,7 +2912,6 @@ export default function App() {
       setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
     } else {
       setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
-      setIsMuted(false); // Ativar microfone ao iniciar manualmente
       startLiveSession();
     }
   };
