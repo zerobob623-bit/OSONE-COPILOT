@@ -95,6 +95,30 @@ export default function App() {
     const saved = localStorage.getItem('osone_selected_persona');
     return saved ? (PERSONAS.find(p => p.id === saved) || PERSONAS[0]) : PERSONAS[0];
   });
+  
+  const [aiProfile, setAiProfile] = useState<AIProfile>(() => {
+    const saved = localStorage.getItem('osone_ai_profile');
+    return saved ? JSON.parse(saved) : {
+      name: 'OSONE',
+      personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+      writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+    };
+  });
+
+  const handleUpdateProfile = (profile: AIProfile) => {
+    setAiProfile(profile);
+    localStorage.setItem('osone_ai_profile', JSON.stringify(profile));
+  };
+
+  const profileInstruction = `
+  PERFIL DE IDENTIDADE:
+  - Seu nome é: ${aiProfile.name}
+  - Sua personalidade é: ${aiProfile.personality}
+  - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
+  
+  Você deve adotar essa identidade e estilo de comunicação em todas as interações, sobrepondo as orientações genéricas, mas mantendo suas capacidades técnicas.
+  `;
+
   const isShadowMode = selectedPersona.id === 'shadow';
 
   const handlePersonaChange = (p: Persona) => {
@@ -1349,7 +1373,9 @@ export default function App() {
         model: "gemini-2.0-flash",
         contents: historyContents,
         config: {
-          systemInstruction: `PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+          systemInstruction: `${profileInstruction}
+          
+          PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
           MEMÓRIA E AUTO-CONHECIMENTO:
           - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
@@ -1741,7 +1767,9 @@ export default function App() {
         ? `\n\nPERFIL DE SAÚDE DO USUÁRIO:\n- Idade: ${healthData.age}\n- Peso: ${healthData.weight}kg\n- Altura: ${healthData.height}cm\n- Gênero: ${healthData.gender}\n- Estilo: ${healthData.stylePreference}` 
         : '';
 
-      const liveSystemInstruction = `PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+      const liveSystemInstruction = `${profileInstruction}
+      
+      PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
       CAPACIDADES VISUAIS (SKELETON VISION):
       Você tem acesso à visão em tempo real se receber frames de imagem.
@@ -3076,20 +3104,6 @@ export default function App() {
             <span className="hidden sm:inline">{isHandsFreeActive ? "HANDS-FREE ON" : "VOZ PASSIVA"}</span>
           </button>
           
-          <button 
-            onClick={toggleCamera}
-            className={cn(
-              "px-3 py-1.5 rounded-full border transition-all text-[10px] font-medium flex items-center gap-2",
-              isCameraActive 
-                ? "bg-her-accent/10 border-her-accent/30 text-her-accent shadow-[0_0_15px_rgba(242,125,38,0.1)] font-bold" 
-                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
-            )}
-            title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
-          >
-            {isCameraActive ? <Eye size={14} className="animate-pulse" /> : <EyeOff size={14} />}
-            <span className="hidden sm:inline">{isCameraActive ? "VISION ON" : "PASSIVE VISION"}</span>
-          </button>
-
           {showInstallButton && (
             <button 
               onClick={handleInstallClick}
@@ -3746,6 +3760,19 @@ export default function App() {
                           </button>
 
                           <button 
+                            onClick={toggleCamera}
+                            className={cn(
+                              "w-11 h-11 rounded-full flex items-center justify-center transition-all border",
+                              isCameraActive 
+                                ? "bg-her-accent/20 text-her-accent border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
+                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-her-accent hover:border-her-accent/20"
+                            )}
+                            title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
+                          >
+                            {isCameraActive ? <Eye size={18} className="animate-pulse" /> : <EyeOff size={18} />}
+                          </button>
+
+                          <button 
                             onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                             className={cn(
                               "w-11 h-11 rounded-full flex items-center justify-center transition-all border",
@@ -3836,6 +3863,20 @@ export default function App() {
                     </button>
 
                     <button 
+                      onClick={toggleCamera}
+                      className={cn(
+                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0",
+                        isChatExpanded ? "flex" : "hidden",
+                        isCameraActive 
+                          ? "bg-her-accent/20 text-her-accent border border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] hover:text-her-accent hover:border-her-accent/20"
+                      )}
+                      title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
+                    >
+                      {isCameraActive ? <Eye size={18} className="animate-pulse" /> : <EyeOff size={18} />}
+                    </button>
+
+                    <button 
                       onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                       className={cn(
                         "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
@@ -3888,6 +3929,8 @@ export default function App() {
         setOrbStyle={setOrbStyle}
         appTheme={appTheme}
         setAppTheme={setAppTheme}
+        aiProfile={aiProfile}
+        setAiProfile={handleUpdateProfile}
       />
 
       <SkeletonBrainPopup 

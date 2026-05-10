@@ -1,3 +1,9 @@
+export interface AIProfile {
+  name: string;
+  personality: string;
+  writingStyle: string;
+}
+
 export interface ApiKeys {
   gemini: string;
   googleHomeId?: string;

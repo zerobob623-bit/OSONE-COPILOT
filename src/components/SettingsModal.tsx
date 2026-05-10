@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home } from 'lucide-react';
+import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { ApiKeys, OrbStyle, AppTheme } from '../types';
+import { ApiKeys, OrbStyle, AppTheme, AIProfile } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
 
-type TabId = 'general' | 'interface' | 'automation';
+type TabId = 'general' | 'interface' | 'profile' | 'automation';
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error';
 
 export const SettingsModal = ({ 
@@ -18,7 +18,9 @@ export const SettingsModal = ({
   orbStyle,
   setOrbStyle,
   appTheme,
-  setAppTheme
+  setAppTheme,
+  aiProfile,
+  setAiProfile
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -30,6 +32,8 @@ export const SettingsModal = ({
   setOrbStyle: (style: OrbStyle) => void;
   appTheme: AppTheme;
   setAppTheme: (theme: AppTheme) => void;
+  aiProfile: AIProfile;
+  setAiProfile: (profile: AIProfile) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -57,6 +61,7 @@ export const SettingsModal = ({
   const tabs = [
     { id: 'general', label: 'Chaves', icon: Key },
     { id: 'interface', label: 'Interface', icon: Palette },
+    { id: 'profile', label: 'Perfil', icon: UserCircle },
     { id: 'automation', label: 'Automação', icon: Cpu },
   ];
 
@@ -239,6 +244,56 @@ export const SettingsModal = ({
                             {theme.label}
                           </button>
                         ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'profile' && (
+                  <motion.div
+                    key="profile"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="space-y-6"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <UserCircle size={12} className="text-her-accent" />
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Identidade da Inteligência</label>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] text-her-muted/60 mb-2 ml-1">Nome da IA</label>
+                          <input 
+                            type="text"
+                            value={aiProfile.name}
+                            onChange={(e) => setAiProfile({ ...aiProfile, name: e.target.value })}
+                            className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-her-ink/80"
+                            placeholder="Ex: OSONE, EREBUS, JARVIS..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-her-muted/60 mb-2 ml-1">Personalidade e Essência</label>
+                          <textarea 
+                            value={aiProfile.personality}
+                            onChange={(e) => setAiProfile({ ...aiProfile, personality: e.target.value })}
+                            className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-her-ink/80 min-h-[100px] resize-none"
+                            placeholder="Descreva como a IA deve se comportar..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] text-her-muted/60 mb-2 ml-1">Jeito de Escrever / Tom de Voz</label>
+                          <textarea 
+                            value={aiProfile.writingStyle}
+                            onChange={(e) => setAiProfile({ ...aiProfile, writingStyle: e.target.value })}
+                            className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-her-ink/80 min-h-[80px] resize-none"
+                            placeholder="Ex: Respostas curtas, uso de gírias, tom acadêmico..."
+                          />
+                        </div>
                       </div>
                     </div>
                   </motion.div>
