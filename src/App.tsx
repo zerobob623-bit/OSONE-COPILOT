@@ -66,7 +66,7 @@ import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject } from './types';
 import { generatePDF } from './lib/pdfUtils';
-import { auth, signInWithPopup, googleProvider, onAuthStateChanged, db, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp } from './lib/firebase';
+import { auth, signInWithPopup, googleProvider, onAuthStateChanged, db, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, isFirebaseEnabled } from './lib/firebase';
 import type { User } from './lib/firebase';
 
 // --- Main App ---
@@ -92,6 +92,7 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -534,6 +535,10 @@ export default function App() {
 
   // --- Firebase Auth & Sync ---
   useEffect(() => {
+    if (!isFirebaseEnabled) {
+      setIsAuthLoading(false);
+      return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setIsAuthLoading(false);
@@ -587,8 +592,13 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
+    if (!isFirebaseEnabled) {
+      addNotification("Cérebro Desconectado. Configure as Chaves de API no menu Configurações para ativar a Nuvem.", "info");
+      return;
+    }
     try {
       await signInWithPopup(auth, googleProvider);
+      setIsGuestMode(false);
     } catch (error) {
       console.error("Login Error:", error);
       addNotification("Falha no login com Google.", "error");
@@ -596,8 +606,10 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (!isFirebaseEnabled) return;
     try {
       await auth.signOut();
+      setIsGuestMode(true);
       // Não resetamos os estados locais aqui para permitir que o usuário continue 
       // usando o sistema no modo "Visitante" com sua memória local intacta.
       // Apenas notificamos que a sincronização em nuvem foi desativada.
@@ -3170,7 +3182,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !isGuestMode) {
     return (
       <div className="min-h-screen bg-her-void flex flex-col items-center justify-center p-6 text-her-ink overflow-hidden relative">
         {/* Background Accents */}
@@ -3200,6 +3212,13 @@ export default function App() {
               <LogIn size={20} className="text-her-accent group-hover:scale-110 transition-transform" />
               <span className="text-sm font-medium tracking-wide">ENTRAR COM O GOOGLE</span>
             </div>
+          </button>
+
+          <button 
+            onClick={() => setIsGuestMode(true)}
+            className="mt-4 w-full rounded-2xl bg-transparent border border-white/[0.05] px-8 py-4 text-xs text-her-muted hover:text-her-ink hover:bg-white/[0.02] transition-all uppercase tracking-widest"
+          >
+            Iniciar sem Login
           </button>
 
           <p className="mt-8 text-[10px] text-her-muted uppercase tracking-[0.2em] opacity-40">Neural Protocol Alpha 0.5</p>

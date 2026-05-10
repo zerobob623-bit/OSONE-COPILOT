@@ -20,25 +20,31 @@ let firebaseConfig: FirebaseOptions = {
 
 const databaseId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
 
-// Attempt to load from protected config file as a fallback in development
-try {
-  // @ts-ignore - This file is in .gitignore and may not exist in production/GitHub
-  import('../../firebase-applet-config.json').then((config) => {
-    if (!firebaseConfig.apiKey && config.default) {
-      Object.assign(firebaseConfig, config.default);
-    }
-  });
-} catch (e) {
-  // Fallback silent failure if file doesn't exist
+// Validation helper
+const isConfigValid = (config: FirebaseOptions) => 
+  !!config.apiKey && config.apiKey !== 'undefined' && !!config.projectId;
+
+// Safe initialization
+export let isFirebaseEnabled = isConfigValid(firebaseConfig);
+
+let app;
+let db: any;
+let auth: any;
+let googleProvider: any;
+
+if (isFirebaseEnabled) {
+  try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app, databaseId || (firebaseConfig as any).firestoreDatabaseId);
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+    isFirebaseEnabled = false;
+  }
 }
 
-// Validation helper
-const isConfigValid = (config: FirebaseOptions) => !!config.apiKey && !!config.projectId;
-
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, databaseId || (firebaseConfig as any).firestoreDatabaseId);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+export { app, db, auth, googleProvider };
 
 export { 
   signInWithPopup, 
