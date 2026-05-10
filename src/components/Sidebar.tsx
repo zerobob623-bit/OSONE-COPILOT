@@ -1,14 +1,17 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, FileSearch, Activity } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, FileSearch, Activity, LogOut, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
+import { User as FirebaseUser } from 'firebase/auth';
 
-export const Sidebar = ({ isOpen, onClose, mode, setMode }: { 
+export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout }: { 
   isOpen: boolean; 
   onClose: () => void;
   mode: WorkspaceMode;
   setMode: (mode: WorkspaceMode) => void;
+  user: FirebaseUser | null;
+  onLogout: () => void;
 }) => (
   <AnimatePresence>
     {isOpen && (
@@ -118,7 +121,29 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode }: {
             </div>
           </div>
 
-          <div className="mt-auto">
+          <div className="mt-auto space-y-6">
+            {user && (
+              <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/[0.05] flex items-center gap-3">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full border border-her-accent/20" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-her-accent/10 flex items-center justify-center text-her-accent font-bold">
+                    {user.displayName?.charAt(0) || 'U'}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-her-ink/80 truncate">{user.displayName}</p>
+                  <button 
+                    onClick={onLogout}
+                    className="text-[9px] text-her-muted hover:text-red-400 transition-colors flex items-center gap-1 uppercase tracking-wider"
+                  >
+                    <LogOut size={10} />
+                    Sair
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.03]">
               <p className="text-[9px] text-her-muted/40 leading-relaxed italic font-light">
                 "O sistema não é apenas uma ferramenta, é uma extensão da sua consciência."

@@ -32,8 +32,9 @@ interface HealthData {
   stylePreference: string;
 }
 
-export function WellnessCenter() {
+export function WellnessCenter({ externalData, onUpdate }: { externalData?: HealthData, onUpdate?: (data: HealthData) => void }) {
   const [data, setData] = useState<HealthData>(() => {
+    if (externalData) return externalData;
     const saved = localStorage.getItem('osone_health_data');
     return saved ? JSON.parse(saved) : {
       age: '',
@@ -44,16 +45,26 @@ export function WellnessCenter() {
     };
   });
 
+  useEffect(() => {
+    if (externalData) {
+      setData(externalData);
+    }
+  }, [externalData]);
+
   const [advice, setAdvice] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
 
   const refreshData = useCallback(() => {
+    if (externalData) {
+      setData(externalData);
+      return;
+    }
     const saved = localStorage.getItem('osone_health_data');
     if (saved) {
       setData(JSON.parse(saved));
     }
-  }, []);
+  }, [externalData]);
 
   useEffect(() => {
     const handleSync = (e: any) => {
@@ -67,7 +78,8 @@ export function WellnessCenter() {
 
   useEffect(() => {
     localStorage.setItem('osone_health_data', JSON.stringify(data));
-  }, [data]);
+    if (onUpdate) onUpdate(data);
+  }, [data, onUpdate]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(advice);

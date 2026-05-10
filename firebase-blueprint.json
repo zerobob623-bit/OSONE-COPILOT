@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "Perfil do Usuário",
+      "description": "Dados globais do usuário e preferências da IA.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "aiProfile": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "personality": { "type": "string" },
+            "writingStyle": { "type": "string" }
+          }
+        },
+        "healthData": {
+          "type": "object",
+          "properties": {
+            "age": { "type": "string" },
+            "weight": { "type": "string" },
+            "height": { "type": "string" },
+            "gender": { "type": "string" },
+            "stylePreference": { "type": "string" }
+          }
+        },
+        "obsidianConfig": {
+          "type": "object",
+          "properties": {
+            "baseUrl": { "type": "string" },
+            "apiKey": { "type": "string" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "chatMessage": {
+      "title": "Mensagem de Chat",
+      "description": "Uma mensagem individual convertida para persistência.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "Documento principal do usuário com suas configurações."
+    },
+    "/users/{userId}/chatHistory/{messageId}": {
+      "schema": "chatMessage",
+      "description": "Coleção de mensagens de chat do usuário."
+    }
+  }
+}

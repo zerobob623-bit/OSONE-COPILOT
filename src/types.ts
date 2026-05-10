@@ -2,6 +2,11 @@ export interface AIProfile {
   name: string;
   personality: string;
   writingStyle: string;
+  obsidianConfig?: {
+    baseUrl: string;
+    apiKey: string;
+    vaultName?: string;
+  };
 }
 
 export interface ApiKeys {

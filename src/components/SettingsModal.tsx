@@ -294,6 +294,51 @@ export const SettingsModal = ({
                             placeholder="Ex: Respostas curtas, uso de gírias, tom acadêmico..."
                           />
                         </div>
+
+                        {/* Obsidian Integration */}
+                        <div className="pt-4 border-t border-white/5">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-5 h-5 rounded bg-[#7C3AED]/20 flex items-center justify-center">
+                              <svg viewBox="0 0 24 24" className="w-3 h-3 fill-[#7C3AED]" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 0L2.5 4.5V19.5L12 24L21.5 19.5V4.5L12 0ZM19.5 18.25L12 21.75L4.5 18.25V5.75L12 2.25L19.5 5.75V18.25Z" />
+                                <path d="M12 5.5L7.5 8V16L12 18.5L16.5 16V8L12 5.5ZM15 15.25L12 17L9 15.25V8.75L12 7L15 8.75V15.25Z" />
+                              </svg>
+                            </div>
+                            <span className="text-[10px] uppercase tracking-widest text-her-accent font-bold">Obsidian Local Sync</span>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-[9px] text-her-muted/50 mb-1 ml-1 uppercase">API Url (Local REST API)</label>
+                              <input 
+                                type="text"
+                                value={aiProfile.obsidianConfig?.baseUrl || ''}
+                                onChange={(e) => setAiProfile({ 
+                                  ...aiProfile, 
+                                  obsidianConfig: { ...(aiProfile.obsidianConfig || { apiKey: '' }), baseUrl: e.target.value } 
+                                })}
+                                className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-2 focus:outline-none focus:border-her-accent/20 transition-all text-[11px] font-mono"
+                                placeholder="http://127.0.0.1:27123"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] text-her-muted/50 mb-1 ml-1 uppercase">API Key</label>
+                              <input 
+                                type="password"
+                                value={aiProfile.obsidianConfig?.apiKey || ''}
+                                onChange={(e) => setAiProfile({ 
+                                  ...aiProfile, 
+                                  obsidianConfig: { ...(aiProfile.obsidianConfig || { baseUrl: '' }), apiKey: e.target.value } 
+                                })}
+                                className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-2 focus:outline-none focus:border-her-accent/20 transition-all text-[11px] font-mono"
+                                placeholder="Sua chave secreta..."
+                              />
+                            </div>
+                            <p className="text-[9px] text-her-muted/40 italic">
+                              Habilite o plugin "Local REST API" no Obsidian para obter estes dados.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </motion.div>

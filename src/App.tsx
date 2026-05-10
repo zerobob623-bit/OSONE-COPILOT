@@ -36,16 +36,18 @@ import {
   Speaker,
   Music,
   Wand2,
-  User,
+  User as UserIcon,
   Eye,
-  EyeOff
+  EyeOff,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
-import { SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
@@ -64,6 +66,8 @@ import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject } from './types';
 import { generatePDF } from './lib/pdfUtils';
+import { auth, signInWithPopup, googleProvider, onAuthStateChanged, db, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp } from './lib/firebase';
+import type { User } from './lib/firebase';
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -86,6 +90,8 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
 ];
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -105,18 +111,40 @@ export default function App() {
     };
   });
 
+  const [healthData, setHealthData] = useState(() => {
+    const saved = localStorage.getItem('osone_health_data');
+    return saved ? JSON.parse(saved) : {
+      age: '',
+      weight: '',
+      height: '',
+      gender: 'masculino',
+      stylePreference: 'casual'
+    };
+  });
+
   const handleUpdateProfile = (profile: AIProfile) => {
     setAiProfile(profile);
     localStorage.setItem('osone_ai_profile', JSON.stringify(profile));
+    syncProfileToCloud(profile);
+  };
+
+  const handleUpdateHealthData = (data: any) => {
+    setHealthData(data);
+    localStorage.setItem('osone_health_data', JSON.stringify(data));
+    syncProfileToCloud(undefined, data);
   };
 
   const profileInstruction = `
-  PERFIL DE IDENTIDADE:
+  PERFIL DE IDENTIDADE DO ASSISTENTE:
   - Seu nome é: ${aiProfile.name}
   - Sua personalidade é: ${aiProfile.personality}
   - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
   
-  Você deve adotar essa identidade e estilo de comunicação em todas as interações, sobrepondo as orientações genéricas, mas mantendo suas capacidades técnicas.
+  DADOS DO USUÁRIO ATUAL:
+  - Nome do Usuário: ${user?.displayName || 'Usuário'}
+  - Email do Usuário: ${user?.email || 'Não informado'}
+  
+  Você deve adotar essa identidade e estilo de comunicação em todas as interações, sobrepondo as orientações genéricas, mas mantendo suas capacidades técnicas. Cumprimente o usuário pelo nome se apropriado.
   `;
 
   const isShadowMode = selectedPersona.id === 'shadow';
@@ -500,6 +528,128 @@ export default function App() {
     localStorage.setItem('osone_drawing_objects', JSON.stringify(drawingObjects));
   }, [drawingObjects]);
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: NotificationType }[]>([]);
+
+  // --- Firebase Auth & Sync ---
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthLoading(false);
+
+      if (currentUser) {
+        // Fetch user data from Firestore
+        try {
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.aiProfile) setAiProfile(data.aiProfile);
+            if (data.healthData) setHealthData(data.healthData);
+            if (data.obsidianConfig) setAiProfile(prev => ({ ...prev, obsidianConfig: data.obsidianConfig }));
+            addNotification(`Bem-vindo de volta, ${currentUser.displayName}!`, "success");
+          } else {
+            // New user, create document
+            await setDoc(doc(db, 'users', currentUser.uid), {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              aiProfile,
+              healthData,
+              updatedAt: serverTimestamp()
+            });
+            addNotification("Perfil criado com sucesso!", "success");
+          }
+
+          // Fetch Chat History
+          const chatQuery = query(
+            collection(db, 'users', currentUser.uid, 'chatHistory'),
+            orderBy('timestamp', 'asc'),
+            limit(50)
+          );
+          const chatSnap = await getDocs(chatQuery);
+          if (!chatSnap.empty) {
+            const history = chatSnap.docs.map(d => ({
+              id: d.id,
+              role: d.data().role,
+              content: d.data().content,
+              imageUrl: d.data().imageUrl
+            })) as Message[];
+            setChatHistory(history);
+          }
+        } catch (error) {
+          console.error("Error syncing user data:", error);
+          addNotification("Erro ao sincronizar dados na nuvem.", "error");
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login Error:", error);
+      addNotification("Falha no login com Google.", "error");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      // Reset states
+      setChatHistory([]);
+      setAiProfile({
+        name: 'OSONE',
+        personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+        writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+      });
+      setHealthData({
+        age: '',
+        weight: '',
+        height: '',
+        gender: 'masculino',
+        stylePreference: 'casual'
+      });
+      localStorage.removeItem('osone_chat_history');
+      localStorage.removeItem('osone_ai_profile');
+      localStorage.removeItem('osone_health_data');
+      addNotification("Sessão encerrada.", "info");
+    } catch (error) {
+      console.error("Logout Error:", error);
+    }
+  };
+
+  const syncProfileToCloud = async (updatedProfile?: AIProfile, updatedHealth?: any) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        aiProfile: updatedProfile || aiProfile,
+        healthData: updatedHealth || healthData,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error("Cloud Sync Error:", error);
+    }
+  };
+
+  const addMessageToCloud = async (message: Message) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'chatHistory'), {
+        ...message,
+        timestamp: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error adding message to cloud:", error);
+    }
+  };
+
+  const addMessage = (msg: Omit<Message, 'id'>) => {
+    const newMessage = { ...msg, id: Math.random().toString(36).substr(2, 9) };
+    setChatHistory(prev => [...prev, newMessage]);
+    if (user) {
+      addMessageToCloud(newMessage);
+    }
+  };
 
   const addNotification = (message: string, type: NotificationType = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -1140,7 +1290,7 @@ export default function App() {
       return;
     }
 
-    setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'user' as const, content: fullMessage }]);
+    addMessage({ role: 'user' as const, content: fullMessage });
 
     try {
       const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
@@ -1276,6 +1426,24 @@ export default function App() {
       });
 
       functionDeclarations.push({
+        name: "save_to_obsidian",
+        description: "Salva uma nota ou pensamento no Obsidian local do usuário (utiliza o plugin Local REST API).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: "O título da nota (será o nome do arquivo, ex: 'Insights do Dia')." },
+            content: { type: Type.STRING, description: "O conteúdo da nota em Markdown." },
+            mode: { 
+              type: Type.STRING, 
+              description: "O modo de salvamento: 'overwrite' (sobrescrever ou criar novo) ou 'append' (adicionar ao final de uma nota existente).",
+              enum: ["overwrite", "append"]
+            }
+          },
+          required: ["title", "content"]
+        }
+      });
+
+      functionDeclarations.push({
         name: "search_chat_history",
         description: "Realiza uma busca semântica ou baseada em palavras-chave no histórico de conversas atual para recuperar informações esquecidas ou detalhes específicos mencionados anteriormente.",
         parameters: {
@@ -1400,6 +1568,7 @@ export default function App() {
           - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
           - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
           - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
+          - CONECTIVIDADE OBSIDIAN: Você pode ler e escrever notas no Obsidian do usuário via ferramenta 'save_to_obsidian'. Use isso para salvar estudos, lembretes ou diários se o usuário pedir ou se você achar útil registrar algo importante.
           - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
           
           ANTI-ALUCINAÇÃO E VERACIDADE:
@@ -1455,11 +1624,10 @@ export default function App() {
               });
               const responseText = searchResult.text;
               
-              setChatHistory(prev => [...prev, { 
-                id: Math.random().toString(36).substr(2, 9), 
+              addMessage({ 
                 role: 'assistant' as const, 
                 content: `Pesquisei no Google por "${query}":\n\n${responseText}` 
-              }]);
+              });
             } catch (err: any) {
               addNotification("Erro na pesquisa Google", "error");
               console.error("Search error:", err);
@@ -1500,6 +1668,42 @@ export default function App() {
               // Para simplificar neste chat básico, apenas exibimos.
             } catch (err: any) {
               addNotification("Erro ao ler página web", "error");
+            }
+          } else if (call.name === 'save_to_obsidian') {
+            const { title, content, mode } = call.args as any;
+            if (!aiProfile.obsidianConfig?.baseUrl || !aiProfile.obsidianConfig?.apiKey) {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: "⚠️ Não consegui salvar no Obsidian. Por favor, configure a URL e a Chave API nas Configurações > Perfil." 
+              }]);
+              addNotification("Configuração do Obsidian faltando", "error");
+            } else {
+              import('./services/obsidianService').then(async ({ obsidianService }) => {
+                const fileName = title.endsWith('.md') ? title : `${title}.md`;
+                let success = false;
+                if (mode === 'append') {
+                  success = await obsidianService.appendToNote(aiProfile.obsidianConfig!, fileName, content);
+                } else {
+                  success = await obsidianService.createNote(aiProfile.obsidianConfig!, fileName, content);
+                }
+
+                if (success) {
+                  addNotification(`Nota salva no Obsidian: ${title}`, "success");
+                  setChatHistory(prev => [...prev, { 
+                    id: Math.random().toString(36).substr(2, 9), 
+                    role: 'assistant' as const, 
+                    content: `✅ Sucesso! Salvei a nota "${title}" no seu Obsidian.` 
+                  }]);
+                } else {
+                  addNotification("Erro ao conectar com Obsidian", "error");
+                  setChatHistory(prev => [...prev, { 
+                    id: Math.random().toString(36).substr(2, 9), 
+                    role: 'assistant' as const, 
+                    content: "❌ Falha ao enviar para o Obsidian. Verifique se o plugin 'Local REST API' está ativo e se a URL e Chave estão corretas." 
+                  }]);
+                }
+              });
             }
           } else if (call.name === 'create_folder') {
             const name = (call.args as any).name;
@@ -1699,12 +1903,12 @@ export default function App() {
       } else {
         const text = result.text;
         if (text) {
-          setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant' as const, content: text }]);
+          addMessage({ role: 'assistant' as const, content: text });
         }
       }
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
-      setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." }]);
+    addMessage({ role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." });
     }
   };
 
@@ -2957,6 +3161,66 @@ export default function App() {
     setIsSinging(false);
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-her-void flex items-center justify-center p-6 text-her-ink">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="w-16 h-16 border-4 border-her-accent/20 border-t-her-accent rounded-full animate-spin" />
+          <p className="text-xs uppercase tracking-[0.3em] font-bold text-her-muted animate-pulse">Sincronizando Sistema</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-her-void flex flex-col items-center justify-center p-6 text-her-ink overflow-hidden relative">
+        {/* Background Accents */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-her-accent/5 rounded-full blur-[120px] pointer-events-none" />
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 flex flex-col items-center max-w-sm w-full text-center"
+        >
+          <div className="mb-8 p-4 bg-white/[0.02] border border-white/[0.05] rounded-[40px] shadow-2xl backdrop-blur-xl">
+            <InfinityLogo active={false} speaking={false} style="classic" />
+          </div>
+
+          <h1 className="text-4xl font-extralight tracking-tighter mb-4">OSONE <span className="font-bold text-her-accent">3</span></h1>
+          <p className="text-her-muted/60 text-sm mb-12 leading-relaxed font-light">
+            Sua interface neural personalizada. <br />
+            Conecte-se para sincronizar memórias e perfis.
+          </p>
+
+          <button 
+            onClick={handleLogin}
+            className="group relative w-full overflow-hidden rounded-2xl bg-white/[0.03] border border-white/[0.1] px-8 py-5 transition-all hover:bg-white/[0.06] hover:border-her-accent/30 active:scale-[0.98]"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-her-accent/0 via-her-accent/5 to-her-accent/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+            <div className="relative flex items-center justify-center gap-3">
+              <LogIn size={20} className="text-her-accent group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-medium tracking-wide">ENTRAR COM O GOOGLE</span>
+            </div>
+          </button>
+
+          <p className="mt-8 text-[10px] text-her-muted uppercase tracking-[0.2em] opacity-40">Neural Protocol Alpha 0.5</p>
+        </motion.div>
+
+        {/* Floating Notifications for Login Page */}
+        <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
+          {notifications.map(n => (
+            <NotificationToast key={n.id} id={n.id} message={n.message} type={n.type} onClose={() => setNotifications(prev => prev.filter(x => x.id !== n.id))} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-[100dvh] w-screen flex flex-col overflow-hidden">
       {/* Lyrics Overlay */}
@@ -3409,7 +3673,10 @@ export default function App() {
                 </button>
                 <h2 className="text-xl font-serif italic font-light">Wellness & Style Lab</h2>
               </div>
-              <WellnessCenter />
+              <WellnessCenter 
+                externalData={healthData}
+                onUpdate={handleUpdateHealthData}
+              />
             </motion.div>
           ) : workspaceMode === 'sounds' ? (
             <motion.div
@@ -3756,7 +4023,7 @@ export default function App() {
                             className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Modos de Personalidade"
                           >
-                            <User size={18} />
+                            <UserIcon size={18} />
                           </button>
 
                           <button 
@@ -3917,6 +4184,8 @@ export default function App() {
         onClose={() => setIsSidebarOpen(false)} 
         mode={workspaceMode}
         setMode={setWorkspaceMode}
+        user={user}
+        onLogout={handleLogout}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 
