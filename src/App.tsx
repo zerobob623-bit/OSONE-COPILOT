@@ -1003,14 +1003,15 @@ export default function App() {
   };
 
   const handleGenerateStructure = async (promptText: string) => {
-    if (!apiKeys.gemini) {
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!effectiveApiKey) {
       console.error('Por favor, configure sua API Key do Gemini nas configurações.');
       return;
     }
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
         contents: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
@@ -1181,14 +1182,15 @@ export default function App() {
 
   const handleGenerate = async (explicitPrompt?: string) => {
     const finalPrompt = explicitPrompt || workspacePrompt;
-    if (!finalPrompt.trim() || !apiKeys.gemini) {
-      if (!apiKeys.gemini) setIsSettingsOpen(true);
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!finalPrompt.trim() || !effectiveApiKey) {
+      if (!effectiveApiKey) setIsSettingsOpen(true);
       return;
     }
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       // Se já houver código, trata como edição
       const isEditing = workspaceText.trim().length > 10;
@@ -1230,11 +1232,12 @@ export default function App() {
   };
 
   const handleAnalyzeCode = async (codeToAnalyze = workspaceText) => {
-    if (!codeToAnalyze.trim() || !apiKeys.gemini || isAnalyzingCode) return;
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!codeToAnalyze.trim() || !effectiveApiKey || isAnalyzingCode) return;
 
     setIsAnalyzingCode(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       const prompt = `Analise este código e forneça exatamente 3 sugestões CURTAS e acionáveis (uma frase cada) para melhorá-lo (performance, bugs, estilo ou features). Retorne APENAS um array JSON de strings como ["Sugestão 1", "Sugestão 2", "Sugestão 3"]. Code:\n\n${codeToAnalyze}`;
       
       const result = await ai.models.generateContent({
@@ -1265,8 +1268,9 @@ export default function App() {
   };
 
   const handleHomeChat = async (directMessage?: string) => {
-    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !apiKeys.gemini) {
-      if (!apiKeys.gemini) setIsSettingsOpen(true);
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !effectiveApiKey) {
+      if (!effectiveApiKey) setIsSettingsOpen(true);
       return;
     }
 
@@ -1293,7 +1297,8 @@ export default function App() {
     addMessage({ role: 'user' as const, content: fullMessage });
 
     try {
-      const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const tools: any[] = [];
       
@@ -2932,13 +2937,13 @@ export default function App() {
                       response: { result: `Imagem está sendo gerada assincronamente.` }
                     });
                     
-                    setChatHistory(prev => [...prev, { 
-                      id: Math.random().toString(36).substr(2, 9), 
+                    addMessage({ 
                       role: 'assistant' as const, 
                       content: `Gerando imagem para: "${prompt}"...` 
-                    }]);
+                    });
                     
-                    const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
+                    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+                    const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
                     genAI.models.generateContent({
                       model: 'gemini-2.0-flash',
                       contents: { parts: [{ text: prompt }] },

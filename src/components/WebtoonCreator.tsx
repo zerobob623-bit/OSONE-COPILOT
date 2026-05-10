@@ -92,7 +92,8 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
     setGenerationStep('script');
     
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const scriptPrompt = `Crie um roteiro de 4 painéis para um Webtoon intitulado "${project.title}".
       Ideia central: ${project.idea}

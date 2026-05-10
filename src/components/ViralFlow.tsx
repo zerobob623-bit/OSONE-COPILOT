@@ -89,11 +89,12 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
   };
 
   const analyzeVideo = async () => {
-    if (!videoFile || !apiKeys.gemini) return;
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!videoFile || !effectiveApiKey) return;
 
     setIsAnalyzing(true);
     try {
-      const genAI = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
 
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
@@ -135,11 +136,12 @@ export function ViralFlow({ apiKeys }: { apiKeys: { gemini: string } }) {
 
   const generateViralScript = async (referenceContent?: string) => {
     const currentTopic = referenceContent ? "Baseado na referência analisada" : topic;
-    if (!currentTopic && !referenceContent) return;
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if ((!currentTopic && !referenceContent) || !effectiveApiKey) return;
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKeys.gemini });
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const prompt = referenceContent 
         ? `Use este conteúdo como REFERÊNCIA ESTRATÉGICA (vibe, estrutura, gatilhos): "${referenceContent}".

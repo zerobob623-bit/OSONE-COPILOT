@@ -19,7 +19,7 @@ export function LyricGenerator() {
     setIsGenerating(true);
     
     try {
-      const apiKey = (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
+      const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
       const ai = new GoogleGenAI({ apiKey });
 
       const finalPrompt = `Aja como um compositor e poeta premiado. Escreva uma letra de música/poesia com as seguintes características:

@@ -53,7 +53,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
     setIsGenerating(true);
     
     try {
-      const apiKey = (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
+      const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
       const ai = new GoogleGenAI({ apiKey });
 
       const prompt = `Você é um gerador de efeitos sonoros e músicas via IA para o sistema operacional OSONE.
