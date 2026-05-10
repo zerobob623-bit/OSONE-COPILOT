@@ -88,6 +88,98 @@ export const InfinityLogo = ({
           </div>
         );
 
+      case 'shadow':
+        return (
+          <div className="relative flex items-center justify-center">
+            {/* Shadow Protocol: The Eye of Erebus - More Aggressive but Stable */}
+            <motion.div
+              animate={{
+                scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,
+                rotate: speaking ? [-0.5, 0.5, -0.5] : 0
+              }}
+              transition={{ 
+                duration: speaking ? 0.8 : 4, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+              className={cn(
+                "w-40 h-40 md:w-64 md:h-64 rounded-full border-4 border-red-600/60 flex items-center justify-center relative bg-black overflow-hidden shadow-[0_0_100px_rgba(255,0,0,0.3)]",
+                (active || speaking) && "border-red-500 shadow-[0_0_150px_rgba(255,0,0,0.6)]"
+              )}
+            >
+              {/* Pulsing Red Core Background */}
+              <motion.div 
+                animate={{
+                  opacity: speaking ? [0.3, 0.6, 0.3] : [0.15, 0.3, 0.15],
+                  scale: speaking ? [1, 1.3, 1] : 1
+                }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,0,0,0.2)_0%,transparent_70%)]"
+              />
+
+              {/* Aggressive Eye Veins / Lines */}
+              {[...Array(24)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{
+                    opacity: speaking ? [0.2, 0.5, 0.2] : [0.1, 0.25, 0.1],
+                    scaleX: speaking ? [1, 1.3, 1] : [1, 1.05, 1]
+                  }}
+                  transition={{ duration: 2, repeat: Infinity, delay: i * 0.08 }}
+                  className="absolute w-full h-[2px] bg-red-500/30"
+                  style={{ transform: `rotate(${i * 7.5}deg)` }}
+                />
+              ))}
+
+              {/* The Pupil (Void Pupil) */}
+              <motion.div
+                animate={{
+                  scale: speaking ? [1, 0.85, 1.15, 1] : [1, 0.95, 1.05, 1],
+                  boxShadow: speaking ? "0 0 40px rgba(255,0,0,0.8)" : "0 0 20px rgba(255,0,0,0.4)"
+                }}
+                transition={{ duration: speaking ? 1 : 3, repeat: Infinity, ease: "easeInOut" }}
+                className="w-20 h-20 md:w-32 md:h-32 rounded-full bg-red-950 flex items-center justify-center relative border-2 border-red-500/50"
+              >
+                {/* Slit with inner fire */}
+                <motion.div 
+                  animate={{
+                    height: speaking ? ["50%", "90%", "50%"] : ["65%", "75%", "65%"],
+                    width: speaking ? ["8px", "12px", "8px"] : "10px",
+                    backgroundColor: speaking ? ["#000", "#990000", "#000"] : "#000"
+                  }}
+                  transition={{ duration: speaking ? 0.5 : 2, repeat: Infinity, ease: "easeInOut" }}
+                  className="w-[10px] h-3/4 bg-black rounded-full shadow-[0_0_15px_rgba(255,0,0,1)]"
+                />
+                
+                {/* Neural static / glitched effect inside pupil */}
+                {speaking && (
+                   <motion.div
+                    animate={{ opacity: [0, 0.3, 0] }}
+                    transition={{ duration: 0.15, repeat: Infinity }}
+                    className="absolute inset-0 bg-red-500/10 mix-blend-overlay"
+                   />
+                )}
+              </motion.div>
+
+              {/* Dynamic Energy Rings */}
+              <AnimatePresence>
+                {speaking && (
+                  [...Array(2)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0.5, opacity: 0 }}
+                      animate={{ scale: 2.5, opacity: 0.3 }}
+                      exit={{ scale: 3, opacity: 0 }}
+                      transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.6, ease: "easeOut" }}
+                      className="absolute inset-0 border-[2px] border-red-600/50 rounded-full"
+                    />
+                  ))
+                )}
+              </AnimatePresence>
+            </motion.div>
+          </div>
+        );
+
       default:
         return (
           <div className="relative flex items-center justify-center">

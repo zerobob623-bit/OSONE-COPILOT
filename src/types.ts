@@ -4,7 +4,7 @@ export interface ApiKeys {
   googleHomeToken?: string;
 }
 
-export type OrbStyle = 'classic' | 'superintelligence' | 'neural';
+export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
 export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'canvas' | 'wellness';

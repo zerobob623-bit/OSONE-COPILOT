@@ -162,7 +162,7 @@ export const SettingsModal = ({
                     <div>
                       <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Voz do Sistema (Frequência)</label>
                       <div className="grid grid-cols-2 gap-2">
-                        {['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'].map((voice) => (
+                        {['Puck', 'Charon', 'Kore', 'Fenrir', 'Erebus'].map((voice) => (
                           <button
                             key={voice}
                             onClick={() => setSelectedVoice(voice)}
@@ -170,11 +170,15 @@ export const SettingsModal = ({
                               "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
                               selectedVoice === voice 
                                 ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
+                                : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
+                              voice === 'Erebus' && "border-red-900/20 hover:border-red-500/30"
                             )}
                           >
-                            {voice}
-                            {selectedVoice === voice && <div className="w-1.5 h-1.5 rounded-full bg-her-accent shadow-[0_0_8px_rgba(var(--her-accent),0.5)]" />}
+                            <span className={cn(voice === 'Erebus' && "text-red-500/80 font-medium")}>{voice}</span>
+                            {selectedVoice === voice && <div className={cn(
+                              "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
+                              voice === 'Erebus' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                            )} />}
                           </button>
                         ))}
                       </div>
@@ -186,7 +190,8 @@ export const SettingsModal = ({
                         {[
                           { id: 'classic', label: 'Classic Architecture', desc: 'Versão minimalista e fluida' },
                           { id: 'superintelligence', label: 'Super AI Matrix', desc: 'Explosão binária e complexidade' },
-                          { id: 'neural', label: 'Neural Network', desc: 'Processamento orgânico e suave' }
+                          { id: 'neural', label: 'Neural Network', desc: 'Processamento orgânico e suave' },
+                          { id: 'shadow', label: 'The Eye of Erebus', desc: 'Protocolo de Observação Sombra' }
                         ].map((style) => (
                           <button
                             key={style.id}
@@ -194,13 +199,17 @@ export const SettingsModal = ({
                             className={cn(
                               "px-5 py-4 rounded-2xl transition-all border text-left group",
                               orbStyle === style.id 
-                                ? "bg-her-accent/10 border-her-accent/30" 
+                                ? style.id === 'shadow' 
+                                  ? "bg-red-950/20 border-red-900/40"
+                                  : "bg-her-accent/10 border-her-accent/30" 
                                 : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]"
                             )}
                           >
                             <div className={cn(
                               "text-xs font-bold uppercase tracking-tight",
-                              orbStyle === style.id ? "text-her-accent" : "text-her-ink/70"
+                              orbStyle === style.id 
+                                ? style.id === 'shadow' ? "text-red-500" : "text-her-accent" 
+                                : "text-her-ink/70"
                             )}>{style.label}</div>
                             <div className="text-[9px] text-her-muted/50 uppercase tracking-widest mt-1">{style.desc}</div>
                           </button>

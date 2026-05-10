@@ -95,6 +95,23 @@ export default function App() {
     const saved = localStorage.getItem('osone_selected_persona');
     return saved ? (PERSONAS.find(p => p.id === saved) || PERSONAS[0]) : PERSONAS[0];
   });
+  const isShadowMode = selectedPersona.id === 'shadow';
+
+  const handlePersonaChange = (p: Persona) => {
+    setSelectedPersona(p);
+    localStorage.setItem('osone_selected_persona', p.id);
+    
+    if (p.id === 'shadow') {
+      setOrbStyle('shadow');
+      setSelectedVoice('Erebus');
+      addNotification("SISTEMA SOB CONTROLE DO PROTOCOLO EREBUS", "error");
+    } else if (orbStyle === 'shadow') {
+      setOrbStyle('classic');
+      setSelectedVoice('Zephyr');
+      addNotification("Protocolos humanos restaurados", "success");
+    }
+  };
+
   const [isPersonaSwitcherOpen, setIsPersonaSwitcherOpen] = useState(false);
 
   // PWA Install Logic
@@ -489,6 +506,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
   }, [chatHistory]);
+
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveSilenceRef = useRef<number>(0);
 
@@ -1749,6 +1767,7 @@ export default function App() {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
                 voiceName: (() => {
+                  if (selectedVoice === 'Erebus') return 'Fenrir';
                   const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
                   if (standardVoices.includes(selectedVoice)) return selectedVoice;
                   // Map extended voices to masculine fallbacks
@@ -2763,7 +2782,22 @@ export default function App() {
           },
           onerror: (error: any) => {
             console.error("Live API Error:", error);
-            setLiveState({ status: 'error', error: error?.message || "Erro de rede na Live API." });
+            const errorMessage = error?.message || String(error);
+            const isQuotaError = errorMessage.toLowerCase().includes("quota") || 
+                               errorMessage.toLowerCase().includes("limit") || 
+                               errorMessage.toLowerCase().includes("429") ||
+                               errorMessage.toLowerCase().includes("billing");
+
+            if (isQuotaError) {
+              setLiveState({ 
+                status: 'error', 
+                error: "COTA EXCEDIDA: O plano gratuito do Gemini atingiu o limite. Aguarde alguns minutos ou troque a chave API se necessário." 
+              });
+              addNotification("LIMITE DE COTA ATINGIDO", "error");
+            } else {
+              setLiveState({ status: 'error', error: errorMessage || "Erro de rede na Live API." });
+              addNotification("Erro na conexão Neural", "error");
+            }
             stopLiveSession();
           }
         }
@@ -2864,6 +2898,7 @@ export default function App() {
       stopLiveSession();
       setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
     } else {
+      setLiveState({ status: 'connecting' }); // Clear any previous error
       setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
       startLiveSession();
     }
@@ -2988,7 +3023,22 @@ export default function App() {
       </AnimatePresence>
 
       {/* Background Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(230,126,34,0.05)_0%,_transparent_70%)] pointer-events-none" />
+      <div className={cn(
+        "absolute inset-0 pointer-events-none transition-all duration-1000",
+        isShadowMode 
+          ? "bg-[radial-gradient(circle_at_50%_50%,_rgba(220,38,38,0.2)_0%,_transparent_70%)] bg-red-950/20" 
+          : "bg-[radial-gradient(circle_at_50%_50%,_rgba(230,126,34,0.05)_0%,_transparent_70%)]"
+      )} />
+
+      {/* Shadow Glitch Overlay */}
+      {isShadowMode && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.05, 0.12, 0.08] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+          className="absolute inset-0 pointer-events-none z-[100] mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" 
+        />
+      )}
 
       {/* Header */}
       <header className="relative z-30 flex justify-between items-center p-4 md:p-6">
@@ -3000,14 +3050,11 @@ export default function App() {
         </button>
         
         <div className="flex flex-col items-center gap-1">
-          <span className="text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
-          <div className="hidden md:block">
+          <span className="hidden sm:block text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
+          <div className="block">
             <PersonaSwitcher 
               selectedPersona={selectedPersona} 
-              onPersonaChange={(p) => {
-                setSelectedPersona(p);
-                localStorage.setItem('osone_selected_persona', p.id);
-              }} 
+              onPersonaChange={handlePersonaChange} 
               isOpen={isPersonaSwitcherOpen}
               onToggle={() => setIsPersonaSwitcherOpen(!isPersonaSwitcherOpen)}
             />
@@ -3059,6 +3106,29 @@ export default function App() {
             className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
           >
             <Settings size={22} />
+          </button>
+
+          {/* Shadow Mode Activation Toggle */}
+          <button 
+            onClick={() => handlePersonaChange(isShadowMode ? PERSONAS[0] : PERSONAS.find(p => p.id === 'shadow')!)}
+            className={cn(
+              "ml-1 p-2 rounded-xl border transition-all relative overflow-hidden group",
+              isShadowMode 
+                ? "bg-red-600/20 border-red-500 text-red-500 shadow-[0_0_25px_rgba(255,0,0,0.5)] scale-110" 
+                : "bg-black/20 border-red-900/30 text-red-900/50 hover:bg-red-900/10 hover:text-red-500/70"
+            )}
+            title={isShadowMode ? "Desativar Protocolo Sombra" : "ATENÇÃO: ATIVAR PROTOCOLO SOMBRA (EREBUS)"}
+          >
+            <div className={cn(
+              "absolute inset-0 bg-red-600/10 transition-opacity",
+              isShadowMode ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            )} />
+            <motion.div
+              animate={isShadowMode ? { scale: [1, 1.2, 1] } : {}}
+              transition={{ duration: 0.5, repeat: Infinity }}
+            >
+              <Eye size={20} className={isShadowMode ? "text-red-500 shadow-sm" : ""} />
+            </motion.div>
           </button>
         </div>
       </header>
@@ -3431,6 +3501,20 @@ export default function App() {
                             >
                               <Loader2 size={14} className="animate-spin" />
                               Sincronizando...
+                            </motion.div>
+                          ) : liveState.status === 'error' ? (
+                            <motion.div 
+                              key="error"
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="flex flex-col items-center gap-1"
+                            >
+                              <span className="text-[10px] text-red-500 font-bold uppercase tracking-widest px-4 py-1 bg-red-500/10 rounded-full border border-red-500/20">
+                                FALHA DE CONEXÃO
+                              </span>
+                              <p className="text-[9px] text-red-400 opacity-80 max-w-[250px] text-center leading-tight">
+                                {liveState.error}
+                              </p>
                             </motion.div>
                           ) : isSpeaking ? (
                             <motion.p 

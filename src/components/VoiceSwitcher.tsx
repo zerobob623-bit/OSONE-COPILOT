@@ -12,7 +12,8 @@ interface VoiceSwitcherProps {
 
 const VOICES = [
   'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 
-  'Aoede', 'Orion', 'Atlas', 'Rigel', 'Helios'
+  'Aoede', 'Orion', 'Atlas', 'Rigel', 'Helios',
+  'Erebus'
 ];
 
 export const VoiceSwitcher = ({ selectedVoice, onVoiceChange, isOpen, onToggle }: VoiceSwitcherProps) => {
