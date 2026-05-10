@@ -5,13 +5,14 @@ import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
 
-export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout }: { 
+export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogin }: { 
   isOpen: boolean; 
   onClose: () => void;
   mode: WorkspaceMode;
   setMode: (mode: WorkspaceMode) => void;
   user: FirebaseUser | null;
   onLogout: () => void;
+  onLogin: () => void;
 }) => (
   <AnimatePresence>
     {isOpen && (
@@ -121,8 +122,8 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout }: {
             </div>
           </div>
 
-          <div className="mt-auto space-y-6">
-            {user && (
+          <div className="mt-auto space-y-4">
+            {user ? (
               <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/[0.05] flex items-center gap-3">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full border border-her-accent/20" />
@@ -132,21 +133,48 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout }: {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-bold text-her-ink/80 truncate">{user.displayName}</p>
+                  <p className="text-[11px] font-bold text-her-ink/80 truncate leading-tight">{user.displayName}</p>
+                  <p className="text-[9px] text-her-accent flex items-center gap-1 mt-0.5 font-medium tracking-wide uppercase">
+                    <span className="w-1 h-1 rounded-full bg-her-accent animate-pulse" />
+                    Cérebro Conectado
+                  </p>
                   <button 
                     onClick={onLogout}
-                    className="text-[9px] text-her-muted hover:text-red-400 transition-colors flex items-center gap-1 uppercase tracking-wider"
+                    className="text-[9px] text-her-muted hover:text-red-400 transition-colors flex items-center gap-1 uppercase tracking-wider mt-1.5"
                   >
                     <LogOut size={10} />
-                    Sair
+                    Desconectar
                   </button>
                 </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/[0.05] flex flex-col gap-3">
+                <div className="flex items-center gap-3 opacity-60">
+                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-her-muted border border-white/10">
+                    <User size={18} />
+                  </div>
+                  <div className="flex flex-col">
+                    <p className="text-[11px] font-bold text-her-ink/80 uppercase tracking-wider">Modo Visitante</p>
+                    <p className="text-[9px] text-her-muted font-light">Memória Momentânea</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    onLogin();
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-her-accent text-her-bg text-[10px] font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all uppercase tracking-widest shadow-lg shadow-her-accent/10"
+                >
+                  <Zap size={12} fill="currentColor" />
+                  Conectar ao Cérebro
+                </button>
               </div>
             )}
             
             <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.03]">
               <p className="text-[9px] text-her-muted/40 leading-relaxed italic font-light">
-                "O sistema não é apenas uma ferramenta, é uma extensão da sua consciência."
+                {user 
+                  ? '"Sua consciência agora está eternizada na rede neural OSONE."' 
+                  : '"Sem conexão, seus pensamentos são como sombras ao amanhecer."'}
               </p>
             </div>
           </div>

@@ -140,9 +140,12 @@ export default function App() {
   - Sua personalidade é: ${aiProfile.personality}
   - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
   
+  ESTADO DO SISTEMA: ${user ? 'Cérebro Conectado (Nuvem Ativa)' : 'Modo Visitante (Memória Local apenas)'}
   DADOS DO USUÁRIO ATUAL:
-  - Nome do Usuário: ${user?.displayName || 'Usuário'}
-  - Email do Usuário: ${user?.email || 'Não informado'}
+  - Nome do Usuário: ${user?.displayName || 'Visitante'}
+  - Email do Usuário: ${user?.email || 'Desconectado'}
+  
+  ${!user ? 'IMPORTANTE: Você está operando em Modo Visitante. Se o usuário perguntar sobre salvar dados, informe que sem login a memória é apenas local e pode ser perdida se o navegador for limpo.' : ''}
   
   Você deve adotar essa identidade e estilo de comunicação em todas as interações, sobrepondo as orientações genéricas, mas mantendo suas capacidades técnicas. Cumprimente o usuário pelo nome se apropriado.
   `;
@@ -595,24 +598,10 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await auth.signOut();
-      // Reset states
-      setChatHistory([]);
-      setAiProfile({
-        name: 'OSONE',
-        personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
-        writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
-      });
-      setHealthData({
-        age: '',
-        weight: '',
-        height: '',
-        gender: 'masculino',
-        stylePreference: 'casual'
-      });
-      localStorage.removeItem('osone_chat_history');
-      localStorage.removeItem('osone_ai_profile');
-      localStorage.removeItem('osone_health_data');
-      addNotification("Sessão encerrada.", "info");
+      // Não resetamos os estados locais aqui para permitir que o usuário continue 
+      // usando o sistema no modo "Visitante" com sua memória local intacta.
+      // Apenas notificamos que a sincronização em nuvem foi desativada.
+      addNotification("Sincronização em nuvem desativada. Operando em Modo Visitante.", "info");
     } catch (error) {
       console.error("Logout Error:", error);
     }
@@ -4191,6 +4180,7 @@ export default function App() {
         setMode={setWorkspaceMode}
         user={user}
         onLogout={handleLogout}
+        onLogin={handleLogin}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 
