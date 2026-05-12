@@ -32,7 +32,7 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
           className="fixed inset-y-0 left-0 z-50 w-72 bg-her-bg border-r border-white/[0.03] shadow-2xl p-8 flex flex-col"
         >
           <div className="flex justify-between items-center mb-12">
-            <h1 className="text-2xl font-serif italic tracking-tight font-light text-her-ink/40">OSONE 3</h1>
+            <h1 className="text-2xl font-serif italic tracking-tight font-light text-her-ink/40">OSONE 4</h1>
             <button onClick={onClose} className="p-2 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted">
               <X size={20} />
             </button>
@@ -149,13 +149,13 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
               </div>
             ) : (
               <div className="flex flex-col gap-4">
-                 <button 
+                <button 
                   onClick={() => {
                     onLogin();
                   }}
-                  className="w-full py-4 px-6 rounded-2xl bg-her-accent text-her-bg text-xs font-bold flex items-center justify-center gap-3 hover:brightness-110 transition-all uppercase tracking-widest shadow-xl shadow-her-accent/20"
+                  className="w-full py-3 px-6 rounded-2xl bg-white/[0.03] border border-white/[0.08] text-her-ink/50 text-[10px] font-bold flex items-center justify-center gap-2 hover:bg-her-accent/10 hover:text-her-accent hover:border-her-accent/20 transition-all uppercase tracking-[0.2em]"
                 >
-                  <Zap size={14} fill="currentColor" />
+                  <Zap size={12} fill="currentColor" className="opacity-50 group-hover:opacity-100" />
                   Conectar ao Cérebro
                 </button>
 

@@ -1637,7 +1637,7 @@ export default function App() {
           DIRETRIZES DE MODO:
           - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
 
-          MANIFESTO DE CAPACIDADES DO OSONE 3:
+          MANIFESTO DE CAPACIDADES DO OSONE 4:
           - PESQUISA WEB (PROIBIÇÃO DE AUTOMATISMO): Você está PROIBIDO de usar 'google_search' por conta própria para conversas, códigos ou opiniões. Use APENAS se o usuário pedir explicitamente "Pesquise no Google" ou se a informação for um fato de hoje (notícia). Priorize 100% a velocidade da voz.
           - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
           - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
@@ -2810,7 +2810,7 @@ export default function App() {
                       // Simulated reading for internal docs - in a real app would use fetch or fs
                       // Since we just created these files, we can simulate the fetch output or just try to fetch
                       const docs: Record<string, string> = {
-                        "manifesto.md": "Manifesto OSONE 3: Identidade, Versão 3.0, Filosofia de Humanismo Tecnológico.",
+                        "manifesto.md": "Manifesto OSONE 4: Identidade, Versão 4.0, Filosofia de Humanismo Tecnológico.",
                         "capacidades.md": "Capacidades: Visão, Desenvolvimento, Criatividade, Produtividade, Memória.",
                         "memoria_evolutiva.md": localStorage.getItem('osone_long_term_memory') || "Memória Evolutiva: Inicializada. Sem novos aprendizados ainda."
                       };
@@ -3400,7 +3400,24 @@ export default function App() {
   }
 
   return (
-    <div className="relative h-[100dvh] w-screen flex flex-col overflow-hidden">
+    <motion.div 
+      onPanEnd={(e, info) => {
+        // Only trigger on mobile/touch if needed, but onPan covers it
+        // info.offset.x > 100 is left-to-right (Open Sidebar)
+        // info.offset.x < -100 is right-to-left (Open Settings)
+        // We also check for horizontal dominance to avoid triggering on scroll
+        const isHorizontal = Math.abs(info.offset.x) > Math.abs(info.offset.y) * 2;
+        
+        if (isHorizontal) {
+          if (info.offset.x > 80) {
+            if (!isSidebarOpen && !isSettingsOpen && !isPreviewOpen) setIsSidebarOpen(true);
+          } else if (info.offset.x < -80) {
+            if (!isSettingsOpen && !isSidebarOpen && !isPreviewOpen) setIsSettingsOpen(true);
+          }
+        }
+      }}
+      className="relative h-[100dvh] w-screen flex flex-col overflow-hidden"
+    >
       {/* Lyrics Overlay */}
       <AnimatePresence>
         {lyrics && (
@@ -3511,16 +3528,17 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="relative z-30 flex justify-between items-center p-4 md:p-6">
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
-        >
-          <Menu size={22} />
-        </button>
+      {workspaceMode !== 'viralflow' && (
+        <header className="relative z-30 flex justify-between items-center p-4 md:p-6 shrink-0">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
+          >
+            <Menu size={22} />
+          </button>
         
         <div className="flex flex-col items-center gap-1">
-          <span className="hidden sm:block text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 3</span>
+          <span className="hidden sm:block text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 4</span>
           <div className="block">
             <PersonaSwitcher 
               selectedPersona={selectedPersona} 
@@ -3588,11 +3606,12 @@ export default function App() {
           </button>
         </div>
       </header>
+      )}
 
       {/* Main Content Area */}
       <main className={cn(
-        "main-content flex-1 relative z-20 flex flex-col overflow-y-auto custom-scrollbar w-full min-h-0",
-        workspaceMode === 'viralflow' ? "items-stretch h-full overflow-hidden" : "items-center"
+        "main-content flex-1 relative z-20 flex flex-col w-full min-h-0",
+        workspaceMode === 'viralflow' ? "h-full overflow-hidden p-0" : "overflow-y-auto items-center custom-scrollbar"
       )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
@@ -3824,23 +3843,14 @@ export default function App() {
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="w-full h-full flex flex-col overflow-hidden relative"
+              className="w-full h-full flex flex-col overflow-hidden relative p-0"
             >
-              <div className="absolute top-4 left-6 z-[100] flex items-center gap-4">
-                <button 
-                  onClick={() => setWorkspaceMode('home')}
-                  className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-2xl hover:bg-black/80 rounded-full text-[10px] font-bold tracking-widest text-white/80 transition-all border border-white/10 shadow-2xl"
-                >
-                   <ChevronRight size={14} className="rotate-180" />
-                   Dashboard
-                </button>
-                <div className="h-4 w-[1px] bg-white/10" />
-                <h2 className="text-sm font-serif italic text-white/40">Viral Flow Studio</h2>
-              </div>
               <ViralFlow 
                 apiKeys={apiKeys} 
                 timeline={timelineState}
                 setTimeline={setTimelineState}
+                onMenuClick={() => setIsSidebarOpen(true)}
+                onBack={() => setWorkspaceMode('home')}
               />
             </motion.div>
           ) : workspaceMode === 'wellness' ? (
@@ -3907,7 +3917,7 @@ export default function App() {
             >
               {chatHistory.length === 0 && (
                 <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
-                  <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 3</h1>
+                  <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 4</h1>
                   <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
                 </div>
               )}
@@ -4476,6 +4486,6 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }

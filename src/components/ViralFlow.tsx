@@ -46,11 +46,15 @@ interface ViralScript {
 export function ViralFlow({ 
   apiKeys, 
   timeline, 
-  setTimeline 
+  setTimeline,
+  onMenuClick,
+  onBack
 }: { 
   apiKeys: { gemini: string };
   timeline: VideoTimelineState;
   setTimeline: React.Dispatch<React.SetStateAction<VideoTimelineState>>;
+  onMenuClick?: () => void;
+  onBack?: () => void;
 }) {
   const [selectedScript, setSelectedScript] = useState<ViralScript | null>(null);
   const [isHubCollapsed, setIsHubCollapsed] = useState(false);
@@ -127,7 +131,7 @@ export function ViralFlow({
       const prompt = "Analise este vídeo. Forneça uma transcrição completa das falas e identifique a estrutura do roteiro (Hook, Retenção, CTA).";
 
       const result = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [
           {
             parts: [
@@ -194,7 +198,7 @@ export function ViralFlow({
       }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [{ parts: [{ text: finalPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -205,7 +209,7 @@ export function ViralFlow({
       
       // Generate individual visual reference
       const imageResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-flash',
         contents: {
           parts: [{ text: `${data.imagePrompt}. Cinematic, modern, 8k, viral energy.` }]
         },
@@ -257,17 +261,19 @@ export function ViralFlow({
   };
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden bg-her-bg relative">
-      {/* FULL SCREEN VIDEO EDITOR */}
-      <div className="flex-1 h-full bg-black relative flex">
+    <div className="w-full h-full flex flex-col overflow-hidden bg-black relative">
+       {/* FULL SCREEN VIDEO EDITOR */}
+       <div className="flex-1 h-full bg-black relative flex overflow-hidden">
         <ViralStudio 
           initialScript={selectedScript || undefined} 
           timeline={timeline}
           setTimeline={setTimeline}
           videoFile={videoFile}
           apiKeys={apiKeys}
+          onMenuClick={onMenuClick}
+          onBack={onBack}
         />
-      </div>
+       </div>
     </div>
   );
 }

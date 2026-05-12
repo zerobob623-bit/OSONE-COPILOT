@@ -1,4 +1,4 @@
-# Especificação de Segurança - OSONE 3
+# Especificação de Segurança - OSONE 4
 
 ## 1. Planilha de Invariantes de Dados
 - Perfil do Usuário: Apenas o próprio usuário (`userId` na rota coincide com `auth.uid`) pode ler e escrever.
