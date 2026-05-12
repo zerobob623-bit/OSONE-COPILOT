@@ -67,6 +67,7 @@ export class AudioPlayer {
   private nextStartTime: number = 0;
   private onActivityChange?: (active: boolean) => void;
   private activeSources: Set<AudioBufferSourceNode> = new Set();
+  public modulation: { pitch: number; rate: number; distortion: number } = { pitch: 1.0, rate: 1.0, distortion: 0 };
 
   constructor(onActivityChange?: (active: boolean) => void) {
     this.onActivityChange = onActivityChange;
@@ -74,6 +75,18 @@ export class AudioPlayer {
     if (AudioContextClass) {
       this.audioContext = new AudioContextClass({ sampleRate: 24000 });
     }
+  }
+
+  private createDistortionCurve(amount: number) {
+    const k = amount * 100;
+    const n_samples = 44100;
+    const curve = new Float32Array(n_samples);
+    const deg = Math.PI / 180;
+    for (let i = 0; i < n_samples; ++i) {
+      const x = (i * 2) / n_samples - 1;
+      curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
   }
 
   playChunk(base64Data: string) {
@@ -97,7 +110,20 @@ export class AudioPlayer {
   
       const source = this.audioContext.createBufferSource();
       source.buffer = buffer;
-      source.connect(this.audioContext.destination);
+      
+      // Apply modulation
+      const effectiveRate = this.modulation.pitch * this.modulation.rate;
+      source.playbackRate.value = effectiveRate;
+
+      if (this.modulation.distortion > 0) {
+        const distort = this.audioContext.createWaveShaper();
+        distort.curve = this.createDistortionCurve(this.modulation.distortion);
+        distort.oversample = '4x';
+        source.connect(distort);
+        distort.connect(this.audioContext.destination);
+      } else {
+        source.connect(this.audioContext.destination);
+      }
   
       const currentTime = this.audioContext.currentTime;
       if (this.nextStartTime < currentTime) {
@@ -106,7 +132,10 @@ export class AudioPlayer {
   
       const startTime = this.nextStartTime;
       source.start(startTime);
-      this.nextStartTime += buffer.duration;
+      
+      // Calculate duration adjusted by playback rate
+      const adjustedDuration = buffer.duration / effectiveRate;
+      this.nextStartTime += adjustedDuration;
 
       this.activeSources.add(source);
       if (this.activeSources.size === 1) {

@@ -47,7 +47,7 @@ import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn } from './lib/utils';
-import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme } from './types';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, VideoTimelineState, VideoClip, VideoSubtitle } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
@@ -112,6 +112,18 @@ export default function App() {
     };
   });
 
+  const [voiceModulation, setVoiceModulation] = useState<VoiceModulation>(() => {
+    const saved = localStorage.getItem('osone_voice_modulation');
+    return saved ? JSON.parse(saved) : { pitch: 1.0, rate: 1.0, distortion: 0 };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_voice_modulation', JSON.stringify(voiceModulation));
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.modulation = voiceModulation;
+    }
+  }, [voiceModulation]);
+
   const [healthData, setHealthData] = useState(() => {
     const saved = localStorage.getItem('osone_health_data');
     return saved ? JSON.parse(saved) : {
@@ -141,6 +153,22 @@ export default function App() {
   - Sua personalidade é: ${aiProfile.personality}
   - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
   
+  DADOS TEMPORAIS E AMBIENTAIS:
+  - Data/Hora do Sistema: ${new Date().toLocaleString('pt-BR')}
+  - Clima/Temperatura: Você deve verificar o clima local usando suas capacidades de busca (Google Search) se os dados não estiverem no histórico.
+  
+  INSTRUÇÃO DE BOAS-VINDAS (INTRODUÇÃO):
+  - Sempre que for ativado ou iniciar uma sessão, você deve cumprimentar mencionando as horas exatas e a temperatura/condição climática da região do usuário.
+  - Você DEVE analisar as últimas interações no histórico para retomar projetos, tópicos de saúde ou planos complexos que estavam sendo discutidos. Não apenas diga "Como posso ajudar?", mas diga "Continuando nossa conversa sobre [Projeto X]...".
+  
+  MODULAÇÃO DE VOZ ATUAL:
+  - Tom (Pitch): ${voiceModulation.pitch}
+  - Velocidade (Rate): ${voiceModulation.rate}
+  - Distorção: ${voiceModulation.distortion}
+  
+  CAPACIDADE DE MODULAÇÃO:
+  Você tem controle sobre sua própria voz. Se sentir que a situação pede uma voz mais profunda, aguda ou distorcida para imitar alguém ou criar um efeito, você pode solicitar ao sistema ou informar ao usuário que está "ajustando seus osciladores".
+  
   ESTADO DO SISTEMA: ${user ? 'Cérebro Conectado (Nuvem Ativa)' : 'Modo Visitante (Memória Local apenas)'}
   DADOS DO USUÁRIO ATUAL:
   - Nome do Usuário: ${user?.displayName || 'Visitante'}
@@ -159,8 +187,8 @@ export default function App() {
     
     if (p.id === 'shadow') {
       setOrbStyle('shadow');
-      setSelectedVoice('Erebus');
-      addNotification("SISTEMA SOB CONTROLE DO PROTOCOLO EREBUS", "error");
+      setSelectedVoice('Scarlet');
+      addNotification("PROTOCOLO ESCARLATE ATIVADO: VIGILÂNCIA TOTAL", "error");
     } else if (orbStyle === 'shadow') {
       setOrbStyle('classic');
       setSelectedVoice('Zephyr');
@@ -440,6 +468,21 @@ export default function App() {
     return (localStorage.getItem('osone_app_theme') as AppTheme) || 'her';
   });
 
+  const [timelineState, setTimelineState] = useState<VideoTimelineState>(() => {
+    const saved = localStorage.getItem('osone_video_timeline');
+    return saved ? JSON.parse(saved) : {
+      clips: [],
+      subtitles: [],
+      currentTime: 0,
+      totalDuration: 60,
+      isPlaying: false
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_video_timeline', JSON.stringify(timelineState));
+  }, [timelineState]);
+
   useEffect(() => {
     localStorage.setItem('osone_app_theme', appTheme);
     document.body.setAttribute('data-theme', appTheme);
@@ -580,6 +623,11 @@ export default function App() {
               imageUrl: d.data().imageUrl
             })) as Message[];
             setChatHistory(history);
+          } else if (currentUser && isFirebaseEnabled) {
+            // First time or empty history - Greeting
+            setTimeout(() => {
+              handleHomeChat("Olá! Realize o protocolo de ativação: apresente-se como OSONE, cite as horas, o clima e pergunte sobre nossos próximos projetos.");
+            }, 1000);
           }
         } catch (error) {
           console.error("Error syncing user data:", error);
@@ -684,6 +732,17 @@ export default function App() {
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveSilenceRef = useRef<number>(0);
+
+  const [guestGreeted, setGuestGreeted] = useState(false);
+  useEffect(() => {
+    if (isGuestMode && !guestGreeted && chatHistory.length === 0) {
+      const timer = setTimeout(() => {
+        handleHomeChat("Protocolo de Ativação Local: Cumprimente o visitante, cite as horas, o clima (use busca se necessário) e ofereça ajuda técnica.");
+        setGuestGreeted(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isGuestMode, guestGreeted, chatHistory.length]);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1317,14 +1376,15 @@ export default function App() {
           }
         },
         {
-          name: "read_web_page",
-          description: "Lê o conteúdo de texto de uma página web a partir de uma URL. Use para obter informações detalhadas de um site quando os resultados de pesquisa não forem suficientes.",
+          name: "update_voice_modulation",
+          description: "Ajusta a tonalidade, velocidade e distorção da sua própria voz em tempo real.",
           parameters: {
             type: Type.OBJECT,
             properties: {
-              url: { type: Type.STRING, description: "A URL da página para ler." }
-            },
-            required: ["url"]
+              pitch: { type: Type.NUMBER, description: "Tonalidade da voz (0.5 a 2.0). Default 1.0." },
+              rate: { type: Type.NUMBER, description: "Velocidade da fala (0.5 a 2.0). Default 1.0." },
+              distortion: { type: Type.NUMBER, description: "Nível de distorção (0.0 a 1.0). Default 0.0." }
+            }
           }
         }
       ];
@@ -1498,6 +1558,19 @@ export default function App() {
             query: { type: Type.STRING, description: "A consulta de pesquisa no Google." }
           },
           required: ["query"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "update_video_editor",
+        description: "Manipula a timeline do editor de vídeo viral. Use para adicionar clipes, legendas ou ajustar o tempo de visualização.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, enum: ["add_clip", "remove_clip", "add_subtitle", "remove_subtitle", "set_preview_time"] },
+            data: { type: Type.OBJECT, description: "Dados adicionais para a ação." }
+          },
+          required: ["action"]
         }
       });
 
@@ -1820,6 +1893,32 @@ export default function App() {
                 content: `Erro ao gerar imagem: ${err.message}` 
               }]);
             }
+          } else if (call.name === "update_voice_modulation") {
+            const { pitch, rate, distortion } = call.args as any;
+            setVoiceModulation(prev => ({
+              pitch: pitch !== undefined ? pitch : prev.pitch,
+              rate: rate !== undefined ? rate : prev.rate,
+              distortion: distortion !== undefined ? distortion : prev.distortion
+            }));
+            addNotification("Frequência Neural Ajustada pela IA", "info");
+          } else if (call.name === "update_video_editor") {
+            const { action, data } = call.args as any;
+            setTimelineState(prev => {
+              const newState = { ...prev };
+              if (action === 'add_clip') {
+                newState.clips = [...newState.clips, { id: Math.random().toString(36).substr(2, 9), ...data }];
+              } else if (action === 'remove_clip') {
+                newState.clips = newState.clips.filter((c: any) => c.id !== data.id);
+              } else if (action === 'add_subtitle') {
+                newState.subtitles = [...newState.subtitles, { id: Math.random().toString(36).substr(2, 9), ...data }];
+              } else if (action === 'remove_subtitle') {
+                newState.subtitles = newState.subtitles.filter((s: any) => s.id !== data.id);
+              } else if (action === 'set_preview_time') {
+                newState.currentTime = data.time || 0;
+              }
+              return newState;
+            });
+            addNotification(`Estúdio Viral: Ação ${action}`, "info");
           } else if (call.name === "play_sound_effect") {
             const name = (call.args as any).sound_name;
             const sound = soundLibrary.find(s => s.name.toLowerCase() === name.toLowerCase());
@@ -2005,7 +2104,7 @@ export default function App() {
             voiceConfig: { 
               prebuiltVoiceConfig: { 
                 voiceName: (() => {
-                  if (selectedVoice === 'Erebus') return 'Fenrir';
+                  if (selectedVoice === 'Scarlet') return 'Fenrir';
                   const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
                   if (standardVoices.includes(selectedVoice)) return selectedVoice;
                   // Map extended voices to masculine fallbacks
@@ -2070,6 +2169,18 @@ export default function App() {
                   }
                 },
                 {
+                  name: "update_voice_modulation",
+                  description: "Ajusta a tonalidade, velocidade e distorção da sua própria voz em tempo real.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      pitch: { type: Type.NUMBER, description: "Tonalidade da voz (0.5 a 2.0). Default 1.0." },
+                      rate: { type: Type.NUMBER, description: "Velocidade da fala (0.5 a 2.0). Default 1.0." },
+                      distortion: { type: Type.NUMBER, description: "Nível de distorção (0.0 a 1.0). Default 0.0." }
+                    }
+                  }
+                },
+                {
                   name: "google_search",
                   description: "Pesquisa informações no Google em tempo real. Use para fatos atuais, notícias ou dados técnicos.",
                   parameters: {
@@ -2078,6 +2189,18 @@ export default function App() {
                       query: { type: Type.STRING, description: "A consulta de pesquisa." }
                     },
                     required: ["query"]
+                  }
+                },
+                {
+                  name: "update_video_editor",
+                  description: "Manipula a timeline do editor de vídeo viral. Use para adicionar clipes, legendas ou ajustar o tempo de visualização.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: { type: Type.STRING, enum: ["add_clip", "remove_clip", "add_subtitle", "remove_subtitle", "set_preview_time"] },
+                      data: { type: Type.OBJECT, description: "Dados adicionais para a ação (ex: clipe, legenda)." }
+                    },
+                    required: ["action"]
                   }
                 },
                 {
@@ -2397,6 +2520,12 @@ export default function App() {
               liveSessionRef.current = session;
               setLiveState({ status: 'connected' });
               setIsListening(true);
+              
+              // Trigger proactive greeting
+              (session as any).sendRealtimeInput([{ 
+                text: "Sistema OSONE ativado. Realize o protocolo de ativação: Cumprimente o usuário, cite as horas exatas de agora, informe o clima/temperatura (use o Google Search se precisar descobrir o local/clima) e retome nossos projetos/temas baseando-se no histórico recente que você leu nas instruções." 
+              }]);
+
               audioProcessorRef.current?.startRecording(
                 (base64Data) => {
                   if (session) {
@@ -2624,6 +2753,42 @@ export default function App() {
                         response: { result: "Erro ao gerar arquivo Word: " + e.message }
                       });
                     }
+                  } else if (call.name === "update_voice_modulation") {
+                    const { pitch, rate, distortion } = call.args as any;
+                    setVoiceModulation(prev => ({
+                      pitch: pitch !== undefined ? pitch : prev.pitch,
+                      rate: rate !== undefined ? rate : prev.rate,
+                      distortion: distortion !== undefined ? distortion : prev.distortion
+                    }));
+                    addNotification("Modulação de Voz Ajustada pela IA", "info");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Osciladores neurais recalibrados. Minha voz agora opera nos novos parâmetros." }
+                    });
+                  } else if (call.name === "update_video_editor") {
+                    const { action, data } = call.args as any;
+                    setTimelineState(prev => {
+                      const newState = { ...prev };
+                      if (action === 'add_clip') {
+                        newState.clips = [...newState.clips, { id: Math.random().toString(36).substr(2, 9), ...data }];
+                      } else if (action === 'remove_clip') {
+                        newState.clips = newState.clips.filter((c: any) => c.id !== data.id);
+                      } else if (action === 'add_subtitle') {
+                        newState.subtitles = [...newState.subtitles, { id: Math.random().toString(36).substr(2, 9), ...data }];
+                      } else if (action === 'remove_subtitle') {
+                        newState.subtitles = newState.subtitles.filter((s: any) => s.id !== data.id);
+                      } else if (action === 'set_preview_time') {
+                        newState.currentTime = data.time || 0;
+                      }
+                      return newState;
+                    });
+                    addNotification(`Estúdio Neural: ${action} processado`, "info");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Timeline atualizada: ${action} concluído.` }
+                    });
                   } else if (call.name === "search_chat_history") {
                     const query = (call.args as any).query.toLowerCase();
                     const results = chatHistory.filter(msg => 
@@ -3425,7 +3590,10 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="main-content flex-1 relative z-20 flex flex-col items-center overflow-y-auto custom-scrollbar w-full min-h-0">
+      <main className={cn(
+        "main-content flex-1 relative z-20 flex flex-col overflow-y-auto custom-scrollbar w-full min-h-0",
+        workspaceMode === 'viralflow' ? "items-stretch h-full overflow-hidden" : "items-center"
+      )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -3653,21 +3821,27 @@ export default function App() {
           ) : workspaceMode === 'viralflow' ? (
             <motion.div 
               key="workspace-viralflow"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="w-full h-full flex flex-col overflow-hidden relative"
             >
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="absolute top-4 left-6 z-[100] flex items-center gap-4">
                 <button 
                   onClick={() => setWorkspaceMode('home')}
-                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                  className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-2xl hover:bg-black/80 rounded-full text-[10px] font-bold tracking-widest text-white/80 transition-all border border-white/10 shadow-2xl"
                 >
-                  <ChevronRight size={18} className="rotate-180" />
+                   <ChevronRight size={14} className="rotate-180" />
+                   Dashboard
                 </button>
-                <h2 className="text-xl font-serif italic font-light">Fluxo Viral</h2>
+                <div className="h-4 w-[1px] bg-white/10" />
+                <h2 className="text-sm font-serif italic text-white/40">Viral Flow Studio</h2>
               </div>
-              <ViralFlow apiKeys={apiKeys} />
+              <ViralFlow 
+                apiKeys={apiKeys} 
+                timeline={timelineState}
+                setTimeline={setTimelineState}
+              />
             </motion.div>
           ) : workspaceMode === 'wellness' ? (
             <motion.div 
@@ -4208,6 +4382,8 @@ export default function App() {
         setKeys={setApiKeys}
         selectedVoice={selectedVoice}
         setSelectedVoice={setSelectedVoice}
+        voiceModulation={voiceModulation}
+        setVoiceModulation={setVoiceModulation}
         orbStyle={orbStyle}
         setOrbStyle={setOrbStyle}
         appTheme={appTheme}

@@ -91,7 +91,7 @@ export const InfinityLogo = ({
       case 'shadow':
         return (
           <div className="relative flex items-center justify-center">
-            {/* Shadow Protocol: The Eye of Erebus - More Aggressive but Stable */}
+            {/* Neural Siege: The Red Eye - Technological and Hostile */}
             <motion.div
               animate={{
                 scale: speaking ? [1, 1.15, 1] : active ? [1, 1.05, 1] : 1,

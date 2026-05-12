@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, FileSearch, Activity, LogOut, User } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Video, Gamepad2, Zap, Activity, LogOut, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -122,19 +122,19 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
             </div>
           </div>
 
-          <div className="mt-auto space-y-4">
+          <div className="mt-auto pt-8 border-t border-white/[0.03]">
             {user ? (
               <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/[0.05] flex items-center gap-3">
                 {user.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full border border-her-accent/20" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-her-accent/10 flex items-center justify-center text-her-accent font-bold">
+                  <div className="w-10 h-10 rounded-full bg-her-accent/10 flex items-center justify-center text-her-accent font-bold text-xs">
                     {user.displayName?.charAt(0) || 'U'}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-bold text-her-ink/80 truncate leading-tight">{user.displayName}</p>
-                  <p className="text-[9px] text-her-accent flex items-center gap-1 mt-0.5 font-medium tracking-wide uppercase">
+                  <p className="text-[8px] text-her-accent flex items-center gap-1 mt-0.5 font-medium tracking-wide uppercase">
                     <span className="w-1 h-1 rounded-full bg-her-accent animate-pulse" />
                     Cérebro Conectado
                   </p>
@@ -148,33 +148,32 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 </div>
               </div>
             ) : (
-              <div className="p-4 rounded-3xl bg-white/[0.02] border border-white/[0.05] flex flex-col gap-3">
-                <div className="flex items-center gap-3 opacity-60">
-                  <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-her-muted border border-white/10">
-                    <User size={18} />
-                  </div>
-                  <div className="flex flex-col">
-                    <p className="text-[11px] font-bold text-her-ink/80 uppercase tracking-wider">Modo Visitante</p>
-                    <p className="text-[9px] text-her-muted font-light">Memória Momentânea</p>
-                  </div>
-                </div>
-                <button 
+              <div className="flex flex-col gap-4">
+                 <button 
                   onClick={() => {
                     onLogin();
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-her-accent text-her-bg text-[10px] font-bold flex items-center justify-center gap-2 hover:brightness-110 transition-all uppercase tracking-widest shadow-lg shadow-her-accent/10"
+                  className="w-full py-4 px-6 rounded-2xl bg-her-accent text-her-bg text-xs font-bold flex items-center justify-center gap-3 hover:brightness-110 transition-all uppercase tracking-widest shadow-xl shadow-her-accent/20"
                 >
-                  <Zap size={12} fill="currentColor" />
+                  <Zap size={14} fill="currentColor" />
                   Conectar ao Cérebro
                 </button>
+
+                <div className="flex items-center justify-between px-2 opacity-40 text-her-ink">
+                  <div className="flex items-center gap-2">
+                    <User size={12} className="text-her-muted" />
+                    <span className="text-[9px] font-bold uppercase tracking-widest">Modo Visitante</span>
+                  </div>
+                  <span className="text-[8px] opacity-60 uppercase tracking-tighter">Memória Local</span>
+                </div>
               </div>
             )}
             
-            <div className="p-5 rounded-3xl bg-white/[0.02] border border-white/[0.03]">
-              <p className="text-[9px] text-her-muted/40 leading-relaxed italic font-light">
+            <div className="mt-6 px-2">
+              <p className="text-[8px] text-her-muted/30 leading-relaxed italic font-light">
                 {user 
-                  ? '"Sua consciência agora está eternizada na rede neural OSONE."' 
-                  : '"Sem conexão, seus pensamentos são como sombras ao amanhecer."'}
+                  ? 'Sua consciência agora está eternizada na rede neural OSONE.' 
+                  : 'Sem conexão, seus pensamentos são como sombras ao amanhecer.'}
               </p>
             </div>
           </div>

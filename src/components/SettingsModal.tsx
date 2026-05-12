@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { ApiKeys, OrbStyle, AppTheme, AIProfile } from '../types';
+import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
 
 type TabId = 'general' | 'interface' | 'profile' | 'automation';
@@ -15,6 +15,8 @@ export const SettingsModal = ({
   setKeys, 
   selectedVoice, 
   setSelectedVoice,
+  voiceModulation,
+  setVoiceModulation,
   orbStyle,
   setOrbStyle,
   appTheme,
@@ -28,6 +30,8 @@ export const SettingsModal = ({
   setKeys: (keys: ApiKeys) => void;
   selectedVoice: string;
   setSelectedVoice: (voice: string) => void;
+  voiceModulation: VoiceModulation;
+  setVoiceModulation: (mod: VoiceModulation) => void;
   orbStyle: OrbStyle;
   setOrbStyle: (style: OrbStyle) => void;
   appTheme: AppTheme;
@@ -167,7 +171,7 @@ export const SettingsModal = ({
                     <div>
                       <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Voz do Sistema (Frequência)</label>
                       <div className="grid grid-cols-2 gap-2">
-                        {['Puck', 'Charon', 'Kore', 'Fenrir', 'Erebus'].map((voice) => (
+                        {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
                           <button
                             key={voice}
                             onClick={() => setSelectedVoice(voice)}
@@ -176,16 +180,69 @@ export const SettingsModal = ({
                               selectedVoice === voice 
                                 ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
                                 : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
-                              voice === 'Erebus' && "border-red-900/20 hover:border-red-500/30"
+                              voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
                             )}
                           >
-                            <span className={cn(voice === 'Erebus' && "text-red-500/80 font-medium")}>{voice}</span>
+                            <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
                             {selectedVoice === voice && <div className={cn(
                               "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
-                              voice === 'Erebus' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                              voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
                             )} />}
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    <div className="p-6 bg-white/[0.01] border border-white/[0.03] rounded-3xl space-y-6">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Modulador de Voz</label>
+                        <button 
+                          onClick={() => setVoiceModulation({ pitch: 1.0, rate: 1.0, distortion: 0 })}
+                          className="text-[8px] uppercase tracking-widest text-her-accent hover:underline"
+                        >
+                          Resetar
+                        </button>
+                      </div>
+
+                      <div className="space-y-5">
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-[10px] text-her-muted/60 uppercase font-medium">
+                            <span>Tonalidade (Pitch)</span>
+                            <span className="text-her-accent">{voiceModulation.pitch.toFixed(2)}x</span>
+                          </div>
+                          <input 
+                            type="range" min="0.5" max="2.0" step="0.05"
+                            value={voiceModulation.pitch}
+                            onChange={(e) => setVoiceModulation({ ...voiceModulation, pitch: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-[10px] text-her-muted/60 uppercase font-medium">
+                            <span>Velocidade (Rate)</span>
+                            <span className="text-her-accent">{voiceModulation.rate.toFixed(2)}x</span>
+                          </div>
+                          <input 
+                            type="range" min="0.5" max="2.0" step="0.05"
+                            value={voiceModulation.rate}
+                            onChange={(e) => setVoiceModulation({ ...voiceModulation, rate: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between text-[10px] text-her-muted/60 uppercase font-medium">
+                            <span>Distorção / Ruído</span>
+                            <span className="text-her-accent">{Math.round(voiceModulation.distortion * 100)}%</span>
+                          </div>
+                          <input 
+                            type="range" min="0" max="1" step="0.01"
+                            value={voiceModulation.distortion}
+                            onChange={(e) => setVoiceModulation({ ...voiceModulation, distortion: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -196,7 +253,7 @@ export const SettingsModal = ({
                           { id: 'classic', label: 'Classic Architecture', desc: 'Versão minimalista e fluida' },
                           { id: 'superintelligence', label: 'Super AI Matrix', desc: 'Explosão binária e complexidade' },
                           { id: 'neural', label: 'Neural Network', desc: 'Processamento orgânico e suave' },
-                          { id: 'shadow', label: 'The Eye of Erebus', desc: 'Protocolo de Observação Sombra' }
+                          { id: 'shadow', label: 'O Olho Escarlate', desc: 'Protocolo de Observação Hostil' }
                         ].map((style) => (
                           <button
                             key={style.id}
