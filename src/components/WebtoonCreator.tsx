@@ -193,7 +193,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
             <h2 className="text-5xl md:text-7xl font-serif italic tracking-tighter text-her-ink">
               Canvas <span className="text-her-accent">Criativo</span>
             </h2>
-            <p className="text-sm font-sans text-her-muted max-w-lg leading-relaxed">
+            <p className="text-sm font-sans text-her-muted w-full leading-relaxed">
               Transforme ideias em sequências visuais cinematográficas. Nossa IA traduz conceitos abstratos em narrativas sequenciais de tirar o fôlego.
             </p>
           </div>
@@ -232,7 +232,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
           {/* Creative Inputs - 7 Columns */}
           <div className="xl:col-span-7 space-y-12">
             {/* Project Premise Card */}
-            <section className="bg-white/[0.03] backdrop-blur-md border border-white/5 p-10 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+            <section className="bg-white/[0.03] backdrop-blur-md border-y md:border border-white/5 p-6 md:p-10 md:rounded-[2.5rem] shadow-xl relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-8 opacity-5">
                 <TypeIcon size={120} />
               </div>
@@ -343,7 +343,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
 
           {/* Settings Sidebar - 5 Columns */}
           <div className="xl:col-span-5 space-y-12">
-            <section className="bg-white/[0.03] backdrop-blur-md border border-white/5 p-10 rounded-[2.5rem] shadow-xl space-y-12">
+            <section className="bg-white/[0.03] backdrop-blur-md border-y md:border border-white/5 p-6 md:p-10 md:rounded-[2.5rem] shadow-xl space-y-12">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-her-accent rounded-full" />
@@ -431,7 +431,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
               </div>
             </div>
 
-            <div className="flex flex-col gap-32 max-w-5xl mx-auto">
+            <div className="flex flex-col gap-32 w-full">
               {project.panels.map((panel, idx) => (
                 <motion.div 
                   key={panel.id} 
@@ -456,7 +456,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
                             referrerPolicy="no-referrer"
                           />
                           <div className="absolute inset-x-0 bottom-0 p-12 bg-gradient-to-t from-black/80 via-black/20 to-transparent">
-                            <div className="space-y-4 max-w-md mx-auto text-center">
+                            <div className="space-y-4 w-full text-center">
                               <p className="text-white text-3xl font-serif italic leading-tight drop-shadow-lg">
                                 "{panel.dialogue}"
                               </p>

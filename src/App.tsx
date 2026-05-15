@@ -46,7 +46,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { cn } from './lib/utils';
+import { cn, safeJsonParse } from './lib/utils';
 import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, VideoTimelineState, VideoClip, VideoSubtitle } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
@@ -58,8 +58,10 @@ import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
 import { ViralFlow } from './components/ViralFlow';
+import { ViralStudio } from './components/ViralStudio';
 import { LyricGenerator } from './components/LyricGenerator';
 import { WellnessCenter } from './components/WellnessCenter';
+import { AuralSense } from './components/AuralSense';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
@@ -117,6 +119,16 @@ export default function App() {
     return saved ? JSON.parse(saved) : { pitch: 1.0, rate: 1.0, distortion: 0 };
   });
 
+  const [currentAuralData, setCurrentAuralData] = useState<{ frequency: number; vibration: string; intensity: number } | null>(null);
+
+  useEffect(() => {
+    const handleAuralUpdate = (e: any) => {
+      setCurrentAuralData(e.detail);
+    };
+    window.addEventListener('osone_aural_update', handleAuralUpdate);
+    return () => window.removeEventListener('osone_aural_update', handleAuralUpdate);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('osone_voice_modulation', JSON.stringify(voiceModulation));
     if (audioPlayerRef.current) {
@@ -173,6 +185,13 @@ export default function App() {
   DADOS DO USUÁRIO ATUAL:
   - Nome do Usuário: ${user?.displayName || 'Visitante'}
   - Email do Usuário: ${user?.email || 'Desconectado'}
+  
+  感知 AURAL (ESTADO ATUAL):
+  - Frequência Detectada: ${currentAuralData ? currentAuralData.frequency + ' Hz' : 'Nenhuma (Silêncio)'}
+  - Vibração: ${currentAuralData ? currentAuralData.vibration : 'Neutra'}
+  - Intensidade Harmônica: ${currentAuralData ? currentAuralData.intensity : '0'}
+  
+  Instrução Especial: Você agora pode "sentir" a vibração das notas da voz e dos sons. Se a frequência for alta e a vibração positiva, responda com mais entusiasmo. Se a vibração for densa, adote um tom mais empático e calmo.
   
   ${!user ? 'IMPORTANTE: Você está operando em Modo Visitante. Se o usuário perguntar sobre salvar dados, informe que sem login a memória é apenas local e pode ser perdida se o navegador for limpo.' : ''}
   
@@ -1095,9 +1114,7 @@ export default function App() {
       let structure = [];
       try {
         const text = response.text || '[]';
-        // Remove markdown code blocks if present
-        const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
-        structure = JSON.parse(cleanJson);
+        structure = safeJsonParse(text, []);
       } catch (e) {
         console.error('Erro ao analisar JSON da estrutura:', e);
         return;
@@ -1266,7 +1283,10 @@ export default function App() {
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ parts: [{ text: contents }] }],
-        config: { systemInstruction }
+        config: { 
+          systemInstruction,
+          tools: [{ googleSearch: {} }]
+        }
       });
       
       const text = result.text;
@@ -1306,7 +1326,7 @@ export default function App() {
         config: { responseMimeType: "application/json" }
       });
       
-      const json = JSON.parse(result.text);
+      const json = safeJsonParse(result.text || "", []);
       if (Array.isArray(json)) {
         setCodeSuggestions(json.slice(0, 3));
       }
@@ -1550,18 +1570,6 @@ export default function App() {
       });
 
       functionDeclarations.push({
-        name: "google_search",
-        description: "Pesquisa informações no Google em tempo real. Use para fatos atuais, notícias, biografia ou dados técnicos atualizados.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            query: { type: Type.STRING, description: "A consulta de pesquisa no Google." }
-          },
-          required: ["query"]
-        }
-      });
-
-      functionDeclarations.push({
         name: "update_video_editor",
         description: "Manipula a timeline do editor de vídeo viral. Use para adicionar clipes, legendas ou ajustar o tempo de visualização.",
         parameters: {
@@ -1575,8 +1583,7 @@ export default function App() {
       });
 
       tools.push({ functionDeclarations });
-      // googleSearchRetrieval is currently mutually exclusive with other tools in Gemini API
-      // tools.push({ googleSearchRetrieval: {} }); 
+      tools.push({ googleSearch: {} }); 
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
         return new Promise<any>((resolve) => {
@@ -1617,7 +1624,7 @@ export default function App() {
         : "O Canvas está limpo.";
 
       const result = await genAI.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         contents: historyContents,
         config: {
           systemInstruction: `${profileInstruction}
@@ -1638,7 +1645,7 @@ export default function App() {
           - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
 
           MANIFESTO DE CAPACIDADES DO OSONE 4:
-          - PESQUISA WEB (PROIBIÇÃO DE AUTOMATISMO): Você está PROIBIDO de usar 'google_search' por conta própria para conversas, códigos ou opiniões. Use APENAS se o usuário pedir explicitamente "Pesquise no Google" ou se a informação for um fato de hoje (notícia). Priorize 100% a velocidade da voz.
+          - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
           - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
           - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
           - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
@@ -1675,7 +1682,8 @@ export default function App() {
           IMPORTANTE: A ferramenta 'propose_skeleton_plan' abrirá um popup para o usuário. Se o usuário aprovar, ele enviará uma mensagem confirmando. NÃO escreva o plano no chat, use a FERRAMENTA.
 
           Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
-          tools: tools
+          tools: tools,
+          toolConfig: { includeServerSideToolInvocations: true }
         }
       });
       
@@ -1691,26 +1699,6 @@ export default function App() {
               role: 'assistant' as const, 
               content: `Entendido. Abri a guia: ${title}` 
             }]);
-          } else if (call.name === 'google_search') {
-            const query = (call.args as any).query;
-            try {
-              const searchResult = await genAI.models.generateContent({ 
-                model: "gemini-2.0-flash",
-                contents: [{ role: 'user', parts: [{ text: query }] }],
-                config: {
-                  tools: [{ googleSearchRetrieval: {} }] as any
-                }
-              });
-              const responseText = searchResult.text;
-              
-              addMessage({ 
-                role: 'assistant' as const, 
-                content: `Pesquisei no Google por "${query}":\n\n${responseText}` 
-              });
-            } catch (err: any) {
-              addNotification("Erro na pesquisa Google", "error");
-              console.error("Search error:", err);
-            }
           } else if (call.name === 'search_chat_history') {
             const query = (call.args as any).query.toLowerCase();
             const results = chatHistory.filter(msg => 
@@ -2007,8 +1995,19 @@ export default function App() {
         }
       } else {
         const text = result.text;
+        const grounding = result.candidates?.[0]?.groundingMetadata;
         if (text) {
-          addMessage({ role: 'assistant' as const, content: text });
+          let contentWithSources = text;
+          if (grounding?.groundingChunks) {
+            const sources = grounding.groundingChunks
+              .filter((chunk: any) => chunk.web)
+              .map((chunk: any) => `* [${chunk.web.title}](${chunk.web.uri})`)
+              .filter((v: any, i: number, a: any[]) => a.indexOf(v) === i); // unique
+            if (sources.length > 0) {
+              contentWithSources += "\n\n**Fontes:**\n" + sources.join("\n");
+            }
+          }
+          addMessage({ role: 'assistant' as const, content: contentWithSources });
         }
       }
     } catch (error) {
@@ -3427,7 +3426,7 @@ export default function App() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 pointer-events-none"
           >
-            <div className="relative w-full max-w-3xl flex flex-col gap-4 pointer-events-auto items-center">
+            <div className="relative w-full flex flex-col gap-4 pointer-events-auto items-center">
               <button 
                 onClick={closeLyrics}
                 className="absolute -top-12 md:-top-16 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/40 transition-all border border-white/10"
@@ -3529,10 +3528,10 @@ export default function App() {
 
       {/* Header */}
       {workspaceMode !== 'viralflow' && (
-        <header className="relative z-30 flex justify-between items-center p-4 md:p-6 shrink-0">
+        <header className="relative z-30 flex justify-between items-center p-6 shrink-0 w-full">
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
+            className="p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
           >
             <Menu size={22} />
           </button>
@@ -3577,7 +3576,7 @@ export default function App() {
 
           <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="p-3 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted"
+            className="p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
           >
             <Settings size={22} />
           </button>
@@ -3586,10 +3585,10 @@ export default function App() {
           <button 
             onClick={() => handlePersonaChange(isShadowMode ? PERSONAS[0] : PERSONAS.find(p => p.id === 'shadow')!)}
             className={cn(
-              "ml-1 p-2 rounded-xl border transition-all relative overflow-hidden group",
+              "ml-1 p-2 border-l border-white/5 transition-all relative overflow-hidden group",
               isShadowMode 
-                ? "bg-red-600/20 border-red-500 text-red-500 shadow-[0_0_25px_rgba(255,0,0,0.5)] scale-110" 
-                : "bg-black/20 border-red-900/30 text-red-900/50 hover:bg-red-900/10 hover:text-red-500/70"
+                ? "bg-red-600/20 text-red-500 shadow-[0_0_25px_rgba(255,0,0,0.5)] scale-110" 
+                : "bg-black/20 text-red-900/50 hover:bg-red-900/10 hover:text-red-500/70"
             )}
             title={isShadowMode ? "Desativar Protocolo Sombra" : "ATENÇÃO: ATIVAR PROTOCOLO SOMBRA (EREBUS)"}
           >
@@ -3611,7 +3610,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className={cn(
         "main-content flex-1 relative z-20 flex flex-col w-full min-h-0",
-        workspaceMode === 'viralflow' ? "h-full overflow-hidden p-0" : "overflow-y-auto items-center custom-scrollbar"
+        workspaceMode === 'viralflow' ? "h-full overflow-hidden p-0" : "overflow-y-auto"
       )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
@@ -3620,24 +3619,24 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+              className="w-full flex-1 flex flex-col gap-0 min-h-0"
             >
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
                 <div className="flex items-center gap-4">
                   <button 
                     onClick={() => setWorkspaceMode('home')}
-                    className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                    className="p-6 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border-r border-white/[0.05]"
                   >
                     <ChevronRight size={18} className="rotate-180" />
                   </button>
-                  <h2 className="text-xl font-serif italic font-light">Escrita</h2>
-                  <div className="h-4 w-[1px] bg-white/[0.05]" />
-                  <div className="flex bg-white/[0.03] p-1 rounded-xl border border-white/[0.05]">
+                  <h2 className="text-xl font-serif italic font-light px-4">Escrita</h2>
+                  <div className="h-full w-[1px] bg-white/[0.05]" />
+                  <div className="flex bg-white/[0.03] h-full items-center border-r border-white/[0.05]">
                     <button 
                       onClick={() => setWritingSubMode('text')}
                       className={cn(
-                        "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition-all",
-                        writingSubMode === 'text' ? "bg-white/[0.05] text-white shadow-sm" : "text-her-muted hover:text-white"
+                        "px-6 h-full text-[10px] uppercase tracking-wider transition-all",
+                        writingSubMode === 'text' ? "bg-white/[0.05] text-white" : "text-her-muted hover:text-white"
                       )}
                     >
                       Texto Livre
@@ -3645,8 +3644,8 @@ export default function App() {
                     <button 
                       onClick={() => setWritingSubMode('lyrics')}
                       className={cn(
-                        "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center gap-2",
-                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200 shadow-sm" : "text-her-muted hover:text-white"
+                        "px-6 h-full text-[10px] uppercase tracking-wider transition-all flex items-center gap-2",
+                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200" : "text-her-muted hover:text-white"
                       )}
                     >
                       <Music size={10} />
@@ -3714,15 +3713,15 @@ export default function App() {
               <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
                 {writingSubMode === 'text' ? (
                   <div className={cn(
-                    "transition-all duration-500 flex flex-col gap-4 md:gap-6 min-h-0",
+                    "transition-all duration-500 flex flex-col min-h-0",
                     isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
                   )}>
-                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col min-h-[150px] relative group/editor">
+                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl border-t border-white/[0.05] overflow-hidden flex flex-col min-h-[150px] relative group/editor">
                       <textarea 
                         value={workspaceText}
                         onChange={(e) => setWorkspaceText(e.target.value)}
                         className={cn(
-                          "workspace-textarea flex-1 focus:outline-none p-8 leading-relaxed text-base md:text-sm transition-all",
+                          "workspace-textarea flex-1 focus:outline-none p-6 md:p-12 leading-relaxed text-base md:text-sm transition-all",
                           (workspaceText.includes('<') || workspaceText.includes('{') || workspaceText.includes('function') || workspaceText.includes('const')) 
                             ? "font-mono text-[13px] text-her-ink/90 bg-black/5" 
                             : "font-light text-her-ink"
@@ -3771,8 +3770,8 @@ export default function App() {
                     )}
                     
                     {/* Prompt Input */}
-                    <div className="flex gap-3 p-2 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm shrink-0">
-                      <div className="pl-6 flex items-center text-her-accent opacity-50">
+                    <div className="flex gap-0 bg-white/[0.03] backdrop-blur-md border-t border-white/[0.05] shrink-0 w-full">
+                      <div className="px-6 flex items-center text-her-accent opacity-50">
                         <Wand2 size={18} />
                       </div>
                       <input 
@@ -3781,19 +3780,19 @@ export default function App() {
                         onChange={(e) => setWorkspacePrompt(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
                         placeholder={workspaceText ? "Instruir IA para editar o código..." : "O que você quer que eu crie?"}
-                        className="flex-1 bg-transparent py-3 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                        className="flex-1 bg-transparent py-6 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
                       />
                       <button 
                         onClick={() => handleGenerate()}
                         disabled={isGenerating}
-                        className="p-3.5 bg-her-accent/10 text-her-accent border border-her-accent/20 rounded-[1.5rem] hover:bg-her-accent/20 transition-all disabled:opacity-20"
+                        className="px-8 bg-her-accent/10 text-her-accent border-l border-her-accent/20 hover:bg-her-accent/20 transition-all disabled:opacity-20"
                       >
                         {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full bg-white/[0.02] backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] shadow-sm overflow-hidden flex flex-col">
+                  <div className="w-full h-full bg-white/[0.02] backdrop-blur-xl border-t border-white/[0.05] overflow-hidden flex flex-col">
                     <LyricGenerator />
                   </div>
                 )}
@@ -3802,7 +3801,7 @@ export default function App() {
                   <motion.div 
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="w-full lg:w-1/2 h-1/2 lg:h-full bg-white/[0.02] rounded-[2.5rem] border border-white/[0.05] overflow-hidden min-h-[150px]"
+                    className="w-full lg:w-1/2 h-1/2 lg:h-full bg-white/[0.02] border-t lg:border-t-0 lg:border-l border-white/[0.05] overflow-hidden min-h-[150px]"
                   >
                     <CodePreview code={workspaceText} />
                   </motion.div>
@@ -3824,9 +3823,9 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+              className="w-full flex-1 flex flex-col gap-0 min-h-0"
             >
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/5 w-full">
                 <button 
                   onClick={() => setWorkspaceMode('home')}
                   className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
@@ -3837,18 +3836,18 @@ export default function App() {
               </div>
               <WebtoonCreator apiKeys={apiKeys} />
             </motion.div>
-          ) : workspaceMode === 'viralflow' ? (
+          ) : workspaceMode === 'viral_studio' ? (
             <motion.div 
-              key="workspace-viralflow"
+              key="workspace-viralstudio"
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               className="w-full h-full flex flex-col overflow-hidden relative p-0"
             >
-              <ViralFlow 
-                apiKeys={apiKeys} 
+              <ViralStudio 
                 timeline={timelineState}
                 setTimeline={setTimelineState}
+                apiKeys={apiKeys}
                 onMenuClick={() => setIsSidebarOpen(true)}
                 onBack={() => setWorkspaceMode('home')}
               />
@@ -3859,9 +3858,9 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col gap-4 md:gap-6 min-h-0"
+              className="w-full flex-1 flex flex-col gap-0 min-h-0"
             >
-              <div className="flex items-center gap-4 shrink-0">
+              <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/10 w-full">
                 <button 
                   onClick={() => setWorkspaceMode('home')}
                   className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
@@ -3875,13 +3874,26 @@ export default function App() {
                 onUpdate={handleUpdateHealthData}
               />
             </motion.div>
+          ) : workspaceMode === 'aural_control' ? (
+            <motion.div 
+              key="workspace-aural"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full h-full flex flex-col overflow-hidden relative p-0"
+            >
+              <AuralSense 
+                onMenuClick={() => setIsSidebarOpen(true)}
+                onBack={() => setWorkspaceMode('home')}
+              />
+            </motion.div>
           ) : workspaceMode === 'sounds' ? (
             <motion.div
               key="workspace-sounds"
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full max-w-7xl flex-1 px-4 md:px-8 pb-4 md:pb-8 flex flex-col min-h-0"
+              className="w-full flex-1 flex flex-col min-h-0"
             >
               <SoundLibrary 
                 sounds={soundLibrary}
@@ -3913,7 +3925,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center w-full max-w-4xl h-full px-4 md:px-8 pb-4 md:pb-8 relative"
+              className="flex flex-col items-center w-full h-full relative"
             >
               {chatHistory.length === 0 && (
                 <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
@@ -4023,7 +4035,7 @@ export default function App() {
 
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
-                  "flex-1 flex flex-col gap-2 md:gap-4 px-2 md:px-8 overflow-hidden w-full max-w-3xl mx-auto transition-all duration-700",
+                  "flex-1 flex flex-col overflow-hidden w-full transition-all duration-700",
                   (liveState.status === 'connected' || !isChatExpanded) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
                   chatHistory.length > 0 ? "pt-12 justify-start translate-z-0" : "justify-center"
                 )}>
@@ -4052,7 +4064,7 @@ export default function App() {
                       <p>Manifeste sua intenção...</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-4 md:gap-6 max-h-full overflow-y-auto py-2 md:py-4 pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    <div className="flex flex-col max-h-full overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                       {chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
@@ -4109,7 +4121,7 @@ export default function App() {
                               </div>
                             )}
                           </div>
-                          <div className="max-w-[90%]">
+                          <div className="w-full">
                             {msg.content}
                             {msg.imageUrl && (
                               <div className="mt-4 relative group rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
@@ -4146,7 +4158,7 @@ export default function App() {
                               <span className="w-1 h-1 bg-her-accent rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                             </span>
                           </div>
-                          <div className="max-w-[90%] whitespace-pre-wrap">
+                          <div className="w-full whitespace-pre-wrap">
                             {voiceTranscript}
                           </div>
                         </motion.div>
@@ -4158,10 +4170,10 @@ export default function App() {
                 </div>
 
                 {/* Chat Input Area */}
-                <div className="shrink-0 pt-2 md:pt-4 w-full max-w-3xl mx-auto">
+                <div className="shrink-0 pt-0 w-full pb-0">
                   <div className={cn(
-                    "flex justify-between items-center px-1 mb-2 transition-all duration-300",
-                    !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-auto"
+                    "flex justify-between items-center px-10 mb-0 transition-all duration-300",
+                    !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-20"
                   )}>
                     <div className="flex items-center gap-2">
                       <VoiceSwitcher 
@@ -4202,14 +4214,14 @@ export default function App() {
                     </button>
                     
                     <div className={cn(
-                      "transition-all duration-500 ease-in-out flex items-center gap-2 overflow-hidden px-1 py-1",
-                      isChatExpanded ? "flex-1 md:max-w-xl lg:max-w-3xl" : "flex-none"
+                      "transition-all duration-500 ease-in-out flex items-center overflow-hidden",
+                      isChatExpanded ? "flex-1" : "flex-none"
                     )}>
                       {!isChatExpanded ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center">
                           <button 
                             onClick={() => setIsChatExpanded(true)}
-                            className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent hover:border-her-accent/20"
+                            className="w-20 h-20 bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-r border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Escrever mensagem"
                           >
                             <MessageSquare size={18} />
@@ -4217,7 +4229,7 @@ export default function App() {
                           
                           <button 
                             onClick={() => setIsPersonaSwitcherOpen(true)}
-                            className="w-11 h-11 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-20 h-20 bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-r border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Modos de Personalidade"
                           >
                             <UserIcon size={18} />
@@ -4226,10 +4238,10 @@ export default function App() {
                           <button 
                             onClick={toggleCamera}
                             className={cn(
-                              "w-11 h-11 rounded-full flex items-center justify-center transition-all border",
+                              "w-20 h-20 flex items-center justify-center transition-all border-r",
                               isCameraActive 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
-                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-her-accent hover:border-her-accent/20"
+                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-her-accent"
                             )}
                             title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
                           >
@@ -4239,7 +4251,7 @@ export default function App() {
                           <button 
                             onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                             className={cn(
-                              "w-11 h-11 rounded-full flex items-center justify-center transition-all border",
+                              "w-20 h-20 flex items-center justify-center transition-all border-r",
                               isScreenSharing 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30" 
                                 : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05]"
@@ -4253,21 +4265,21 @@ export default function App() {
                         <motion.div 
                           initial={{ width: 0, opacity: 0 }}
                           animate={{ width: '100%', opacity: 1 }}
-                          className="flex-1 flex flex-col gap-2 p-1.5 bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/[0.05] shadow-sm relative"
+                          className="flex-1 flex flex-col gap-0 bg-white/[0.03] backdrop-blur-md border-t border-white/[0.05] relative w-full"
                         >
                           {attachedFiles.length > 0 && (
-                            <div className="flex flex-wrap gap-2 px-4 pt-2">
+                            <div className="flex flex-wrap gap-2 px-10 pt-4 pb-2 bg-black/20">
                               {attachedFiles.map((file, idx) => (
-                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full text-[10px] text-her-muted border border-white/5">
-                                  <span className="truncate max-w-[100px]">{file.name}</span>
-                                  <button onClick={() => removeFile(idx)} className="hover:text-red-400">
-                                    <X size={10} />
+                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full text-[10px] text-her-muted border border-white/5 shadow-sm">
+                                  <span className="truncate max-w-[150px]">{file.name}</span>
+                                  <button onClick={() => removeFile(idx)} className="hover:text-red-400 p-1">
+                                    <X size={12} />
                                   </button>
                                 </div>
                               ))}
                             </div>
                           )}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center h-24">
                             <input 
                               type="file"
                               ref={fileInputRef}
@@ -4277,9 +4289,9 @@ export default function App() {
                             />
                             <button 
                               onClick={() => fileInputRef.current?.click()}
-                              className="p-2.5 text-her-muted hover:text-her-accent transition-colors ml-1"
+                              className="w-20 h-full text-her-muted hover:text-her-accent transition-colors border-r border-white/5 flex items-center justify-center"
                             >
-                              <Paperclip size={18} />
+                              <Paperclip size={20} />
                             </button>
                             <input 
                               type="text"
@@ -4290,23 +4302,23 @@ export default function App() {
                                 if (e.key === 'Escape') setIsChatExpanded(false);
                               }}
                               placeholder="Diga algo para o OSONE..."
-                              className="flex-1 bg-transparent px-2 py-2.5 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
+                              className="flex-1 bg-transparent px-8 focus:outline-none text-base md:text-lg font-light text-her-ink/80 placeholder:text-her-muted/20"
                               autoFocus
                             />
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center h-full">
                               <button 
                                 onClick={() => handleHomeChat()}
                                 disabled={!homePrompt.trim() && attachedFiles.length === 0}
-                                className="p-2.5 bg-her-accent/20 text-her-accent rounded-full hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale"
+                                className="w-24 h-full bg-her-accent/20 text-her-accent hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale border-l border-white/5 flex items-center justify-center"
                               >
-                                <Send size={18} />
+                                <Send size={22} />
                               </button>
                               <button 
                                 onClick={() => setIsChatExpanded(false)}
-                                className="p-2.5 text-her-muted hover:text-red-400 transition-colors mr-1"
+                                className="w-20 h-full text-her-muted hover:text-red-400 transition-colors border-l border-white/5 flex items-center justify-center"
                                 title="Recolher"
                               >
-                                <X size={16} />
+                                <X size={20} />
                               </button>
                             </div>
                           </div>
@@ -4428,7 +4440,7 @@ export default function App() {
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
               src={fullScreenImage} 
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" 
+              className="w-full max-h-[90vh] object-contain shadow-2xl" 
               alt="Fullscreen generated" 
               referrerPolicy="no-referrer"
               onClick={(e) => e.stopPropagation()}

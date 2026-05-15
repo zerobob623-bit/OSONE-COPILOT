@@ -18,7 +18,7 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'canvas' | 'wellness';
+export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'viral_studio' | 'canvas' | 'wellness' | 'aural_control';
 
 export interface DrawingObject {
   id: string;

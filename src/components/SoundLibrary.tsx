@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Music, Plus, Trash2, Play, Volume2, X, Search, Upload, Link, Square, Edit2, Sparkles, Wand2, Music2, Brain } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
 import { SoundEffect } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
@@ -83,7 +83,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
         model: "gemini-2.5-flash",
         contents: prompt
       });
-      const data = JSON.parse((result.text || "").replace(/```json|```/g, ''));
+      const data = safeJsonParse(result.text || "", { name: "Som", category: "funny", url: "" });
       
       onAddSound({
         name: `[AI] ${data.name}`,
@@ -134,11 +134,11 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
   };
 
   return (
-    <div className="flex flex-col h-full bg-her-bg/50 backdrop-blur-xl rounded-[2.5rem] border border-white/[0.05] overflow-hidden">
+    <div className="flex flex-col h-full bg-her-bg/50 backdrop-blur-xl overflow-hidden w-full">
       {/* Header */}
-      <div className="p-6 md:p-8 flex items-center justify-between border-b border-white/[0.05]">
+      <div className="p-10 flex items-center justify-between border-b border-white/[0.05] bg-black/20">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-her-accent/10 rounded-2xl text-her-accent">
+          <div className="p-4 bg-her-accent/10 text-her-accent">
             <Music size={24} />
           </div>
           <div>
@@ -150,7 +150,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
           {playingUrl && (
             <button 
               onClick={onStopSound}
-              className="flex items-center gap-2 px-4 py-2 bg-red-400/10 text-red-400 hover:bg-red-400/20 rounded-xl text-xs font-light border border-red-400/20 transition-all"
+              className="flex items-center gap-2 px-6 py-4 bg-red-400/10 text-red-400 hover:bg-red-400/20 text-xs font-light border border-red-400/20 transition-all uppercase tracking-widest"
             >
               <Square size={14} fill="currentColor" />
               <span>Parar Todos</span>
@@ -158,20 +158,20 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
           )}
           <button 
             onClick={onRestoreDefaults}
-            className="hidden md:flex items-center gap-2 px-4 py-2 bg-white/[0.05] text-her-muted hover:text-white rounded-xl text-xs font-light border border-white/[0.05] transition-all"
+            className="hidden md:flex items-center gap-2 px-6 py-4 bg-white/[0.05] text-her-muted hover:text-white text-xs font-light border border-white/[0.05] transition-all uppercase tracking-widest"
           >
             <span>Restaurar Padrões</span>
           </button>
           <button 
             onClick={() => setIsAiModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500/20 to-her-accent/20 text-purple-200 rounded-xl text-xs font-light border border-purple-500/30 hover:from-purple-500/30 hover:to-her-accent/30 transition-all"
+            className="flex items-center gap-2 px-6 py-4 bg-gradient-to-r from-purple-500/20 to-her-accent/20 text-purple-200 text-xs font-light border border-purple-500/30 hover:from-purple-500/30 hover:to-her-accent/30 transition-all uppercase tracking-widest"
           >
             <Sparkles size={16} className="text-purple-400" />
             <span>Gerar com IA</span>
           </button>
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-her-accent text-white rounded-xl text-xs font-light hover:bg-her-accent/90 transition-all"
+            className="flex items-center gap-2 px-6 py-4 bg-her-accent text-white text-xs font-light hover:bg-her-accent/90 transition-all uppercase tracking-widest"
           >
             <Plus size={16} />
             <span>Adicionar</span>
@@ -182,7 +182,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 p-6 md:p-8 gap-6">
+      <div className="flex-1 flex flex-col min-h-0 p-10 gap-10">
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 shrink-0">
           <div className="flex-1 relative">
@@ -192,7 +192,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
               placeholder="Buscar sons..." 
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl py-2.5 pl-10 pr-4 text-sm font-light focus:outline-none focus:border-her-accent/30 transition-all"
+              className="w-full bg-white/[0.03] border border-white/[0.05] py-4 pl-12 pr-6 text-base font-light focus:outline-none focus:border-her-accent/30 transition-all"
             />
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
@@ -201,7 +201,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
-                  "px-4 py-2 rounded-xl text-[10px] uppercase tracking-wider font-light transition-all whitespace-nowrap border",
+                  "px-6 py-3 text-[11px] uppercase tracking-widest font-light transition-all whitespace-nowrap border",
                   activeCategory === cat 
                     ? "bg-her-accent/10 text-her-accent border-her-accent/20" 
                     : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
@@ -222,7 +222,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                 key={sound.id}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="group relative p-4 bg-white/[0.03] border border-white/[0.05] rounded-2xl hover:bg-white/[0.06] transition-all"
+                className="group relative p-8 bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition-all"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="p-2 bg-her-accent/5 rounded-lg text-her-accent">
@@ -251,7 +251,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                 <button
                   onClick={() => playingUrl === sound.url ? onStopSound() : onPlaySound(sound.url)}
                   className={cn(
-                    "mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] uppercase tracking-widest transition-all",
+                    "mt-4 w-full flex items-center justify-center gap-3 py-3 text-[11px] uppercase tracking-widest transition-all",
                     playingUrl === sound.url 
                       ? "bg-her-accent text-white" 
                       : "bg-white/[0.05] hover:bg-her-accent hover:text-white"
@@ -402,28 +402,28 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
               </div>
 
               <div className="space-y-4">
-                <div className="flex bg-white/[0.03] rounded-xl p-1 mb-2">
-                  <button 
-                    onClick={() => setUploadType('url')}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] uppercase tracking-wider transition-all",
-                      uploadType === 'url' ? "bg-white/10 text-white" : "text-her-muted hover:text-white/60"
-                    )}
-                  >
-                    <Link size={12} />
-                    Link
-                  </button>
-                  <button 
-                    onClick={() => setUploadType('file')}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] uppercase tracking-wider transition-all",
-                      uploadType === 'file' ? "bg-white/10 text-white" : "text-her-muted hover:text-white/60"
-                    )}
-                  >
-                    <Upload size={12} />
-                    Arquivo
-                  </button>
-                </div>
+              <div className="flex bg-white/[0.03] p-1 mb-2">
+                <button 
+                  onClick={() => setUploadType('url')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-4 text-[10px] uppercase tracking-wider transition-all",
+                    uploadType === 'url' ? "bg-white/10 text-white" : "text-her-muted hover:text-white/60"
+                  )}
+                >
+                  <Link size={12} />
+                  Link
+                </button>
+                <button 
+                  onClick={() => setUploadType('file')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-2 py-4 text-[10px] uppercase tracking-wider transition-all",
+                    uploadType === 'file' ? "bg-white/10 text-white" : "text-her-muted hover:text-white/60"
+                  )}
+                >
+                  <Upload size={12} />
+                  Arquivo
+                </button>
+              </div>
 
                 <div>
                   <label className="block text-[9px] uppercase tracking-widest text-her-muted mb-2 font-light">Nome do Som</label>
@@ -432,7 +432,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                     value={newSound.name}
                     onChange={(e) => setNewSound({ ...newSound, name: e.target.value })}
                     placeholder="Ex: Risada Comica"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl py-2.5 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] py-3 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
                 <div>
@@ -440,7 +440,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                   <select 
                     value={newSound.category}
                     onChange={(e) => setNewSound({ ...newSound, category: e.target.value })}
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl py-2.5 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30 appearance-none"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] py-3 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30 appearance-none"
                   >
                     <option value="funny">Funny</option>
                     <option value="comico">Comico</option>
@@ -460,7 +460,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                       value={newSound.url}
                       onChange={(e) => setNewSound({ ...newSound, url: e.target.value })}
                       placeholder="https://exemplo.com/som.mp3"
-                      className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl py-2.5 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30"
+                      className="w-full bg-white/[0.03] border border-white/[0.05] py-3 px-4 text-sm font-light focus:outline-none focus:border-her-accent/30"
                     />
                   ) : (
                     <div className="relative">
@@ -501,7 +501,7 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                 <button 
                   onClick={handleAdd}
                   disabled={!newSound.name || !newSound.url || isUploading}
-                  className="w-full py-3 bg-her-accent text-white rounded-xl text-xs font-light hover:bg-her-accent/90 transition-all disabled:opacity-30 disabled:grayscale mt-4"
+                  className="w-full py-5 bg-her-accent text-white text-xs font-black uppercase tracking-[0.2em] hover:bg-her-accent/90 transition-all disabled:opacity-30 disabled:grayscale mt-4"
                 >
                   {isUploading ? 'Processando...' : editingSound ? 'Salvar Alterações' : 'Adicionar à Biblioteca'}
                 </button>

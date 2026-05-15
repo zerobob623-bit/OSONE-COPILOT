@@ -27,10 +27,11 @@ import {
   FileSearch,
   Target,
   TrendingUp,
-  Menu
+  Menu,
+  Info
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
 import { VideoTimelineState, VideoClip, VideoSubtitle } from '../types';
 
 interface ViralStudioProps {
@@ -54,15 +55,18 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
   const [scriptText, setScriptText] = useState('');
   
   // AI States
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAutoEditing, setIsAutoEditing] = useState(false);
   const [transcription, setTranscription] = useState<string | null>(null);
-  const [topic, setTopic] = useState('');
-  const [niche, setNiche] = useState('entertainment');
-  const [tone, setTone] = useState('energetic');
-  const [platform, setPlatform] = useState('tiktok');
+  const [toast, setToast] = useState<{ message: string, type: 'info' | 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
   const timelineRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -196,62 +200,124 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
     }));
   };
 
-  const [activeSideTab, setActiveSideTab] = useState<'media' | 'script' | 'analyze'>('media');
-
-  const generateViralScript = async (referenceContent?: string) => {
-    const currentTopic = referenceContent ? "Baseado na referência analisada" : topic;
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if ((!currentTopic && !referenceContent) || !effectiveApiKey) return;
-
-    setIsGenerating(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-      const prompt = referenceContent 
-        ? `Use este conteúdo como REFERÊNCIA ESTRATÉGICA: "${referenceContent}". Crie um NOVO roteiro para ${platform}.`
-        : `Crie um roteiro viral estratégico para ${platform}. Assunto: ${topic}. Nicho: ${niche}. Tom: ${tone}`;
-      
-      const finalPrompt = `${prompt} Responda em formato JSON com campos 'suggestedTitle' e 'sections' (array de {title, content, visualCue}).`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ parts: [{ text: finalPrompt }] }],
-        config: { responseMimeType: "application/json" }
-      });
-
-      const data = JSON.parse(response.text);
-      const fullText = data.sections.map((s: any) => `${s.title}: ${s.content}`).join('\n\n');
-      setScriptText(fullText);
-      setActiveSideTab('script');
-    } catch (error) {
-      console.error("Erro ao gerar roteiro:", error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const analyzeVideo = async (file: File) => {
     const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
     if (!file || !effectiveApiKey) return;
 
     setIsAnalyzing(true);
     try {
-      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.readAsDataURL(file);
       });
       const base64Data = await base64Promise;
-      const result = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [{ parts: [{ text: "Analise este vídeo e identifique a estrutura do roteiro." }, { inlineData: { data: base64Data, mimeType: file.type } }] }]
+
+      showToast("Analisando vídeo de referência...", "info");
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: {
+          parts: [
+            { text: "Analise este vídeo e identifique a estrutura do roteiro. Extraia hooks, tópicos e CTAs." },
+            { inlineData: { data: base64Data, mimeType: file.type } }
+          ]
+        }
       });
-      setTranscription(result.text);
-      setActiveSideTab('analyze');
+      const text = response.text || "";
+      setTranscription(text);
+      showToast("Engenharia reversa concluída!", "success");
     } catch (error) {
       console.error("Erro ao analisar vídeo:", error);
+      showToast("Falha na análise do vídeo.", "error");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const autoEditWithAI = async () => {
+    if (!videoFile) return;
+    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+    if (!effectiveApiKey) return;
+
+    setIsAutoEditing(true);
+    showToast("Iniciando Engenharia Social do Vídeo...", "info");
+    try {
+      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+      
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(videoFile);
+      });
+      const base64Data = await base64Promise;
+
+      const prompt = `Você é um ENGENHEIRO DE EDIÇÃO AUTOMATIZADA e expert em retenção viral (TikTok/YouTube Shorts).
+Seu objetivo é extrair apenas o "ouro" do vídeo bruto, removendo imperfeições humanas.
+
+REGRAS RÍGIDAS DE ANÁLISE:
+1. Delete todos os silêncios maiores que 0.3 segundos.
+2. Delete gagues, repetições de palavras e erros de fala.
+3. Delete vícios de linguagem (filler words) como: "é...", "tipo", "né", "hum", "tá?", "então".
+4. Mantenha apenas frases completas com energia alta.
+5. Crie cortes secos e rápidos (Jump Cuts) para aumentar a retenção.
+
+RETORNE APENAS JSON.
+Formato: { "segments": [{ "start": float, "end": float, "label": "fala_otimizada" }] }`;
+
+      showToast("IA detectando silêncios e vícios de linguagem...", "info");
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: {
+          parts: [
+            { text: prompt },
+            { inlineData: { data: base64Data, mimeType: videoFile.type } }
+          ]
+        },
+        config: { 
+          responseMimeType: "application/json",
+          temperature: 0.1 
+        }
+      });
+
+      const responseText = response.text || "{}";
+      const data = safeJsonParse(responseText, { segments: [] });
+
+      if (data.segments && Array.isArray(data.segments) && data.segments.length > 0) {
+        let currentTimelineTime = 0;
+        const newClips = data.segments.map((seg: { start: number; end: number, label?: string }, index: number) => {
+          const duration = seg.end - seg.start;
+          const clip: VideoClip = {
+            id: `ai-pro-cut-${index}-${Date.now()}`,
+            title: seg.label || `Jump Cut ${index + 1}`,
+            startTime: currentTimelineTime,
+            duration: duration,
+            sourceUrl: videoUrl || '',
+            sourceOffset: seg.start,
+            type: 'video',
+            trackIndex: 0
+          };
+          currentTimelineTime += duration;
+          return clip;
+        });
+
+        setTimeline(prev => ({
+          ...prev,
+          clips: newClips,
+          totalDuration: currentTimelineTime,
+          currentTime: 0
+        }));
+        
+        if (videoRef.current) videoRef.current.currentTime = 0;
+        showToast(`${newClips.length} cortes dinâmicos aplicados!`, "success");
+      } else {
+        showToast("Nenhum corte necessário identificado.", "info");
+      }
+    } catch (error) {
+      console.error("Erro no Auto-Edit:", error);
+      showToast("Falha na automação inteligente.", "error");
+    } finally {
+      setIsAutoEditing(false);
     }
   };
 
@@ -271,18 +337,25 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
         {onMenuClick && (
           <button 
             onClick={onMenuClick}
-            className="p-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-black/60 transition-all"
+            className="p-3 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-black/60 transition-all"
           >
             <Menu size={20} />
           </button>
         )}
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-2 px-4 py-3 bg-her-accent/20 backdrop-blur-xl border border-her-accent/30 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-her-accent hover:bg-her-accent hover:text-white transition-all shadow-2xl"
+        >
+          <Plus size={16} />
+          <span>Enviar Arquivo</span>
+        </button>
         {onBack && (
           <button 
             onClick={onBack}
             className="flex items-center gap-2 px-4 py-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-white transition-all shadow-2xl"
           >
             <ChevronRight size={14} className="rotate-180" />
-            <span className="hidden md:inline">Dashboard</span>
+            <span className="hidden md:inline">Início</span>
           </button>
         )}
       </div>
@@ -301,136 +374,75 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col xl:flex-row-reverse overflow-hidden relative">
-        {/* Unified Tools Panel (Right on Desktop, Bottom/Drawer on Mobile) */}
-        <div className="w-full xl:w-[420px] bg-[#050505]/95 xl:bg-[#050505]/50 backdrop-blur-3xl flex flex-col shrink-0 z-40 h-[28vh] xl:h-auto xl:max-h-none overflow-hidden relative border-t xl:border-t-0 xl:border-l border-white/10 shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
-           <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-white/5 to-transparent hidden xl:block" />
-           {/* Sidebar Tabs */}
-           <div className="flex border-b border-white/5 p-1.5 xl:p-4 gap-1.5 xl:gap-3 shrink-0">
-              {[
-                { id: 'media', icon: <Plus size={16} />, label: 'Mídia' },
-                { id: 'script', icon: <Sparkles size={16} />, label: 'Roteiro' },
-                { id: 'analyze', icon: <Zap size={16} />, label: 'Viral' }
-              ].map(tab => (
-                <button 
-                  key={tab.id}
-                  onClick={() => setActiveSideTab(tab.id as any)}
-                  className={cn(
-                    "flex-1 flex flex-col items-center py-2.5 xl:py-4 rounded-xl xl:rounded-2xl transition-all gap-1.5 xl:gap-2",
-                    activeSideTab === tab.id ? "bg-her-accent/20 text-her-accent border border-her-accent/20" : "text-white/30 hover:text-white"
-                  )}
-                >
-                  {tab.icon}
-                  <span className="text-[9px] xl:text-[11px] font-bold uppercase tracking-widest">{tab.label}</span>
-                </button>
-              ))}
+        {/* Simplified Media Panel */}
+        <div className="w-full xl:w-[420px] bg-[#050505] xl:bg-[#050505]/50 backdrop-blur-3xl flex flex-col shrink-0 z-40 border-t xl:border-t-0 xl:border-l border-white/10 shadow-[0_-20px_50px_rgba(0,0,0,0.8)] h-full max-h-[50vh] xl:max-h-none">
+           {/* Header for Desktop only or simplified handle for Mobile */}
+           <div className="w-12 h-1 bg-white/10 rounded-full mx-auto my-2 xl:hidden shrink-0" />
+           <div className="p-4 xl:p-8 shrink-0 flex items-center justify-between border-b border-white/5">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Biblioteca de Mídia</h3>
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 bg-her-accent/20 text-her-accent rounded-lg border border-her-accent/30 hover:bg-her-accent hover:text-white transition-all"
+              >
+                <Plus size={16} />
+              </button>
            </div>
-
+           
            <div className="flex-1 overflow-y-auto p-4 xl:p-8 custom-scrollbar">
-              <AnimatePresence mode="wait">
-                {activeSideTab === 'media' && (
-                  <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} key="media" className="space-y-6">
-                    <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full h-40 border-2 border-dashed border-white/10 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 hover:border-her-accent/50 hover:bg-her-accent/5 transition-all group"
-                    >
-                      <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white/40 group-hover:text-her-accent transition-all group-hover:scale-110">
-                        <Plus size={28} />
-                      </div>
-                      <div className="text-center">
-                        <span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">SUBIR VÍDEO</span>
-                        <span className="block text-[9px] text-white/20 mt-1 uppercase tracking-widest font-mono">Formatos: MP4, MOV, WebM</span>
-                      </div>
-                    </button>
-                    <input type="file" ref={fileInputRef} hidden accept="video/*" onChange={handleFileChange} />
-                    
-                    <div className="space-y-4">
-                       <h5 className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1 border-l-2 border-her-accent pl-3">Arquivos do Projeto</h5>
-                       {videoUrl && (
-                         <div className="p-4 bg-white/[0.03] rounded-3xl border border-white/10 flex items-center gap-4 group hover:bg-white/[0.05] transition-all">
-                            <div className="w-16 h-16 bg-black rounded-2xl overflow-hidden shrink-0 border border-white/10 relative">
-                               <video src={videoUrl} className="w-full h-full object-cover" />
-                               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Play size={16} className="text-white" />
-                               </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                               <p className="text-[11px] font-bold text-white truncate uppercase tracking-tighter">media_01.mp4</p>
-                               <div className="flex items-center gap-3 mt-1.5">
-                                 <span className="px-2 py-0.5 bg-green-500/10 text-green-500 text-[8px] font-bold rounded-full border border-green-500/20">ATIVO</span>
-                                 <p className="text-[9px] text-white/30 truncate uppercase tracking-widest font-mono">0:24s</p>
-                               </div>
-                            </div>
-                         </div>
-                       )}
+              <div className="space-y-6">
+                {!videoUrl && (
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full aspect-video xl:h-40 border-2 border-dashed border-white/10 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 hover:border-her-accent/50 hover:bg-her-accent/5 transition-all group"
+                  >
+                    <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white/40 group-hover:text-her-accent transition-all group-hover:scale-110">
+                      <Plus size={28} />
                     </div>
-                  </motion.div>
+                    <div className="text-center px-4">
+                      <span className="block text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">SUBIR VÍDEO</span>
+                      <span className="block text-[9px] text-white/20 mt-1 uppercase tracking-widest font-mono">Formatos: MP4, MOV, WebM</span>
+                    </div>
+                  </button>
                 )}
-
-                {activeSideTab === 'script' && (
-                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} key="script" className="space-y-6">
-                    <div className="flex items-center justify-between px-1">
-                       <h5 className="text-[10px] font-bold uppercase tracking-widest text-white/20">Gerador Viral</h5>
-                       <button 
-                         onClick={() => generateViralScript()}
-                         disabled={isGenerating || !topic}
-                         className="text-[10px] font-bold text-her-accent uppercase hover:underline flex items-center gap-2"
-                       >
-                         {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                         Gerar
-                       </button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                       <p className="text-[9px] uppercase font-bold text-white/20 px-1">Seu Conceito</p>
-                       <textarea 
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="Ex: 3 erros ao investir no Reels..."
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-[12px] text-white h-24 resize-none focus:ring-1 focus:ring-her-accent/20 transition-all font-serif italic leading-relaxed"
-                       />
-                    </div>
-
-                    <div className="h-[1px] bg-white/5 mx-1" />
-
-                    <div className="flex flex-col gap-3">
-                       <p className="text-[9px] uppercase font-bold text-white/20 px-1">Script Resultante</p>
-                       <textarea 
-                        value={scriptText}
-                        onChange={(e) => setScriptText(e.target.value)}
-                        placeholder="O roteiro aparecerá aqui..."
-                        className="w-full h-80 bg-white/5 border border-white/10 rounded-2xl p-4 text-[12px] text-white/80 font-serif italic leading-relaxed resize-none focus:ring-1 focus:ring-her-accent/20"
-                       />
-                    </div>
-                  </motion.div>
+                <input type="file" ref={fileInputRef} hidden accept="video/*" onChange={handleFileChange} />
+                
+                {videoUrl && (
+                  <div className="space-y-4">
+                     <h5 className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1 border-l-2 border-her-accent pl-3">No Projeto</h5>
+                     <div className="p-4 bg-white/[0.03] rounded-3xl border border-white/10 flex items-center gap-4 group hover:bg-white/[0.05] transition-all relative overflow-hidden">
+                        <div className="w-20 h-20 bg-black rounded-2xl overflow-hidden shrink-0 border border-white/10 relative">
+                           <video src={videoUrl} className="w-full h-full object-cover" />
+                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Play size={16} className="text-white" />
+                           </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                           <p className="text-[11px] font-bold text-white truncate uppercase tracking-tighter">media_01.mp4</p>
+                           <div className="flex items-center gap-3 mt-1.5">
+                             <span className="px-2 py-0.5 bg-green-500/10 text-green-500 text-[8px] font-bold rounded-full border border-green-500/20">ATIVO</span>
+                             <p className="text-[9px] text-white/30 truncate uppercase tracking-widest font-mono">0:24s</p>
+                           </div>
+                        </div>
+                     </div>
+                     <button 
+                        onClick={() => autoEditWithAI()}
+                        disabled={isAutoEditing}
+                        className="w-full py-4 bg-her-accent text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:shadow-[0_0_30px_rgba(var(--her-accent),0.4)] transition-all flex items-center justify-center gap-3 disabled:opacity-50 group overflow-hidden relative mt-4 shadow-2xl"
+                     >
+                        {isAutoEditing ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Zap size={16} className="group-hover:animate-pulse" />
+                        )}
+                        <span>{isAutoEditing ? 'Editando...' : 'Auto-Corte Inteligente (IA)'}</span>
+                        <div className="absolute inset-0 bg-white/10 -translate-x-full group-hover:translate-x-0 transition-transform duration-500 pointer-events-none" />
+                     </button>
+                  </div>
                 )}
-
-                {activeSideTab === 'analyze' && (
-                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} key="analyze" className="space-y-4">
-                    <div className="p-6 border border-dashed border-white/10 rounded-[2rem] text-center space-y-3 bg-white/[0.02]">
-                       <Zap size={24} className="mx-auto text-her-accent" />
-                       <p className="text-[9px] font-bold uppercase tracking-widest text-white">Inteligência Competitiva</p>
-                       <p className="text-[8px] text-white/40 italic">Entenda o segredo dos vídeos que dominam o feed.</p>
-                       
-                       {transcription ? (
-                         <div className="text-left p-3 bg-black rounded-xl border border-white/5 text-[9px] text-white/60 max-h-40 overflow-y-auto">
-                            {transcription}
-                         </div>
-                       ) : (
-                         <button 
-                           onClick={() => {
-                             if (videoFile) analyzeVideo(videoFile);
-                           }}
-                           className="w-full py-2 bg-white text-black rounded-xl text-[10px] font-bold uppercase tracking-widest hover:scale-105 transition-all"
-                         >
-                            {isAnalyzing ? <Loader2 size={12} className="animate-spin mx-auto" /> : "Analisar Vídeo Atual"}
-                         </button>
-                       )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              </div>
            </div>
         </div>
+
 
         {/* Center Area: Player & Tools */}
         <div className="flex-1 flex flex-col bg-[#080808] overflow-hidden relative">
@@ -455,20 +467,42 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
           <div className="flex-1 flex flex-col p-0 relative group">
              {/* Main Canvas Context */}
              <div className="flex-1 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--her-accent)_0%,_transparent_70%)] opacity-[0.06] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--her-accent)_0%,_transparent_70%)] opacity-[0.04] pointer-events-none" />
                 
                 {/* Virtual Video Canvas / Real Video Element */}
                 <div 
                   ref={playerRef}
-                  className="aspect-[9/16] h-full max-h-full bg-white/[0.01] rounded-none md:rounded-[3.5rem] border-none md:border md:border-white/10 shadow-none md:shadow-[0_0_120px_rgba(0,0,0,0.9)] relative overflow-hidden flex flex-col items-center justify-center transition-all duration-700"
+                  className="aspect-[9/16] h-full max-h-full bg-white/[0.01] rounded-none md:rounded-[3.5rem] border-x md:border border-white/10 shadow-2xl relative overflow-hidden flex flex-col items-center justify-center transition-all duration-700"
                 >
                    {videoUrl ? (
-                     <video 
-                       ref={videoRef}
-                       src={videoUrl}
-                       className="w-full h-full object-contain"
-                       playsInline
-                     />
+                      <div className="w-full h-full relative">
+                        <video 
+                          ref={videoRef}
+                          src={videoUrl}
+                          className={cn("w-full h-full object-contain", isAutoEditing && "opacity-20")}
+                          playsInline
+                        />
+                        {isAutoEditing && (
+                          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-8 text-center bg-black/60 backdrop-blur-md">
+                            <div className="w-20 h-20 bg-her-accent/20 rounded-full flex items-center justify-center mb-6 border border-her-accent/40 relative">
+                               <Zap size={40} className="text-her-accent animate-pulse" />
+                               <div className="absolute inset-0 rounded-full border-2 border-her-accent animate-ping opacity-20" />
+                            </div>
+                            <h2 className="text-xl font-bold mb-2 uppercase tracking-[0.2em] italic">AI AUTO-EDITOR PRO</h2>
+                            <p className="text-[10px] text-white/40 uppercase tracking-widest font-black max-w-[280px] leading-loose">
+                              Detectando filler words (né, tipo, é), removendo silêncios &gt; 0.4s e otimizando retenção via Jump Cuts.
+                            </p>
+                            <div className="mt-8 w-48 h-1 bg-white/10 rounded-full overflow-hidden">
+                               <motion.div 
+                                 initial={{ x: "-100%" }}
+                                 animate={{ x: "100%" }}
+                                 transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                                 className="w-full h-full bg-her-accent"
+                               />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                    ) : (
                       <div className="text-center space-y-6 opacity-30 max-w-[200px]">
                         <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6 border border-white/10 animate-pulse">
@@ -500,7 +534,10 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
                       </motion.div>
                    )}
                 </div>
-               {/* Dynamic Float Controls */}
+              </div>
+           </div>
+
+           {/* Dynamic Float Controls */}
               <div className="flex flex-col items-center justify-center gap-4 px-4 py-6 xl:py-10">
                  <div className="flex items-center gap-6 xl:gap-10 bg-black/60 xl:bg-white/[0.03] backdrop-blur-3xl border border-white/10 px-6 xl:px-10 py-3 xl:py-5 rounded-full xl:rounded-[2.5rem] shadow-2xl mx-auto ring-1 ring-white/5">
                     <div className="hidden xl:flex items-center gap-4 border-r border-white/5 pr-10">
@@ -518,11 +555,11 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
                        <button 
                          onClick={togglePlay}
                          className={cn(
-                           "w-12 h-12 xl:w-16 xl:h-16 rounded-full flex items-center justify-center transition-all duration-300 relative group active:scale-90",
+                           "w-10 h-10 xl:w-16 xl:h-16 rounded-full flex items-center justify-center transition-all duration-300 relative group active:scale-90",
                            timeline.isPlaying ? "bg-white text-black" : "bg-her-accent text-white shadow-[0_0_50px_rgba(var(--her-accent),0.4)]"
                          )}
                        >
-                          {timeline.isPlaying ? <Pause size={24} className="xl:hidden" fill="currentColor" /> : <Play size={24} className="xl:hidden ml-0.5" fill="currentColor" />}
+                          {timeline.isPlaying ? <Pause size={20} className="xl:hidden" fill="currentColor" /> : <Play size={20} className="xl:hidden ml-0.5" fill="currentColor" />}
                           {timeline.isPlaying ? <Pause size={32} className="hidden xl:block" fill="currentColor" /> : <Play size={32} className="hidden xl:block ml-1" fill="currentColor" />}
                        </button>
                        <button className="text-white/20 hover:text-white transition-colors"><SkipForward size={20} className="xl:hidden" /><SkipForward size={28} className="hidden xl:block" /></button>
@@ -543,27 +580,15 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
                        <Type size={20} className="xl:hidden group-hover:scale-110 transition-transform" />
                        <Type size={24} className="hidden xl:block group-hover:scale-110 transition-transform" />
                     </button>
-                 </div>
-              </div>
-          </div>
+                                 </div>
 
-
-          {/* Timeline Panel */}
-          <div className="h-[140px] md:h-[400px] border-t border-white/10 bg-[#020202] flex flex-col shrink-0 z-40 relative">
+           {/* Timeline Panel */}
+          <div className="flex-1 md:h-[400px] border-t border-white/10 bg-[#020202] flex flex-col shrink-0 z-40 relative">
              {/* Toolbar */}
-             <div className="h-10 md:h-16 border-b border-white/5 px-2.5 md:px-8 flex items-center justify-between shrink-0 bg-black/60 shadow-xl">
-                <div className="flex bg-white/5 p-1 rounded-xl xl:rounded-2xl scale-90 xl:scale-100 origin-left">
-                   {['Vídeo', 'Áudio', 'Títulos', 'Efeitos'].map((tab) => (
-                      <button 
-                         key={tab}
-                         className={cn(
-                           "px-3 xl:px-6 py-1.5 xl:py-2 rounded-lg xl:rounded-xl text-[8px] xl:text-[10px] font-bold uppercase tracking-widest transition-all",
-                           activeTab.toLowerCase() === tab.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace("titulos", "subtitles") ? "bg-white/10 text-white shadow-xl border border-white/5" : "text-her-muted hover:text-white"
-                         )}
-                      >
-                        {tab}
-                      </button>
-                   ))}
+             <div className="h-10 md:h-16 border-b border-white/5 px-4 md:px-8 flex items-center justify-between shrink-0 bg-black/60 shadow-xl overflow-x-auto no-scrollbar">
+
+                <div className="flex items-center gap-4 shrink-0">
+                   <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-her-accent">Timeline Editor</h4>
                 </div>
                 
                 <div className="flex items-center gap-4 xl:gap-8">
@@ -587,18 +612,18 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
              {/* Tracks Area */}
              <div className="flex-1 flex overflow-hidden">
                 {/* Labels Column */}
-                <div className="w-16 md:w-40 border-r border-white/5 bg-black/40 flex flex-col pt-8 xl:pt-12 shrink-0">
-                    <div className="h-[60px] xl:h-[90px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
+                <div className="w-16 md:w-40 border-r border-white/5 bg-black/40 flex flex-col pt-6 xl:pt-12 shrink-0">
+                    <div className="h-[50px] xl:h-[90px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
                         <Video size={14} className="xl:hidden" />
                         <Video size={18} className="hidden xl:block text-her-accent" />
                         <span className="text-[8px] xl:text-[11px] font-bold uppercase tracking-widest hidden sm:inline">Vídeo</span>
                     </div>
-                    <div className="h-[45px] xl:h-[70px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
+                    <div className="h-[35px] xl:h-[70px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
                         <Type size={14} className="xl:hidden" />
                         <Type size={18} className="hidden xl:block text-yellow-400" />
                         <span className="text-[8px] xl:text-[11px] font-bold uppercase tracking-widest hidden sm:inline">Texto</span>
                     </div>
-                    <div className="h-[50px] xl:h-[80px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
+                    <div className="h-[40px] xl:h-[80px] flex items-center px-4 xl:px-6 gap-2 xl:gap-4 opacity-50">
                         <Music size={14} className="xl:hidden" />
                         <Music size={18} className="hidden xl:block text-blue-400" />
                         <span className="text-[8px] xl:text-[11px] font-bold uppercase tracking-widest hidden sm:inline">Áudio</span>
@@ -626,12 +651,12 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
                       </div>
 
                       {/* Video Track 1 */}
-                      <div className="h-[60px] xl:h-[90px] flex items-center relative group">
-                          <div className="absolute left-0 right-0 h-12 xl:h-16 bg-white/[0.01] border-y border-white/5" />
+                      <div className="h-[50px] xl:h-[90px] flex items-center relative group">
+                          <div className="absolute left-0 right-0 h-10 xl:h-16 bg-white/[0.01] border-y border-white/5" />
                           {timeline.clips.filter(c => c.type === 'video').map(clip => (
                             <div 
                               key={clip.id}
-                              className="absolute h-12 xl:h-16 bg-her-accent/20 border border-her-accent/30 rounded-lg xl:rounded-2xl flex items-center px-3 xl:px-6 overflow-hidden group/clip hover:bg-her-accent/30 transition-all cursor-pointer shadow-xl"
+                              className="absolute h-10 xl:h-16 bg-her-accent/20 border border-her-accent/30 rounded-lg xl:rounded-2xl flex items-center px-3 xl:px-6 overflow-hidden group/clip hover:bg-her-accent/30 transition-all cursor-pointer shadow-xl"
                               style={{ 
                                 left: `${clip.startTime * zoomLevel}px`, 
                                 width: `${clip.duration * zoomLevel}px` 
@@ -661,12 +686,12 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
                       </div>
 
                       {/* Subtitles Track */}
-                      <div className="h-[45px] xl:h-[70px] flex items-center relative group">
-                          <div className="absolute left-0 right-0 h-8 xl:h-12 bg-white/[0.005] border-y border-white/5" />
+                      <div className="h-[35px] xl:h-[70px] flex items-center relative group">
+                          <div className="absolute left-0 right-0 h-7 xl:h-12 bg-white/[0.005] border-y border-white/5" />
                           {timeline.subtitles.map(sub => (
                             <div
                               key={sub.id}
-                              className="absolute h-7 xl:h-10 bg-yellow-400/10 border border-yellow-400/20 rounded-md xl:rounded-xl flex items-center px-2 xl:px-4 overflow-hidden cursor-move group/sub hover:bg-yellow-400/30 transition-all"
+                              className="absolute h-6 xl:h-10 bg-yellow-400/10 border border-yellow-400/20 rounded-md xl:rounded-xl flex items-center px-2 xl:px-4 overflow-hidden cursor-move group/sub hover:bg-yellow-400/30 transition-all"
                               style={{ 
                                 left: `${sub.startTime * zoomLevel}px`, 
                                 width: `${sub.duration * zoomLevel}px` 
@@ -705,6 +730,27 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
           </div>
         </div>
       </div>
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className={cn(
+              "fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 backdrop-blur-xl border border-white/10 min-w-[300px]",
+              toast.type === 'success' ? "bg-green-500/20 text-green-400" : 
+              toast.type === 'error' ? "bg-red-500/20 text-red-400" : 
+              "bg-black/80 text-white"
+            )}
+          >
+            {toast.type === 'success' ? <CheckCircle2 size={20} /> : 
+             toast.type === 'error' ? <Info size={20} /> : 
+             <Loader2 size={20} className="animate-spin text-her-accent" />}
+            <p className="text-sm font-bold tracking-tight">{toast.message}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

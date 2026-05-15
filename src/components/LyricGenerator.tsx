@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Music, Wand2, Copy, Trash2, Download, Sparkles, BookOpen, Quote, PenTool, Hash } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { Music, Wand2, Copy, Trash2, Download, Sparkles, BookOpen, Quote, PenTool, Hash, Mic2, Play, Pause, Loader2, Volume2 } from 'lucide-react';
+import { GoogleGenAI, Modality } from "@google/genai";
 import { cn } from '../lib/utils';
 
 export function LyricGenerator() {
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isVocalizing, setIsVocalizing] = useState(false);
+  const [vocalizedAudioUrl, setVocalizedAudioUrl] = useState<string | null>(null);
   const [style, setStyle] = useState('Poesia');
   const [mood, setMood] = useState('Melancólico');
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const styles = ['Trap', 'Poesia', 'Sertanejo', 'MPB', 'Rock', 'Rap', 'Pop'];
   const moods = ['Melancólico', 'Eufórico', 'Sombrio', 'Romântico', 'Revoltado'];
@@ -17,6 +21,7 @@ export function LyricGenerator() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setIsGenerating(true);
+    setVocalizedAudioUrl(null);
     
     try {
       const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
@@ -36,8 +41,11 @@ export function LyricGenerator() {
       Retorne APENAS a letra, sem comentários adicionais.`;
 
       const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: finalPrompt
+        model: "gemini-3-flash-preview",
+        contents: finalPrompt,
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
       });
 
       setLyrics(result.text || "");
@@ -49,9 +57,24 @@ export function LyricGenerator() {
     }
   };
 
+  const handleVocalize = async () => {
+    // Disabled due to API stability issues
+    alert("Funcionalidade de vocalização temporariamente desativada para manutenção.");
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(lyrics);
-    alert("Copiado para a área de transferência!");
+  };
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
   };
 
   return (
@@ -130,6 +153,8 @@ export function LyricGenerator() {
                 </>
               )}
             </button>
+
+            {/* Vocalize button removed to prevent API errors */}
           </div>
         </div>
 
@@ -143,18 +168,58 @@ export function LyricGenerator() {
                 exit={{ opacity: 0, y: -10 }}
                 className="max-w-2xl mx-auto"
               >
-                <div className="flex justify-end gap-3 mb-8">
-                  <button onClick={copyToClipboard} className="p-2.5 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl text-her-muted hover:text-white transition-all border border-white/[0.05]">
-                    <Copy size={16} />
-                  </button>
-                  <button onClick={() => setLyrics('')} className="p-2.5 bg-white/[0.03] hover:bg-red-500/20 rounded-xl text-her-muted hover:text-red-400 transition-all border border-white/[0.05]">
-                    <Trash2 size={16} />
-                  </button>
+                <div className="flex justify-between items-center mb-8">
+                  <div className="flex items-center gap-4">
+                    {vocalizedAudioUrl && (
+                      <div className="flex items-center gap-3 bg-purple-500/10 border border-purple-500/20 px-4 py-2 rounded-2xl">
+                        <button 
+                          onClick={togglePlay}
+                          className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white hover:scale-105 transition-transform"
+                        >
+                          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
+                        </button>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase tracking-widest text-purple-300 font-medium">Voz Gerada</span>
+                          <div className="flex items-center gap-1">
+                            <Volume2 size={10} className="text-purple-400" />
+                            <div className="h-1 w-24 bg-white/10 rounded-full overflow-hidden">
+                              <motion.div 
+                                className="h-full bg-purple-500"
+                                animate={{ 
+                                  width: isPlaying ? ["0%", "100%"] : "0%"
+                                }}
+                                transition={{ 
+                                  duration: 30, // 30s is roughly the length of the clip
+                                  ease: "linear",
+                                  repeat: isPlaying ? Infinity : 0
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <audio 
+                          ref={audioRef} 
+                          src={vocalizedAudioUrl} 
+                          onEnded={() => setIsPlaying(false)}
+                          className="hidden"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={copyToClipboard} className="p-2.5 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl text-her-muted hover:text-white transition-all border border-white/[0.05]">
+                      <Copy size={16} />
+                    </button>
+                    <button onClick={() => { setLyrics(''); setVocalizedAudioUrl(null); }} className="p-2.5 bg-white/[0.03] hover:bg-red-500/20 rounded-xl text-her-muted hover:text-red-400 transition-all border border-white/[0.05]">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
                 
-                <div className="bg-white/[0.02] border border-white/[0.05] p-10 rounded-[2rem] shadow-sm relative">
+                <div className="bg-white/[0.02] border border-white/[0.05] p-10 rounded-[2rem] shadow-sm relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 via-purple-500/0 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
                   <Quote className="absolute top-8 left-8 text-purple-500/10" size={64} />
-                  <div className="relative z-10 whitespace-pre-wrap font-serif italic text-lg leading-relaxed text-her-muted hover:text-white transition-colors duration-700">
+                  <div className="relative z-10 whitespace-pre-wrap font-serif italic text-lg leading-relaxed text-her-muted group-hover:text-white transition-colors duration-700">
                     {lyrics}
                   </div>
                 </div>

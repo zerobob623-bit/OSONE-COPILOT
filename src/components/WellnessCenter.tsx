@@ -141,8 +141,11 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
       Use um tom profissional, acolhedor e motivador. Use formatação Markdown (negrito para títulos).`;
 
       const result = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }]
+        }
       });
 
       setAdvice(result.text || "");
@@ -159,11 +162,11 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
   const status = imcVal ? getIMCStatus(imcVal) : null;
 
   return (
-    <div className="h-full flex flex-col bg-her-bg/50 overflow-hidden">
+    <div className="h-full flex flex-col bg-transparent overflow-hidden">
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
         {/* Bio Entry Panel */}
-        <div className="w-full lg:w-96 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
+        <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-10 flex flex-col gap-12 overflow-y-auto bg-black/20">
           <div>
             <h3 className="text-sm font-serif italic mb-6 flex items-center gap-2">
               <Stethoscope size={16} className="text-her-accent" />
@@ -181,7 +184,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.age}
                     onChange={(e) => setData({...data, age: e.target.value})}
                     placeholder="Anos"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
                 <div className="space-y-2">
@@ -191,7 +194,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                   <select 
                     value={data.gender}
                     onChange={(e) => setData({...data, gender: e.target.value})}
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-her-accent/30 appearance-none"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30 appearance-none"
                   >
                     <option value="masculino">Masculino</option>
                     <option value="feminino">Feminino</option>
@@ -210,7 +213,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.weight}
                     onChange={(e) => setData({...data, weight: e.target.value})}
                     placeholder="70"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
                 <div className="space-y-2">
@@ -222,7 +225,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.height}
                     onChange={(e) => setData({...data, height: e.target.value})}
                     placeholder="175"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
               </div>
@@ -237,7 +240,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                       key={s}
                       onClick={() => setData({...data, stylePreference: s})}
                       className={cn(
-                        "px-3 py-2 rounded-lg text-[10px] transition-all border",
+                        "px-4 py-3 text-[11px] transition-all border uppercase tracking-widest",
                         data.stylePreference === s 
                           ? "bg-her-accent/20 border-her-accent/40 text-white" 
                           : "bg-white/[0.03] border-transparent text-her-muted hover:bg-white/[0.06]"
@@ -256,7 +259,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-white/[0.05] to-transparent p-6 rounded-3xl border border-white/[0.05] space-y-4 shadow-sm"
+              className="bg-gradient-to-br from-white/[0.05] to-transparent p-10 border-y border-white/[0.1] space-y-6"
             >
               <div className="flex justify-between items-center">
                 <span className="text-[10px] uppercase tracking-widest text-her-muted">Seu IMC</span>
@@ -283,7 +286,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
           <button
             onClick={handleConsult}
             disabled={isGenerating || !data.weight || !data.height}
-            className="w-full py-4 bg-gradient-to-r from-her-accent to-purple-600 text-white rounded-2xl text-[10px] uppercase tracking-[0.2em] font-medium hover:shadow-[0_0_25px_rgba(239,68,68,0.3)] transition-all disabled:opacity-50 flex items-center justify-center gap-3 mt-auto group"
+            className="w-full py-8 bg-gradient-to-r from-her-accent to-purple-600 text-white text-[12px] uppercase tracking-[0.4em] font-black hover:shadow-[0_0_50px_rgba(239,68,68,0.3)] transition-all disabled:opacity-50 flex items-center justify-center gap-4 mt-auto group"
           >
             {isGenerating ? (
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
@@ -304,11 +307,11 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                 key="advice"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="max-w-3xl mx-auto space-y-8"
+                className="w-full space-y-8 pb-20"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-her-accent/10 rounded-2xl flex items-center justify-center text-her-accent border border-her-accent/20">
+                    <div className="w-20 h-20 bg-her-accent/10 flex items-center justify-center text-her-accent border border-her-accent/20">
                       <Sparkles size={20} />
                     </div>
                     <div>
@@ -319,28 +322,28 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={handleCopy}
-                      className="p-2.5 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl text-her-muted hover:text-white transition-all border border-white/[0.05]"
+                      className="p-5 bg-white/[0.03] hover:bg-white/[0.08] text-her-muted hover:text-white transition-all border border-white/[0.05]"
                       title="Copiar Relatório"
                     >
                       {isCopied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
                     </button>
                     <button 
                       onClick={handleDownload}
-                      className="p-2.5 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl text-her-muted hover:text-white transition-all border border-white/[0.05]"
+                      className="p-5 bg-white/[0.03] hover:bg-white/[0.08] text-her-muted hover:text-white transition-all border border-white/[0.05]"
                       title="Baixar Relatório Texto"
                     >
                       <Download size={14} />
                     </button>
                     <button 
                       onClick={() => generatePDF(advice, `relatorio-premium-${new Date().toLocaleDateString()}.pdf`)}
-                      className="p-2.5 bg-her-accent/10 hover:bg-her-accent/20 rounded-xl text-her-accent transition-all border border-her-accent/20"
+                      className="p-5 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent transition-all border border-her-accent/20"
                       title="Exportar PDF Premium"
                     >
                       <FileText size={14} />
                     </button>
                     <button 
                       onClick={() => setAdvice('')}
-                      className="p-2.5 bg-white/[0.03] hover:bg-red-500/10 rounded-xl text-her-muted hover:text-red-400 transition-all border border-white/[0.05]"
+                      className="p-5 bg-white/[0.03] hover:bg-red-500/10 text-her-muted hover:text-red-400 transition-all border border-white/[0.05]"
                       title="Limpar"
                     >
                       <Trash2 size={14} />
@@ -348,20 +351,20 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                   </div>
                 </div>
 
-                <div className="bg-white/[0.02] border border-white/[0.05] rounded-[2.5rem] p-8 md:p-12 shadow-sm leading-relaxed text-her-muted markdown-body">
+                <div className="bg-white/[0.02] border-b border-white/[0.05] p-6 md:p-12 leading-relaxed text-her-muted markdown-body w-full">
                   <ReactMarkdown>{advice}</ReactMarkdown>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white/[0.03] border border-white/[0.05] p-6 rounded-3xl flex items-start gap-4">
+                  <div className="bg-white/[0.03] border border-white/[0.05] p-10 flex items-start gap-4">
                     <Activity size={24} className="text-green-400 shrink-0" />
                     <div>
                       <h5 className="text-xs font-medium text-white mb-1">Dica de Saúde</h5>
                       <p className="text-[11px] text-her-muted leading-relaxed">Sua hidratação ideal baseada no seu peso é de aproximadamente {(parseFloat(data.weight) * 0.035).toFixed(1)}L por dia.</p>
                     </div>
                   </div>
-                  <div className="bg-white/[0.03] border border-white/[0.05] p-6 rounded-3xl flex items-start gap-4">
-                    <TrendingUp size={24} className="text-blue-400 shrink-0" />
+                  <div className="bg-white/[0.03] border border-white/[0.05] p-10 flex items-start gap-4">
+                    <Activity size={24} className="text-blue-400 shrink-0" />
                     <div>
                       <h5 className="text-xs font-medium text-white mb-1">Metabolismo</h5>
                       <p className="text-[11px] text-her-muted leading-relaxed">Taxa metabólica basal estimada: {data.gender === 'masculino' ? (66 + (13.7 * parseFloat(data.weight)) + (5 * parseFloat(data.height)) - (6.8 * parseFloat(data.age))).toFixed(0) : (655 + (9.6 * parseFloat(data.weight)) + (1.8 * parseFloat(data.height)) - (4.7 * parseFloat(data.age))).toFixed(0)} kcal.</p>
@@ -374,7 +377,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                 key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.3 }}
-                className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto"
+                className="h-full flex flex-col items-center justify-center text-center w-full px-6"
               >
                 <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
                   <Info size={40} className="text-her-muted" />

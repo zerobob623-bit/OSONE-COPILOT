@@ -89,14 +89,14 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                   <span>Criação de Webtoon</span>
                 </button>
                 <button 
-                  onClick={() => { setMode('viralflow'); onClose(); }}
+                  onClick={() => { setMode('viral_studio'); onClose(); }}
                   className={cn(
                     "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                    mode === 'viralflow' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                    mode === 'viral_studio' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
                   )}
                 >
-                  <Zap size={18} />
-                  <span>Fluxo Viral</span>
+                  <Video size={18} />
+                  <span>Editor de Vídeo (Viral)</span>
                 </button>
                 <button 
                   onClick={() => { setMode('wellness'); onClose(); }}
@@ -117,6 +117,16 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <Gamepad2 size={18} />
                   <span>Interativo</span>
+                </button>
+                <button 
+                  onClick={() => { setMode('aural_control'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'aural_control' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Activity size={18} />
+                  <span>Sentido Aural</span>
                 </button>
               </div>
             </div>
