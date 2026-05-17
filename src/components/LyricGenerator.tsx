@@ -4,7 +4,7 @@ import { Music, Wand2, Copy, Trash2, Download, Sparkles, BookOpen, Quote, PenToo
 import { GoogleGenAI, Modality } from "@google/genai";
 import { cn } from '../lib/utils';
 
-export function LyricGenerator() {
+export function LyricGenerator({ apiKeys }: { apiKeys: { gemini: string } }) {
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -20,11 +20,16 @@ export function LyricGenerator() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
+    const apiKey = apiKeys.gemini;
+    if (!apiKey || apiKey.trim() === '') {
+      alert("Por favor, vincule sua própria chave API Gemini nas configurações para compor letras.");
+      return;
+    }
+    
     setIsGenerating(true);
     setVocalizedAudioUrl(null);
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
       const ai = new GoogleGenAI({ apiKey });
 
       const finalPrompt = `Aja como um compositor e poeta premiado. Escreva uma letra de música/poesia com as seguintes características:

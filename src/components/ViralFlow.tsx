@@ -111,8 +111,8 @@ export function ViralFlow({
   };
 
   const analyzeVideo = async () => {
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!videoFile || !effectiveApiKey) return;
+    const effectiveApiKey = apiKeys.gemini;
+    if (!videoFile || !effectiveApiKey || effectiveApiKey.trim() === '') return;
 
     setIsAnalyzing(true);
     try {
@@ -158,8 +158,8 @@ export function ViralFlow({
 
   const generateViralScript = async (referenceContent?: string) => {
     const currentTopic = referenceContent ? "Baseado na referência analisada" : topic;
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if ((!currentTopic && !referenceContent) || !effectiveApiKey) return;
+    const effectiveApiKey = apiKeys.gemini;
+    if ((!currentTopic && !referenceContent) || !effectiveApiKey || effectiveApiKey.trim() === '') return;
 
     setIsGenerating(true);
     try {
@@ -301,7 +301,7 @@ export function ViralFlow({
                          value={topic}
                          onChange={(e) => setTopic(e.target.value)}
                          placeholder="Ex: Como economizar R$1.000 por mês ou Tutorial de maquiagem rápida..."
-                         className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-5 text-sm focus:outline-none focus:border-her-accent/50 focus:ring-1 focus:ring-her-accent/20 transition-all placeholder:text-white/10 resize-none leading-relaxed"
+                         className="w-full h-32 bg-white/5 border border-white/10 p-5 text-sm focus:outline-none focus:border-her-accent/50 focus:ring-1 focus:ring-her-accent/20 transition-all placeholder:text-white/10 resize-none leading-relaxed"
                       />
                    </div>
 
@@ -312,7 +312,7 @@ export function ViralFlow({
                             <select 
                                value={niche}
                                onChange={(e) => setNiche(e.target.value)}
-                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs appearance-none focus:outline-none focus:border-her-accent/50"
+                               className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs appearance-none focus:outline-none focus:border-her-accent/50"
                             >
                                {niches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
                             </select>
@@ -325,7 +325,7 @@ export function ViralFlow({
                             <select 
                                value={tone}
                                onChange={(e) => setTone(e.target.value)}
-                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs appearance-none focus:outline-none focus:border-her-accent/50"
+                               className="w-full bg-white/5 border border-white/10 px-4 py-3 text-xs appearance-none focus:outline-none focus:border-her-accent/50"
                             >
                                {tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
@@ -342,7 +342,7 @@ export function ViralFlow({
                                key={p.id}
                                onClick={() => setPlatform(p.id)}
                                className={cn(
-                                 "px-4 py-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all",
+                                 "px-4 py-3 border text-[10px] font-bold uppercase tracking-wider transition-all",
                                  platform === p.id 
                                     ? "bg-her-accent/10 border-her-accent/40 text-her-accent" 
                                     : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
@@ -357,7 +357,7 @@ export function ViralFlow({
                    <button 
                       onClick={() => generateViralScript()}
                       disabled={!topic || isGenerating}
-                      className="w-full py-5 bg-white text-black rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] hover:bg-her-accent hover:text-white transition-all disabled:opacity-20 disabled:grayscale relative overflow-hidden group shadow-[0_20px_50px_rgba(0,0,0,0.3)]"
+                      className="w-full py-5 bg-white text-black font-black text-sm uppercase tracking-[0.2em] hover:bg-her-accent hover:text-white transition-all disabled:opacity-20 disabled:grayscale relative overflow-hidden group shadow-xl"
                    >
                       {isGenerating ? (
                          <div className="flex items-center justify-center gap-3">
@@ -377,7 +377,7 @@ export function ViralFlow({
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                    <div 
                       onClick={() => fileInputRef.current?.click()}
-                      className="w-full aspect-video md:aspect-square bg-white/5 border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center p-8 text-center cursor-pointer hover:bg-white/[0.08] hover:border-her-accent/30 transition-all group"
+                      className="w-full aspect-video md:aspect-square bg-white/5 border border-dashed border-white/10 flex flex-col items-center justify-center p-8 text-center cursor-pointer hover:bg-white/[0.08] hover:border-her-accent/30 transition-all group"
                    >
                       <input 
                          type="file" 
@@ -387,10 +387,10 @@ export function ViralFlow({
                          className="hidden" 
                       />
                       {videoPreview ? (
-                         <video src={videoPreview} className="w-full h-full object-cover rounded-2xl" />
+                         <video src={videoPreview} className="w-full h-full object-cover" />
                       ) : (
                          <>
-                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                            <div className="w-16 h-16 bg-white/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                                <Upload size={28} className="text-white/40 group-hover:text-her-accent transition-colors" />
                             </div>
                             <h3 className="font-bold mb-2">Análise Estratégica</h3>
@@ -403,7 +403,7 @@ export function ViralFlow({
                       <button 
                          onClick={analyzeVideo}
                          disabled={isAnalyzing}
-                         className="w-full py-5 bg-her-accent text-white rounded-[2rem] font-bold text-sm uppercase tracking-widest hover:shadow-[0_0_30px_rgba(var(--her-accent),0.3)] transition-all flex items-center justify-center gap-3 active:scale-95"
+                         className="w-full py-5 bg-her-accent text-white font-bold text-sm uppercase tracking-widest hover:bg-her-accent/90 transition-all flex items-center justify-center gap-3 active:scale-95"
                       >
                          {isAnalyzing ? <Loader2 size={18} className="animate-spin" /> : <BrainCircuit size={18} />}
                          {isAnalyzing ? "Mapeando Padrões..." : "Iniciar Engenharia Reversa"}
@@ -412,7 +412,7 @@ export function ViralFlow({
 
                    {transcription && (
                       <div className="space-y-6">
-                         <div className="p-6 bg-white/5 rounded-3xl border border-white/10">
+                         <div className="p-6 bg-white/5 border border-white/10">
                             <h4 className="text-[10px] uppercase font-bold text-her-accent mb-4 tracking-widest flex items-center gap-2">
                                <FileText size={14} />
                                Inteligência Extraída
@@ -421,7 +421,7 @@ export function ViralFlow({
                          </div>
                          <button 
                             onClick={() => generateViralScript(transcription)}
-                            className="w-full py-4 bg-white text-black rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-her-accent hover:text-white transition-all flex items-center justify-center gap-2"
+                            className="w-full py-4 bg-white text-black font-bold text-xs uppercase tracking-widest hover:bg-her-accent hover:text-white transition-all flex items-center justify-center gap-2"
                          >
                             <TrendingUp size={16} />
                             Criar Novo Baseado nesta Ref
@@ -452,9 +452,9 @@ export function ViralFlow({
                       className="w-full space-y-8 pb-20"
                    >
                        {/* Script Card Header */}
-                       <div className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden p-6 md:p-10 relative">
+                       <div className="bg-white/5 border border-white/10 overflow-hidden p-6 md:p-10 relative">
                           <div className="absolute top-0 right-0 p-8">
-                             <div className="w-12 h-12 bg-her-accent/20 rounded-full flex items-center justify-center text-her-accent animate-pulse">
+                             <div className="w-12 h-12 bg-her-accent/20 flex items-center justify-center text-her-accent animate-pulse">
                                 <Zap size={24} />
                              </div>
                           </div>
@@ -462,16 +462,16 @@ export function ViralFlow({
                           <div className="w-full">
                              <h2 className="text-2xl md:text-4xl font-black italic mb-4 leading-tight">"{selectedScript.suggestedTitle}"</h2>
                              <div className="flex flex-wrap gap-2 mb-8">
-                                <span className="px-3 py-1 bg-white/5 rounded-full text-[10px] uppercase font-bold text-white/40 border border-white/5">Nicho: {niche}</span>
-                                <span className="px-3 py-1 bg-white/5 rounded-full text-[10px] uppercase font-bold text-white/40 border border-white/5">Tom: {tone}</span>
-                                <span className="px-3 py-1 bg-her-accent/10 rounded-full text-[10px] uppercase font-bold text-her-accent border border-her-accent/10">{platform} Optimized</span>
+                                <span className="px-3 py-1 bg-white/5 text-[10px] uppercase font-bold text-white/40 border border-white/5">Nicho: {niche}</span>
+                                <span className="px-3 py-1 bg-white/5 text-[10px] uppercase font-bold text-white/40 border border-white/5">Tom: {tone}</span>
+                                <span className="px-3 py-1 bg-her-accent/10 text-[10px] uppercase font-bold text-her-accent border border-her-accent/10">{platform} Optimized</span>
                              </div>
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
                              <div className="space-y-4">
                                 <h3 className="text-[10px] uppercase font-bold text-white/30 tracking-widest">Estratégia de Capa (Thumbnail)</h3>
-                                <p className="text-sm leading-relaxed text-white/60 bg-black/40 p-5 rounded-2xl border border-white/5 italic">
+                                <p className="text-sm leading-relaxed text-white/60 bg-black/40 p-5 border border-white/5 italic">
                                    {selectedScript.thumbnailStrategy}
                                 </p>
                              </div>
@@ -483,9 +483,9 @@ export function ViralFlow({
                           <h3 className="text-[10px] uppercase font-bold text-white/30 tracking-widest px-4">Estrutura do Roteiro</h3>
                           <div className="space-y-4">
                              {selectedScript.sections.map((section, idx) => (
-                                <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 md:p-8 flex gap-6 md:gap-8 group hover:bg-white/[0.04] transition-all">
+                                <div key={idx} className="bg-white/[0.02] border border-white/5 p-6 md:p-8 flex gap-6 md:gap-8 group hover:bg-white/[0.04] transition-all">
                                    <div className="shrink-0 flex flex-col items-center">
-                                      <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center font-black italic text-white/20 group-hover:text-her-accent transition-colors">
+                                      <div className="w-10 h-10 bg-white/5 flex items-center justify-center font-black italic text-white/20 group-hover:text-her-accent transition-colors">
                                          0{idx + 1}
                                       </div>
                                       <div className="w-px flex-1 bg-white/5 my-4" />
@@ -495,7 +495,7 @@ export function ViralFlow({
                                          <span className="text-[10px] uppercase font-black text-her-accent tracking-[0.2em]">{section.title}</span>
                                          <button 
                                             onClick={() => copyToClipboard(`${selectedScript.id}-${idx}`, section.content)}
-                                            className="p-2 hover:bg-white/5 rounded-full transition-all text-white/20 hover:text-white"
+                                            className="p-2 hover:bg-white/5 transition-all text-white/20 hover:text-white"
                                          >
                                             {copiedId === `${selectedScript.id}-${idx}` ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                                          </button>
@@ -503,7 +503,7 @@ export function ViralFlow({
                                       <p className="text-lg md:text-xl font-light italic leading-relaxed text-white/90">
                                          {section.content}
                                       </p>
-                                      <div className="flex items-center gap-3 p-3 bg-black/40 rounded-xl border border-white/5">
+                                      <div className="flex items-center gap-3 p-3 bg-black/40 border border-white/5">
                                          <ImageIcon size={14} className="text-white/20" />
                                          <span className="text-[10px] text-white/40 italic">{section.visualCue}</span>
                                       </div>
@@ -517,14 +517,14 @@ export function ViralFlow({
                        <div className="flex items-center justify-center gap-4 pt-8">
                           <button 
                              onClick={() => copyToClipboard(selectedScript.id, selectedScript.sections.map(s => `${s.title}: ${s.content}`).join('\n\n'))}
-                             className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold text-xs uppercase tracking-widest border border-white/10 transition-all flex items-center gap-3"
+                             className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-bold text-xs uppercase tracking-widest border border-white/10 transition-all flex items-center gap-3"
                           >
                              {copiedId === selectedScript.id ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
                              Copiar Roteiro Completo
                           </button>
                           <button 
                              onClick={onEditorClick}
-                             className="px-8 py-4 bg-her-accent text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:shadow-[0_20px_50px_rgba(var(--her-accent),0.3)] transition-all flex items-center gap-3"
+                             className="px-8 py-4 bg-her-accent text-white font-black text-xs uppercase tracking-widest hover:bg-her-accent/90 transition-all flex items-center gap-3"
                           >
                              <Scissors size={18} />
                              Iniciar Edição

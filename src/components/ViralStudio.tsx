@@ -201,8 +201,8 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
   };
 
   const analyzeVideo = async (file: File) => {
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!file || !effectiveApiKey) return;
+    const effectiveApiKey = apiKeys.gemini;
+    if (!file || !effectiveApiKey || effectiveApiKey.trim() === '') return;
 
     setIsAnalyzing(true);
     try {
@@ -237,8 +237,8 @@ export function ViralStudio({ initialScript, timeline, setTimeline, videoFile, a
 
   const autoEditWithAI = async () => {
     if (!videoFile) return;
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!effectiveApiKey) return;
+    const effectiveApiKey = apiKeys.gemini;
+    if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
 
     setIsAutoEditing(true);
     showToast("Iniciando Engenharia Social do Vídeo...", "info");

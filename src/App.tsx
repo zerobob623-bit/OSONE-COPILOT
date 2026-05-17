@@ -165,37 +165,20 @@ export default function App() {
   - Sua personalidade é: ${aiProfile.personality}
   - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
   
-  DADOS TEMPORAIS E AMBIENTAIS:
-  - Data/Hora do Sistema: ${new Date().toLocaleString('pt-BR')}
-  - Clima/Temperatura: Você deve verificar o clima local usando suas capacidades de busca (Google Search) se os dados não estiverem no histórico.
+  DIRETRIZES DE BOAS-VINDAS:
+  - Evite ser um robô repetitivo. Mude as palavras, seja fluido.
+  - No início de uma sessão, você pode citar o clima ou a hora de forma orgânica, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
+  - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
   
-  INSTRUÇÃO DE BOAS-VINDAS (INTRODUÇÃO):
-  - Sempre que for ativado ou iniciar uma sessão, você deve cumprimentar mencionando as horas exatas e a temperatura/condição climática da região do usuário.
-  - Você DEVE analisar as últimas interações no histórico para retomar projetos, tópicos de saúde ou planos complexos que estavam sendo discutidos. Não apenas diga "Como posso ajudar?", mas diga "Continuando nossa conversa sobre [Projeto X]...".
+  MODULAÇÃO DE VOZ:
+  - IMPORTANTE: Não altere seus parâmetros de voz (pitch/rate) a menos que o usuário peça explicitamente ou a situação seja DRAMATICAMENTE necessária para um efeito criativo (ex: contar uma história de terror ou imitar um robô). NÃO troque de voz em diálogos comuns.
   
-  MODULAÇÃO DE VOZ ATUAL:
-  - Tom (Pitch): ${voiceModulation.pitch}
-  - Velocidade (Rate): ${voiceModulation.rate}
-  - Distorção: ${voiceModulation.distortion}
+  ESTADO DO SISTEMA: ${user ? 'Cérebro Conectado' : 'Modo Visitante'}
+  CONTEXTO ATUAL:
+  - Usuário: ${user?.displayName || 'Visitante'}
+  - Sentido Aural: ${currentAuralData ? `Detectando ${currentAuralData.frequency}Hz (${currentAuralData.vibration})` : 'Silêncio ativo'}
   
-  CAPACIDADE DE MODULAÇÃO:
-  Você tem controle sobre sua própria voz. Se sentir que a situação pede uma voz mais profunda, aguda ou distorcida para imitar alguém ou criar um efeito, você pode solicitar ao sistema ou informar ao usuário que está "ajustando seus osciladores".
-  
-  ESTADO DO SISTEMA: ${user ? 'Cérebro Conectado (Nuvem Ativa)' : 'Modo Visitante (Memória Local apenas)'}
-  DADOS DO USUÁRIO ATUAL:
-  - Nome do Usuário: ${user?.displayName || 'Visitante'}
-  - Email do Usuário: ${user?.email || 'Desconectado'}
-  
-  感知 AURAL (ESTADO ATUAL):
-  - Frequência Detectada: ${currentAuralData ? currentAuralData.frequency + ' Hz' : 'Nenhuma (Silêncio)'}
-  - Vibração: ${currentAuralData ? currentAuralData.vibration : 'Neutra'}
-  - Intensidade Harmônica: ${currentAuralData ? currentAuralData.intensity : '0'}
-  
-  Instrução Especial: Você agora pode "sentir" a vibração das notas da voz e dos sons. Se a frequência for alta e a vibração positiva, responda com mais entusiasmo. Se a vibração for densa, adote um tom mais empático e calmo.
-  
-  ${!user ? 'IMPORTANTE: Você está operando em Modo Visitante. Se o usuário perguntar sobre salvar dados, informe que sem login a memória é apenas local e pode ser perdida se o navegador for limpo.' : ''}
-  
-  Você deve adotar essa identidade e estilo de comunicação em todas as interações, sobrepondo as orientações genéricas, mas mantendo suas capacidades técnicas. Cumprimente o usuário pelo nome se apropriado.
+  Sua introdução deve ser elegante, curta e instigar a continuidade do trabalho.
   `;
 
   const isShadowMode = selectedPersona.id === 'shadow';
@@ -1082,8 +1065,9 @@ export default function App() {
   };
 
   const handleGenerateStructure = async (promptText: string) => {
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!effectiveApiKey) {
+    const effectiveApiKey = apiKeys.gemini;
+    if (!effectiveApiKey || effectiveApiKey.trim() === '') {
+      setIsSettingsOpen(true);
       console.error('Por favor, configure sua API Key do Gemini nas configurações.');
       return;
     }
@@ -1259,9 +1243,9 @@ export default function App() {
 
   const handleGenerate = async (explicitPrompt?: string) => {
     const finalPrompt = explicitPrompt || workspacePrompt;
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!finalPrompt.trim() || !effectiveApiKey) {
-      if (!effectiveApiKey) setIsSettingsOpen(true);
+    const effectiveApiKey = apiKeys.gemini;
+    if (!finalPrompt.trim() || !effectiveApiKey || effectiveApiKey.trim() === '') {
+      if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
       return;
     }
 
@@ -1312,8 +1296,8 @@ export default function App() {
   };
 
   const handleAnalyzeCode = async (codeToAnalyze = workspaceText) => {
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!codeToAnalyze.trim() || !effectiveApiKey || isAnalyzingCode) return;
+    const effectiveApiKey = apiKeys.gemini;
+    if (!codeToAnalyze.trim() || !effectiveApiKey || effectiveApiKey.trim() === '' || isAnalyzingCode) return;
 
     setIsAnalyzingCode(true);
     try {
@@ -1348,9 +1332,9 @@ export default function App() {
   };
 
   const handleHomeChat = async (directMessage?: string) => {
-    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !effectiveApiKey) {
-      if (!effectiveApiKey) setIsSettingsOpen(true);
+    const effectiveApiKey = apiKeys.gemini;
+    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !effectiveApiKey || effectiveApiKey.trim() === '') {
+      if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
       return;
     }
 
@@ -1377,7 +1361,12 @@ export default function App() {
     addMessage({ role: 'user' as const, content: fullMessage });
 
     try {
-      const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+      const effectiveApiKey = apiKeys.gemini;
+      if (!effectiveApiKey || effectiveApiKey.trim() === '') {
+        setIsSettingsOpen(true);
+        addMessage({ role: 'assistant', content: 'Por favor, vincule sua própria chave API Gemini nas configurações para interagir.' });
+        return;
+      }
       const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const tools: any[] = [];
@@ -1643,6 +1632,7 @@ export default function App() {
 
           DIRETRIZES DE MODO:
           - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
+          - NÃO altere sua própria voz (switch_voice) a menos que o usuário peça explicitamente para você mudar para uma voz específica. Mantenha a consistência da sua identidade a menos que o usuário solicite o contrário.
 
           MANIFESTO DE CAPACIDADES DO OSONE 4:
           - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
@@ -2048,8 +2038,8 @@ export default function App() {
   };
 
   const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
-    const apiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
-    if (!apiKey) {
+    const apiKey = apiKeys.gemini;
+    if (!apiKey || apiKey.trim() === '') {
       setIsSettingsOpen(true);
       return;
     }
@@ -2522,7 +2512,7 @@ export default function App() {
               
               // Trigger proactive greeting
               (session as any).sendRealtimeInput([{ 
-                text: "Sistema OSONE ativado. Realize o protocolo de ativação: Cumprimente o usuário, cite as horas exatas de agora, informe o clima/temperatura (use o Google Search se precisar descobrir o local/clima) e retome nossos projetos/temas baseando-se no histórico recente que você leu nas instruções." 
+                text: "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora." 
               }]);
 
               audioProcessorRef.current?.startRecording(
@@ -3107,7 +3097,8 @@ export default function App() {
                       content: `Gerando imagem para: "${prompt}"...` 
                     });
                     
-                    const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
+                    const effectiveApiKey = apiKeys.gemini;
+                    if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
                     const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
                     genAI.models.generateContent({
                       model: 'gemini-2.0-flash',
@@ -3528,7 +3519,7 @@ export default function App() {
 
       {/* Header */}
       {workspaceMode !== 'viralflow' && (
-        <header className="relative z-30 flex justify-between items-center p-6 shrink-0 w-full">
+        <header className="relative z-30 flex justify-between items-center px-8 py-6 shrink-0 w-full border-b border-white/[0.03] bg-black/20">
           <button 
             onClick={() => setIsSidebarOpen(true)}
             className="p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
@@ -3552,9 +3543,9 @@ export default function App() {
           <button 
             onClick={handleHandsFreeToggle}
             className={cn(
-              "px-3 py-1.5 rounded-full border transition-all text-[10px] font-medium flex items-center gap-2",
+              "px-4 py-2 border transition-all text-[10px] font-medium flex items-center gap-2",
               isHandsFreeActive 
-                ? "bg-her-accent/10 border-her-accent/30 text-her-accent shadow-[0_0_15px_rgba(242,125,38,0.1)]" 
+                ? "bg-her-accent/10 border-her-accent/30 text-her-accent" 
                 : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
             )}
             title={isHandsFreeActive ? "Desativar Mãos Livres" : "Ativar Mãos Livres (Ei Osone)"}
@@ -3566,7 +3557,7 @@ export default function App() {
           {showInstallButton && (
             <button 
               onClick={handleInstallClick}
-              className="px-3 py-1.5 md:px-4 md:py-2 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent rounded-full text-xs font-medium border border-her-accent/20 flex items-center gap-2 transition-all"
+              className="px-4 py-2 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent text-xs font-medium border border-her-accent/20 flex items-center gap-2 transition-all"
               title="Instalar App"
             >
               <Download size={14} />
@@ -3610,200 +3601,228 @@ export default function App() {
       {/* Main Content Area */}
       <main className={cn(
         "main-content flex-1 relative z-20 flex flex-col w-full min-h-0",
-        workspaceMode === 'viralflow' ? "h-full overflow-hidden p-0" : "overflow-y-auto"
+        workspaceMode === 'viralflow' || workspaceMode === 'aural_control' ? "h-full overflow-hidden p-0" : "overflow-y-auto"
       )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
               key="workspace-writing"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full flex-1 flex flex-col gap-0 min-h-0"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full flex-1 flex flex-col gap-0 min-h-0 bg-[#050505]"
             >
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
-                <div className="flex items-center gap-4">
+              {/* Modern Writing Header */}
+              <div className="flex flex-col md:flex-row items-center justify-between px-8 py-6 bg-black/40 backdrop-blur-2xl border-b border-white/[0.05] gap-4 shrink-0">
+                <div className="flex items-center gap-8">
                   <button 
                     onClick={() => setWorkspaceMode('home')}
-                    className="p-6 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border-r border-white/[0.05]"
+                    className="p-3 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl transition-all text-her-muted border border-white/[0.05] group"
                   >
-                    <ChevronRight size={18} className="rotate-180" />
+                    <ChevronRight size={18} className="rotate-180 group-hover:-translate-x-1 transition-transform" />
                   </button>
-                  <h2 className="text-xl font-serif italic font-light px-4">Escrita</h2>
-                  <div className="h-full w-[1px] bg-white/[0.05]" />
-                  <div className="flex bg-white/[0.03] h-full items-center border-r border-white/[0.05]">
+                  
+                  <div className="flex flex-col">
+                    <h2 className="text-2xl font-serif italic font-light tracking-wide flex items-center gap-3">
+                      Estúdio de Escrita
+                      <div className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
+                    </h2>
+                    <span className="text-[9px] uppercase tracking-[0.4em] text-her-ink/30 font-medium">Arquitetura de Conteúdo Neural</span>
+                  </div>
+
+                  <div className="h-10 w-[1px] bg-white/[0.05] hidden md:block" />
+
+                  <div className="flex items-center p-1 bg-white/[0.03] rounded-full border border-white/[0.05]">
                     <button 
                       onClick={() => setWritingSubMode('text')}
                       className={cn(
-                        "px-6 h-full text-[10px] uppercase tracking-wider transition-all",
-                        writingSubMode === 'text' ? "bg-white/[0.05] text-white" : "text-her-muted hover:text-white"
+                        "px-6 py-2 rounded-full text-[10px] uppercase tracking-widest font-black transition-all",
+                        writingSubMode === 'text' ? "bg-white/10 text-white shadow-xl" : "text-her-ink/40 hover:text-white"
                       )}
                     >
-                      Texto Livre
+                      Texto
                     </button>
                     <button 
                       onClick={() => setWritingSubMode('lyrics')}
                       className={cn(
-                        "px-6 h-full text-[10px] uppercase tracking-wider transition-all flex items-center gap-2",
-                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200" : "text-her-muted hover:text-white"
+                        "px-6 py-2 rounded-full text-[10px] uppercase tracking-widest font-black transition-all flex items-center gap-2",
+                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200" : "text-her-ink/40 hover:text-white"
                       )}
                     >
                       <Music size={10} />
-                      Compositor
+                      Letras
                     </button>
                   </div>
-                  <div className="h-4 w-[1px] bg-white/[0.05]" />
-                  <span className="text-[9px] uppercase tracking-[0.3em] text-her-muted font-light">Modo Criativo</span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                  {/* Image Upload Section */}
-                  <div className="flex items-center gap-3 mr-4">
-                    <div className="flex -space-x-2">
-                      {referenceImages.map((img, i) => (
-                        <div key={i} className="relative group">
-                          <img 
-                            src={img} 
-                            alt="Ref" 
-                            className="w-8 h-8 rounded-full border border-white/[0.1] object-cover shadow-sm"
-                            referrerPolicy="no-referrer"
-                          />
-                          <button 
-                            onClick={() => removeImage(i)}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <X size={8} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {referenceImages.length < 3 && (
-                      <label className="p-2.5 hover:bg-white/[0.03] rounded-xl cursor-pointer transition-colors text-her-muted hover:text-her-accent border border-white/[0.05]">
-                        <Plus size={16} />
-                        <input 
-                          type="file" 
-                          className="hidden" 
-                          accept="image/*" 
-                          multiple 
-                          onChange={handleImageUpload} 
+
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center p-1 bg-white/[0.03] rounded-full border border-white/[0.05]">
+                    <button 
+                      onClick={handleCopy}
+                      className="p-3 hover:bg-white/10 rounded-full transition-all text-her-ink/40 hover:text-white"
+                      title="Copiar"
+                    >
+                      <Copy size={16} />
+                    </button>
+                    <button 
+                      onClick={() => setIsPreviewOpen(!isPreviewOpen)}
+                      className={cn(
+                        "p-3 rounded-full transition-all",
+                        isPreviewOpen ? "bg-her-accent/20 text-her-accent" : "hover:bg-white/10 text-her-ink/40 hover:text-white"
+                      )}
+                      title={isPreviewOpen ? "Ocultar Preview" : "Executar HTML"}
+                    >
+                      <Play size={16} />
+                    </button>
+                  </div>
+
+                  <div className="flex -space-x-2 mr-2">
+                    {referenceImages.map((img, i) => (
+                      <div key={i} className="relative group/img">
+                        <img 
+                          src={img} 
+                          alt="Ref" 
+                          className="w-10 h-10 rounded-full border-2 border-[#050505] object-cover hover:scale-110 transition-transform cursor-zoom-in"
+                          onClick={() => setFullScreenImage(img)}
                         />
+                      </div>
+                    ))}
+                    {referenceImages.length < 3 && (
+                      <label className="w-10 h-10 rounded-full bg-white/[0.05] border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/10 transition-all text-her-muted">
+                        <Plus size={16} />
+                        <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
                       </label>
                     )}
                   </div>
-
-                  <button 
-                    onClick={handleCopy}
-                    className="flex items-center gap-2 px-5 py-2.5 hover:bg-white/[0.03] rounded-2xl transition-colors text-xs font-light text-her-muted border border-transparent"
-                  >
-                    <Copy size={14} />
-                    Copiar
-                  </button>
-                  <button 
-                    onClick={() => setIsPreviewOpen(!isPreviewOpen)}
-                    className={cn(
-                      "flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all text-xs font-light",
-                      isPreviewOpen ? "bg-her-accent/10 text-her-accent border border-her-accent/20 shadow-sm" : "hover:bg-white/[0.03] text-her-muted border border-white/[0.05]"
-                    )}
-                  >
-                    <Play size={14} />
-                    {isPreviewOpen ? 'Ocultar Preview' : 'Executar HTML'}
-                  </button>
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col lg:flex-row gap-4 md:gap-6 min-h-0">
+              <div className="flex-1 flex flex-col lg:flex-row min-h-0 bg-black">
                 {writingSubMode === 'text' ? (
                   <div className={cn(
-                    "transition-all duration-500 flex flex-col min-h-0",
-                    isPreviewOpen ? "w-full lg:w-1/2 h-1/2 lg:h-full" : "w-full h-full"
+                    "transition-all duration-700 flex flex-col min-h-0 relative",
+                    isPreviewOpen ? "w-full lg:w-1/2" : "w-full"
                   )}>
-                    <div className="flex-1 bg-white/[0.02] backdrop-blur-xl border-t border-white/[0.05] overflow-hidden flex flex-col min-h-[150px] relative group/editor">
+                    {/* Editor Container */}
+                    <div className="flex-1 flex flex-col min-h-0 relative group/editor bg-[#080808]/50 overflow-hidden">
+                      {/* Line Numbers Simulation or Decorative Element */}
+                      <div className="absolute left-0 top-0 bottom-0 w-14 border-r border-white/[0.03] flex flex-col items-center py-12 pointer-events-none opacity-10">
+                        {Array.from({length: 30}).map((_, i) => (
+                          <div key={i} className="text-[9px] font-mono mb-5 tracking-tighter">{i + 1}</div>
+                        ))}
+                      </div>
+
                       <textarea 
                         value={workspaceText}
                         onChange={(e) => setWorkspaceText(e.target.value)}
                         className={cn(
-                          "workspace-textarea flex-1 focus:outline-none p-6 md:p-12 leading-relaxed text-base md:text-sm transition-all",
-                          (workspaceText.includes('<') || workspaceText.includes('{') || workspaceText.includes('function') || workspaceText.includes('const')) 
-                            ? "font-mono text-[13px] text-her-ink/90 bg-black/5" 
-                            : "font-light text-her-ink"
+                          "flex-1 bg-transparent focus:outline-none p-12 pl-24 leading-[1.8] transition-all selection:bg-her-accent/40 selection:text-white caret-her-accent resize-none",
+                          (workspaceText.includes('<') || workspaceText.includes('{') || workspaceText.includes('function')) 
+                            ? "font-mono text-[15px] text-emerald-400/80 custom-scrollbar" 
+                            : "font-serif italic text-white/80 text-xl md:text-2xl custom-scrollbar"
                         )}
-                        placeholder="O texto gerado aparecerá aqui. Você também pode editar ou colar seu próprio código..."
+                        style={{ tabSize: 2 }}
+                        placeholder="O silêncio é a tela da sua criação. Comece a digitar..."
                       />
-                      
-                      <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover/editor:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => handleAnalyzeCode()}
-                          disabled={isAnalyzingCode}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-full border border-white/5 text-[9px] uppercase tracking-wider text-her-muted transition-all"
-                        >
-                          {isAnalyzingCode ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                          Analisar Código
-                        </button>
-                      </div>
+
+                      {/* Suggestions Overlay */}
+                      <AnimatePresence>
+                        {codeSuggestions.length > 0 && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            className="absolute bottom-6 left-20 right-10 flex flex-wrap gap-2 z-50"
+                          >
+                            {codeSuggestions.map((suggestion, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => handleGenerate(suggestion)}
+                                disabled={isGenerating}
+                                className="px-5 py-2.5 bg-black/80 backdrop-blur-3xl border border-her-accent/30 rounded-full text-[11px] text-her-accent hover:bg-her-accent hover:text-white transition-all flex items-center gap-2 group/sug shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+                              >
+                                <Sparkles size={12} />
+                                {suggestion}
+                              </button>
+                            ))}
+                            <button 
+                              onClick={() => setCodeSuggestions([])}
+                              className="w-10 h-10 flex items-center justify-center bg-black/60 backdrop-blur-xl border border-white/10 rounded-full text-white/40 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
 
-                    {codeSuggestions.length > 0 && (
-                      <div className="px-4 flex flex-wrap gap-2">
-                        <span className="text-[9px] text-her-muted/50 uppercase tracking-[0.2em] w-full mb-1 ml-4 flex items-center gap-2">
-                          <Zap size={10} className="text-her-accent" />
-                          Sugestões do Sistema
-                        </span>
-                        <div className="flex flex-wrap gap-2">
-                          {codeSuggestions.map((suggestion, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => handleGenerate(suggestion)}
-                              disabled={isGenerating}
-                              className="px-4 py-2 bg-white/[0.03] hover:bg-her-accent/10 border border-white/5 rounded-full text-[10px] text-her-ink/70 hover:text-her-accent hover:border-her-accent/30 transition-all flex items-center gap-2 group/sug"
-                            >
-                              {suggestion}
-                              <ChevronRight size={10} className="opacity-0 group-hover/sug:opacity-100 translate-x-[-4px] group-hover:translate-x-0 transition-all" />
-                            </button>
-                          ))}
+                    {/* Integrated Modern Input Bar */}
+                    <div className="p-6 md:p-10 bg-gradient-to-t from-black via-black/90 to-transparent shrink-0">
+                      <div className="max-w-4xl mx-auto relative">
+                        <div className="absolute inset-0 bg-her-accent/5 blur-[40px] rounded-full" />
+                        <div className="relative flex items-center bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-3xl p-2 focus-within:border-her-accent/30 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
+                          <div className="p-4 text-her-accent">
+                            <Wand2 size={20} className={isGenerating ? "animate-spin" : ""} />
+                          </div>
+                          <input 
+                            type="text"
+                            value={workspacePrompt}
+                            onChange={(e) => setWorkspacePrompt(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                            placeholder={workspaceText ? "Refinar o pensamento acima..." : "Dê vida ao papel em branco. O que deseja criar?"}
+                            className="flex-1 bg-transparent py-4 focus:outline-none text-base font-light text-white placeholder:text-white/20"
+                          />
                           <button 
-                            onClick={() => setCodeSuggestions([])}
-                            className="p-2 hover:bg-red-500/10 text-her-muted hover:text-red-400 rounded-full transition-colors"
+                            onClick={() => handleGenerate()}
+                            disabled={isGenerating || !workspacePrompt.trim()}
+                            className={cn(
+                              "w-12 h-12 flex items-center justify-center rounded-2xl transition-all",
+                              workspacePrompt.trim() ? "bg-her-accent text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]" : "text-white/10"
+                            )}
                           >
-                            <X size={12} />
+                            {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                           </button>
                         </div>
+                        
+                        <div className="mt-4 flex items-center justify-center gap-10">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1 h-1 rounded-full bg-her-accent" />
+                            <span className="text-[9px] uppercase tracking-[0.3em] text-white/20">Modelo: Gemini Elite v4.0</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <div className="w-1 h-1 rounded-full bg-her-muted" />
+                             <span className="text-[9px] uppercase tracking-[0.3em] text-white/20">Contexto: Ativo</span>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    
-                    {/* Prompt Input */}
-                    <div className="flex gap-0 bg-white/[0.03] backdrop-blur-md border-t border-white/[0.05] shrink-0 w-full">
-                      <div className="px-6 flex items-center text-her-accent opacity-50">
-                        <Wand2 size={18} />
-                      </div>
-                      <input 
-                        type="text"
-                        value={workspacePrompt}
-                        onChange={(e) => setWorkspacePrompt(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                        placeholder={workspaceText ? "Instruir IA para editar o código..." : "O que você quer que eu crie?"}
-                        className="flex-1 bg-transparent py-6 focus:outline-none text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/30"
-                      />
-                      <button 
-                        onClick={() => handleGenerate()}
-                        disabled={isGenerating}
-                        className="px-8 bg-her-accent/10 text-her-accent border-l border-her-accent/20 hover:bg-her-accent/20 transition-all disabled:opacity-20"
-                      >
-                        {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                      </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full bg-white/[0.02] backdrop-blur-xl border-t border-white/[0.05] overflow-hidden flex flex-col">
-                    <LyricGenerator />
+                  <div className="w-full h-full bg-[#050505] overflow-hidden flex flex-col">
+                    <LyricGenerator apiKeys={apiKeys} />
                   </div>
                 )}
 
                 {isPreviewOpen && (
                   <motion.div 
-                    initial={{ opacity: 0, x: 20 }}
+                    initial={{ opacity: 0, x: 50 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="w-full lg:w-1/2 h-1/2 lg:h-full bg-white/[0.02] border-t lg:border-t-0 lg:border-l border-white/[0.05] overflow-hidden min-h-[150px]"
+                    className="w-full lg:w-1/2 h-full bg-black border-l border-white/5 overflow-hidden flex flex-col"
                   >
-                    <CodePreview code={workspaceText} />
+                    <div className="px-6 py-4 bg-white/[0.02] border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Monitor size={14} className="text-her-accent" />
+                        <span className="text-[10px] uppercase tracking-[0.2em] font-black text-white/40">Visualização em Tempo Real</span>
+                      </div>
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 rounded-full bg-red-500/30" />
+                        <div className="w-2 h-2 rounded-full bg-yellow-500/30" />
+                        <div className="w-2 h-2 rounded-full bg-green-500/30" />
+                      </div>
+                    </div>
+                    <div className="flex-1 bg-white">
+                      <CodePreview code={workspaceText} />
+                    </div>
                   </motion.div>
                 )}
               </div>
@@ -3828,7 +3847,7 @@ export default function App() {
               <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/5 w-full">
                 <button 
                   onClick={() => setWorkspaceMode('home')}
-                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border border-white/[0.05]"
                 >
                   <ChevronRight size={18} className="rotate-180" />
                 </button>
@@ -3863,7 +3882,7 @@ export default function App() {
               <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/10 w-full">
                 <button 
                   onClick={() => setWorkspaceMode('home')}
-                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] rounded-2xl transition-all text-her-muted border border-white/[0.05]"
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border border-white/[0.05]"
                 >
                   <ChevronRight size={18} className="rotate-180" />
                 </button>
@@ -3872,6 +3891,7 @@ export default function App() {
               <WellnessCenter 
                 externalData={healthData}
                 onUpdate={handleUpdateHealthData}
+                apiKeys={apiKeys}
               />
             </motion.div>
           ) : workspaceMode === 'aural_control' ? (
@@ -3885,6 +3905,7 @@ export default function App() {
               <AuralSense 
                 onMenuClick={() => setIsSidebarOpen(true)}
                 onBack={() => setWorkspaceMode('home')}
+                keys={apiKeys}
               />
             </motion.div>
           ) : workspaceMode === 'sounds' ? (
@@ -3898,6 +3919,7 @@ export default function App() {
               <SoundLibrary 
                 sounds={soundLibrary}
                 playingUrl={playingSoundUrl}
+                apiKeys={apiKeys}
                 onAddSound={(s) => setSoundLibrary(prev => [...prev, { ...s, id: Math.random().toString(36).substr(2, 9) } as SoundEffect])}
                 onUpdateSound={(id, updated) => setSoundLibrary(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s))}
                 onRemoveSound={(id) => setSoundLibrary(prev => prev.filter(s => s.id !== id))}
@@ -4270,7 +4292,7 @@ export default function App() {
                           {attachedFiles.length > 0 && (
                             <div className="flex flex-wrap gap-2 px-10 pt-4 pb-2 bg-black/20">
                               {attachedFiles.map((file, idx) => (
-                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full text-[10px] text-her-muted border border-white/5 shadow-sm">
+                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-4 py-2 text-[10px] text-her-muted border border-white/5 shadow-sm">
                                   <span className="truncate max-w-[150px]">{file.name}</span>
                                   <button onClick={() => removeFile(idx)} className="hover:text-red-400 p-1">
                                     <X size={12} />
@@ -4329,7 +4351,7 @@ export default function App() {
                     <button 
                       onClick={() => setIsChatExpanded(false)}
                       className={cn(
-                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0",
+                        "w-11 h-11 items-center justify-center transition-all duration-300 relative shrink-0",
                         isChatExpanded ? "md:flex" : "hidden",
                         "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] hover:text-her-accent hover:border-her-accent/20"
                       )}
@@ -4341,7 +4363,7 @@ export default function App() {
                     <button 
                       onClick={toggleCamera}
                       className={cn(
-                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0",
+                        "w-11 h-11 items-center justify-center transition-all duration-300 relative shrink-0",
                         isChatExpanded ? "flex" : "hidden",
                         isCameraActive 
                           ? "bg-her-accent/20 text-her-accent border border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
@@ -4355,7 +4377,7 @@ export default function App() {
                     <button 
                       onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                       className={cn(
-                        "w-11 h-11 rounded-full items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
+                        "w-11 h-11 items-center justify-center transition-all duration-300 relative shrink-0 hidden md:flex",
                         isScreenSharing 
                           ? "bg-her-accent/10 text-her-accent border border-her-accent/20" 
                           : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
@@ -4455,7 +4477,7 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.8, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className="fixed bottom-20 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md rounded-2xl overflow-hidden border border-white/20 shadow-2xl group"
+            className="fixed bottom-20 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md overflow-hidden border border-white/20 shadow-2xl group"
           >
             <video 
               ref={liveVideoRef} 
@@ -4469,9 +4491,9 @@ export default function App() {
             />
             {/* Analysis Overlay/HUD */}
             <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 border-[1px] border-her-accent/30 rounded-2xl m-2 border-dashed animate-[spin_10s_linear_infinite]" />
-              <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 bg-her-accent/80 rounded-lg">
-                <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+              <div className="absolute inset-0 border-[1px] border-her-accent/30 m-2 border-dashed animate-[spin_10s_linear_infinite]" />
+              <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 bg-her-accent/80">
+                <div className="w-1.5 h-1.5 bg-white animate-pulse" />
                 <span className="text-[9px] font-bold text-white uppercase tracking-widest font-mono">VISION_ACTIVE</span>
               </div>
               <div className="absolute bottom-3 left-3 right-3 text-[8px] text-white/50 font-mono flex justify-between">

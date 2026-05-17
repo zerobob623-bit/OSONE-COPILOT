@@ -8,6 +8,7 @@ import { GoogleGenAI } from "@google/genai";
 interface SoundLibraryProps {
   sounds: SoundEffect[];
   playingUrl: string | null;
+  apiKeys: { gemini: string };
   onAddSound: (sound: Partial<SoundEffect>) => void;
   onUpdateSound: (id: string, sound: Partial<SoundEffect>) => void;
   onRemoveSound: (id: string) => void;
@@ -17,7 +18,7 @@ interface SoundLibraryProps {
   onClose: () => void;
 }
 
-export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, onRemoveSound, onRestoreDefaults, onPlaySound, onStopSound, onClose }: SoundLibraryProps) => {
+export const SoundLibrary = ({ sounds, playingUrl, apiKeys, onAddSound, onUpdateSound, onRemoveSound, onRestoreDefaults, onPlaySound, onStopSound, onClose }: SoundLibraryProps) => {
   const [filter, setFilter] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -50,10 +51,15 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return;
+    const apiKey = apiKeys.gemini;
+    if (!apiKey || apiKey.trim() === '') {
+      alert("Por favor, vincule sua própria chave API Gemini nas configurações para gerar sons.");
+      return;
+    }
+    
     setIsGenerating(true);
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
       const ai = new GoogleGenAI({ apiKey });
 
       const prompt = `Você é um gerador de efeitos sonoros e músicas via IA para o sistema operacional OSONE.
@@ -222,10 +228,10 @@ export const SoundLibrary = ({ sounds, playingUrl, onAddSound, onUpdateSound, on
                 key={sound.id}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="group relative p-8 bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition-all"
+                className="group relative p-6 bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.06] transition-all"
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div className="p-2 bg-her-accent/5 rounded-lg text-her-accent">
+                  <div className="p-2 bg-her-accent/5 text-her-accent">
                     <Volume2 size={16} />
                   </div>
                   <div className="flex items-center gap-1">

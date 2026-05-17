@@ -88,11 +88,16 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
       return;
     }
 
+    const effectiveApiKey = apiKeys.gemini;
+    if (!effectiveApiKey || effectiveApiKey.trim() === '') {
+      alert("Por favor, vincule sua própria chave API Gemini nas configurações para gerar histórias.");
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationStep('script');
     
     try {
-      const effectiveApiKey = process.env.GEMINI_API_KEY || apiKeys.gemini;
       const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const scriptPrompt = `Crie um roteiro de 4 painéis para um Webtoon intitulado "${project.title}".

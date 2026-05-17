@@ -32,7 +32,7 @@ interface HealthData {
   stylePreference: string;
 }
 
-export function WellnessCenter({ externalData, onUpdate }: { externalData?: HealthData, onUpdate?: (data: HealthData) => void }) {
+export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalData?: HealthData, onUpdate?: (data: HealthData) => void, apiKeys: { gemini: string } }) {
   const [data, setData] = useState<HealthData>(() => {
     if (externalData) return externalData;
     const saved = localStorage.getItem('osone_health_data');
@@ -44,7 +44,6 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
       stylePreference: 'casual'
     };
   });
-
   useEffect(() => {
     if (externalData) {
       setData(externalData);
@@ -116,9 +115,14 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
       return;
     }
 
+    const apiKey = apiKeys.gemini;
+    if (!apiKey || apiKey.trim() === '') {
+      alert("Por favor, vincule sua própria chave API Gemini nas configurações para a consulta neural.");
+      return;
+    }
+
     setIsGenerating(true);
     try {
-      const apiKey = process.env.GEMINI_API_KEY || (JSON.parse(localStorage.getItem('osone_api_keys') || '{}')).gemini;
       const ai = new GoogleGenAI({ apiKey });
       const imc = calculateIMC();
       
@@ -165,16 +169,15 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
     <div className="h-full flex flex-col bg-transparent overflow-hidden">
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        {/* Bio Entry Panel */}
-        <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-10 flex flex-col gap-12 overflow-y-auto bg-black/20">
+               <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-8 flex flex-col gap-10 overflow-y-auto bg-black/20">
           <div>
             <h3 className="text-sm font-serif italic mb-6 flex items-center gap-2">
               <Stethoscope size={16} className="text-her-accent" />
               Perfil Biométrico
             </h3>
             
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-her-muted font-light">
                     <Calendar size={12} /> Idade
@@ -184,7 +187,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.age}
                     onChange={(e) => setData({...data, age: e.target.value})}
                     placeholder="Anos"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
                 <div className="space-y-2">
@@ -194,7 +197,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                   <select 
                     value={data.gender}
                     onChange={(e) => setData({...data, gender: e.target.value})}
-                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30 appearance-none"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-sm focus:outline-none focus:border-her-accent/30 appearance-none"
                   >
                     <option value="masculino">Masculino</option>
                     <option value="feminino">Feminino</option>
@@ -203,7 +206,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-her-muted font-light">
                     <Scale size={12} /> Peso (kg)
@@ -213,7 +216,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.weight}
                     onChange={(e) => setData({...data, weight: e.target.value})}
                     placeholder="70"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
                 <div className="space-y-2">
@@ -225,7 +228,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                     value={data.height}
                     onChange={(e) => setData({...data, height: e.target.value})}
                     placeholder="175"
-                    className="w-full bg-white/[0.03] border border-white/[0.05] px-6 py-4 text-sm focus:outline-none focus:border-her-accent/30"
+                    className="w-full bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
               </div>
@@ -240,7 +243,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                       key={s}
                       onClick={() => setData({...data, stylePreference: s})}
                       className={cn(
-                        "px-4 py-3 text-[11px] transition-all border uppercase tracking-widest",
+                        "px-4 py-3 text-[10px] transition-all border uppercase tracking-widest",
                         data.stylePreference === s 
                           ? "bg-her-accent/20 border-her-accent/40 text-white" 
                           : "bg-white/[0.03] border-transparent text-her-muted hover:bg-white/[0.06]"
@@ -259,17 +262,17 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-white/[0.05] to-transparent p-10 border-y border-white/[0.1] space-y-6"
+              className="bg-gradient-to-br from-white/[0.05] to-transparent p-6 border-y border-white/[0.1] space-y-4"
             >
               <div className="flex justify-between items-center">
                 <span className="text-[10px] uppercase tracking-widest text-her-muted">Seu IMC</span>
-                <span className={cn("text-xs font-medium", status?.color)}>{status?.label}</span>
+                <span className={cn("text-[10px] font-medium", status?.color)}>{status?.label}</span>
               </div>
               <div className="flex items-end gap-2">
-                <span className="text-4xl font-serif italic text-white">{imc}</span>
-                <span className="text-[10px] text-her-muted mb-2">kg/m²</span>
+                <span className="text-3xl font-serif italic text-white">{imc}</span>
+                <span className="text-[10px] text-her-muted mb-1">kg/m²</span>
               </div>
-              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-white/5 h-1 overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(100, (imcVal! / 40) * 100)}%` }}
@@ -286,7 +289,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
           <button
             onClick={handleConsult}
             disabled={isGenerating || !data.weight || !data.height}
-            className="w-full py-8 bg-gradient-to-r from-her-accent to-purple-600 text-white text-[12px] uppercase tracking-[0.4em] font-black hover:shadow-[0_0_50px_rgba(239,68,68,0.3)] transition-all disabled:opacity-50 flex items-center justify-center gap-4 mt-auto group"
+            className="w-full py-6 bg-gradient-to-r from-her-accent to-purple-600 text-white text-[11px] uppercase tracking-[0.4em] font-black hover:bg-her-accent/90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 mt-auto group"
           >
             {isGenerating ? (
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
@@ -379,7 +382,7 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                 animate={{ opacity: 0.3 }}
                 className="h-full flex flex-col items-center justify-center text-center w-full px-6"
               >
-                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                <div className="w-20 h-20 bg-white/5 flex items-center justify-center mb-6">
                   <Info size={40} className="text-her-muted" />
                 </div>
                 <h4 className="font-serif italic text-2xl mb-3">Bem-estar Integrado</h4>
@@ -387,9 +390,9 @@ export function WellnessCenter({ externalData, onUpdate }: { externalData?: Heal
                   Para uma análise personalizada de saúde, vestuário e metabolismo, preencha seus dados ao lado e inicie o processamento neural.
                 </p>
                 <div className="flex gap-2">
-                  <div className="w-1.5 h-1.5 bg-her-accent rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-her-accent rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-1.5 h-1.5 bg-her-accent rounded-full animate-bounce [animation-delay:0.4s]" />
+                  <div className="w-1.5 h-1.5 bg-her-accent animate-bounce" />
+                  <div className="w-1.5 h-1.5 bg-her-accent animate-bounce [animation-delay:0.2s]" />
+                  <div className="w-1.5 h-1.5 bg-her-accent animate-bounce [animation-delay:0.4s]" />
                 </div>
               </motion.div>
             )}
