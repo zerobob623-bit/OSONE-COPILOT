@@ -4004,9 +4004,9 @@ export default function App() {
                   "flex flex-col items-center justify-center py-2 transition-all duration-1000 ease-in-out z-50",
                   liveState.status === 'connected'
                     ? "relative flex-1 scale-110 md:scale-125" // Center large when voice active
-                    : chatHistory.length > 0 
+                    : (chatHistory.length > 0 || isChatExpanded)
                       ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
-                      : "relative shrink-0 transform scale-75 md:scale-100 origin-center -my-4 md:my-0"
+                      : "absolute inset-0 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-none"
                 )}>
                   <div onClick={handleVoiceToggle} className={cn(
                     "cursor-pointer transition-all duration-500 group relative",
