@@ -30,6 +30,17 @@ export class AudioProcessor {
         if (!this.processor) return;
         const inputData = e.inputBuffer.getChannelData(0);
         
+        // Calculate RMS to detect user voice volume
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        
+        // Dispatch CustomEvent on window for components to react to user speaking volume
+        const voiceEvent = new CustomEvent('osone_user_voice', { detail: { rms } });
+        window.dispatchEvent(voiceEvent);
+        
         // Convert Float32 to Int16 PCM
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {

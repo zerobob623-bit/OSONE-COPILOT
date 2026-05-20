@@ -13,8 +13,329 @@ export const InfinityLogo = ({
   speaking: boolean; 
   style?: OrbStyle;
 }) => {
+  const [userRms, setUserRms] = React.useState(0);
+
+  React.useEffect(() => {
+    const handleUserVoice = (e: any) => {
+      if (active) {
+        setUserRms(e.detail.rms);
+      } else {
+        setUserRms(0);
+      }
+    };
+    window.addEventListener('osone_user_voice', handleUserVoice);
+    return () => {
+      window.removeEventListener('osone_user_voice', handleUserVoice);
+    };
+  }, [active]);
+
+  const isUserSpeaking = active && userRms > 0.015;
+  const combinedSpeaking = speaking || isUserSpeaking;
+
   const renderStyle = () => {
     switch (style) {
+      case 'wave': {
+        // Esfera Simples e Elegante Alabastro/Branca - Modelo Prímula Recomendado para IAs
+        // Uma única esfera circular 3D perfeita branca/perolada com reflexos metálicos suaves e refração realista.
+        // Reage à voz em tempo real de forma física e concisa: deforma-se suavemente como metal líquido e vibra com limites mais estritos.
+        const rmsOffset = isUserSpeaking ? Math.min(userRms * 1.5, 0.15) : 0;
+        const pulseScale = speaking 
+          ? [0.96, 1.05, 0.98, 1.04, 0.97, 1.02, 0.96] 
+          : isUserSpeaking
+            ? [1 - rmsOffset * 0.4, 1 + rmsOffset * 0.6, 1 - rmsOffset * 0.2, 1 + rmsOffset * 0.4, 1]
+            : active 
+              ? [1, 1.015, 0.99, 1.01, 1] 
+              : [1, 1];
+
+        // Soft, organic liquid mercury border radius deformations
+        const frameBorderRadius = combinedSpeaking
+          ? [
+              "50% 50% 50% 50% / 50% 50% 50% 50%",
+              "46% 54% 48% 52% / 49% 47% 53% 51%",
+              "54% 46% 52% 48% / 51% 53% 47% 49%",
+              "48% 52% 46% 54% / 52% 48% 52% 48%",
+              "50% 50% 50% 50% / 50% 50% 50% 50%"
+            ]
+          : "50% 50% 50% 50% / 50% 50% 50% 50%";
+
+        // Physical sound vibration translation offsets (x, y) - tightly controlled and kept concise
+        const vibeMultiplier = isUserSpeaking ? Math.min(userRms * 15, 4) : 0.8;
+        const vibrationX = combinedSpeaking ? [0, -1.2 * vibeMultiplier, 1.6 * vibeMultiplier, -0.8 * vibeMultiplier, 1.2 * vibeMultiplier, -0.4 * vibeMultiplier, 0] : 0;
+        const vibrationY = combinedSpeaking ? [0, 1.6 * vibeMultiplier, -2.0 * vibeMultiplier, 0.8 * vibeMultiplier, -1.6 * vibeMultiplier, 1.2 * vibeMultiplier, 0] : 0;
+
+        return (
+          <div className="relative flex items-center justify-center overflow-visible w-full h-full">
+            {/* Esfera de Luz de Fundo White/Opaline Glow */}
+            <div className="absolute w-24 h-24 rounded-full bg-white/10 blur-[18px] opacity-50 animate-pulse pointer-events-none select-none" />
+            <div className="absolute w-28 h-28 rounded-full bg-slate-300/5 blur-[35px] opacity-20 pointer-events-none select-none" />
+
+            <motion.div
+              animate={{
+                scale: pulseScale,
+                borderRadius: frameBorderRadius,
+                x: vibrationX,
+                y: vibrationY,
+                rotate: combinedSpeaking ? [0, -1.5, 2, -1, 0] : 0,
+              }}
+              transition={{
+                scale: { duration: combinedSpeaking ? 1.0 : 4, repeat: Infinity, ease: "easeInOut" },
+                borderRadius: { duration: combinedSpeaking ? 1.4 : 3, repeat: Infinity, ease: "easeInOut" },
+                x: { duration: 0.22, repeat: Infinity, ease: "linear" },
+                y: { duration: 0.24, repeat: Infinity, ease: "linear" },
+                rotate: { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+              }}
+              className="relative w-24 h-24 md:w-30 md:h-30 flex items-center justify-center overflow-hidden border border-white/30 shadow-[inset_0_0_18px_rgba(255,255,255,0.8),0_10px_25px_rgba(255,255,255,0.15)] bg-slate-100"
+              style={{
+                // 3D Metallic Alabaster/Glass White Sphere Gradient
+                background: "radial-gradient(circle at 35% 25%, #ffffff 0%, #fcfcfd 30%, #f1f5f9 65%, #cbd5e1 90%, #94a3b8 100%)",
+              }}
+            >
+              {/* Internal mercury reflections (moving in reverse for rich parallax and depth) */}
+              <motion.div
+                animate={{
+                  y: combinedSpeaking ? [10, -10, 10] : [1, -1, 1],
+                  x: combinedSpeaking ? [-10, 10, -10] : [-1, 1, -1],
+                  opacity: combinedSpeaking ? [0.4, 0.6, 0.4] : 0.3,
+                }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute inset-0 mix-blend-color-dodge bg-[radial-gradient(circle_at_70%_70%,#ffffff_0%,transparent_50%)]"
+              />
+              <motion.div
+                animate={{
+                  y: combinedSpeaking ? [-8, 8, -8] : [-1.5, 1.5, -1.5],
+                  x: combinedSpeaking ? [8, -8, 8] : [1.5, -1.5, 1.5],
+                  opacity: combinedSpeaking ? [0.3, 0.5, 0.3] : 0.2,
+                }}
+                transition={{ duration: 5.2, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+                className="absolute inset-0 mix-blend-screen bg-[radial-gradient(circle_at_25%_75%,#ffffff_0%,transparent_60%)]"
+              />
+
+              {/* White High-Energy Core representing local power & voice modulation */}
+              <motion.div
+                animate={{
+                  scale: combinedSpeaking ? [0.9, 1.15, 0.95, 1.1, 0.9] : [1, 1.03, 1],
+                  opacity: combinedSpeaking ? [0.6, 0.95, 0.7, 0.9, 0.6] : 0.4
+                }}
+                transition={{ duration: combinedSpeaking ? 0.9 : 3.5, repeat: Infinity, ease: "easeInOut" }}
+                className="w-8 h-8 rounded-full bg-white/45 blur-[5px] mix-blend-overlay flex items-center justify-center md:w-10 md:h-10"
+              />
+              
+              {/* Inner ambient shadows and occlusion supporting glass look */}
+              <div 
+                className="absolute inset-0 rounded-full shadow-[inset_0_4px_10px_rgba(255,255,255,0.95),inset_0_-4px_10px_rgba(15,23,42,0.15)] mix-blend-overlay"
+              />
+
+              {/* Glossy top glass lens reflection overlay */}
+              <div className="absolute top-1 left-4 right-4 h-8 bg-gradient-to-b from-white/40 to-transparent rounded-full blur-[1px]" />
+            </motion.div>
+          </div>
+        );
+      }
+
+      case 'jarvis':
+        return (
+          <div className="relative flex items-center justify-center perspective-[1000px] overflow-visible w-full h-full">
+            {/* Holographic 3D Floating & Oscillating Core Container */}
+            <motion.div
+              animate={{
+                scale: speaking ? [1, 1.05, 0.98, 1.03, 1] : 1,
+                y: [0, -6, 2, -4, 4, 0],
+                x: [0, 4, -2, 3, -1, 0],
+                rotateX: active ? [20, -20, 20] : 15,
+                rotateY: active ? [0, 360] : 0,
+              }}
+              transition={{
+                scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
+                y: { duration: 8, repeat: Infinity, ease: "easeInOut" },
+                x: { duration: 10, repeat: Infinity, ease: "easeInOut" },
+                rotateX: { duration: 12, repeat: Infinity, ease: "easeInOut" },
+                rotateY: { duration: 25, repeat: Infinity, ease: "linear" },
+              }}
+              className="relative w-44 h-44 md:w-56 md:h-56 preserve-3d flex items-center justify-center"
+            >
+              {/* Backglow layer */}
+              <div className="absolute w-36 h-36 rounded-full bg-cyan-950/10 blur-[30px] opacity-40 mix-blend-screen" />
+
+              {/* HUD Grid Overlay and Radar Scan */}
+              <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full overflow-visible pointer-events-none opacity-90 mix-blend-screen select-none">
+                <defs>
+                  <radialGradient id="jarvisGlowRad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
+                    <stop offset="70%" stopColor="#0891b2" stopOpacity="0.1" />
+                    <stop offset="100%" stopColor="#000" stopOpacity="0" />
+                  </radialGradient>
+                  <filter id="jarvisGlow">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
+                </defs>
+
+                {/* Concentric Radar Circles with high-precision dash arrays */}
+                <circle cx="100" cy="100" r="90" fill="none" stroke="#22d3ee" strokeWidth="0.5" strokeOpacity="0.15" />
+                <circle cx="100" cy="100" r="75" fill="none" stroke="#22d3ee" strokeWidth="0.75" strokeOpacity="0.2" strokeDasharray="4 8" />
+                <circle cx="100" cy="100" r="50" fill="none" stroke="#22d3ee" strokeWidth="0.5" strokeOpacity="0.1" />
+                
+                {/* Crosshairs & Angle ticks */}
+                <line x1="100" y1="2" x2="100" y2="198" stroke="#22d3ee" strokeWidth="0.5" strokeOpacity="0.2" strokeDasharray="2 6" />
+                <line x1="2" y1="100" x2="198" y2="100" stroke="#22d3ee" strokeWidth="0.5" strokeOpacity="0.2" strokeDasharray="2 6" />
+
+                {/* Degree angles markings */}
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => {
+                  const rad = (angle * Math.PI) / 180;
+                  const x1 = 100 + Math.cos(rad) * 85;
+                  const y1 = 100 + Math.sin(rad) * 85;
+                  const x2 = 100 + Math.cos(rad) * 92;
+                  const y2 = 100 + Math.sin(rad) * 92;
+                  return (
+                    <line
+                      key={`tick-${i}`}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="#22d3ee"
+                      strokeWidth="1"
+                      strokeOpacity="0.4"
+                    />
+                  );
+                })}
+
+                {/* Oscillating Web / Line Connectors that ripple according to speaking */}
+                {[...Array(16)].map((_, i) => {
+                  const angle = (i * 22.5 * Math.PI) / 180;
+                  const startR = 45;
+                  const endR = speaking ? 75 : 65;
+                  
+                  return (
+                    <motion.path
+                      key={`radar-spoke-${i}`}
+                      d={`M ${100 + Math.cos(angle) * startR} ${100 + Math.sin(angle) * startR} L ${100 + Math.cos(angle) * endR} ${100 + Math.sin(angle) * endR}`}
+                      stroke="#22d3ee"
+                      strokeWidth={speaking ? "0.8" : "0.5"}
+                      strokeOpacity={speaking ? "0.6" : "0.3"}
+                      animate={{
+                        d: speaking
+                          ? [
+                              `M ${100 + Math.cos(angle) * startR} ${100 + Math.sin(angle) * startR} L ${100 + Math.cos(angle) * (endR + Math.random() * 20)} ${100 + Math.sin(angle) * (endR + Math.random() * 20)}`,
+                              `M ${100 + Math.cos(angle) * startR} ${100 + Math.sin(angle) * startR} L ${100 + Math.cos(angle) * (endR - Math.random() * 12)} ${100 + Math.sin(angle) * (endR - Math.random() * 12)}`,
+                              `M ${100 + Math.cos(angle) * startR} ${100 + Math.sin(angle) * startR} L ${100 + Math.cos(angle) * endR} ${100 + Math.sin(angle) * endR}`
+                            ]
+                          : `M ${100 + Math.cos(angle) * startR} ${100 + Math.sin(angle) * startR} L ${100 + Math.cos(angle) * endR} ${100 + Math.sin(angle) * endR}`
+                      }}
+                      transition={{ duration: 0.35, repeat: Infinity }}
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Side levels/oscillators (HUD Equalizer columns) */}
+              <div className="absolute inset-x-4 flex justify-between items-center pointer-events-none select-none">
+                {/* Left side level indicator */}
+                <div className="flex flex-col gap-1 items-start">
+                  {[...Array(5)].map((_, idx) => (
+                    <motion.div
+                      key={`jarvis-l-eq-${idx}`}
+                      animate={{
+                        width: speaking ? [4, 16, 4] : [4, 8, 4],
+                        opacity: speaking ? [0.4, 1, 0.4] : 0.6
+                      }}
+                      transition={{ duration: 0.2 + idx * 0.08, repeat: Infinity }}
+                      className="h-1 bg-cyan-400 rounded-sm w-4"
+                    />
+                  ))}
+                </div>
+                {/* Right side level indicator */}
+                <div className="flex flex-col gap-1 items-end">
+                  {[...Array(5)].map((_, idx) => (
+                    <motion.div
+                      key={`jarvis-r-eq-${idx}`}
+                      animate={{
+                        width: speaking ? [4, 16, 4] : [4, 8, 4],
+                        opacity: speaking ? [0.4, 1, 0.4] : 0.6
+                      }}
+                      transition={{ duration: 0.2 + idx * 0.08, repeat: Infinity }}
+                      className="h-1 bg-cyan-400 rounded-sm w-4"
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Beautiful 3D Orbiting Gimbal Rings */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ transformStyle: 'preserve-3d' }}>
+                {/* X-Axis Core ring */}
+                <div className="absolute w-36 h-36 border border-cyan-400/20 rounded-full" style={{ transform: 'rotateX(72deg) rotateY(15deg)', transformStyle: 'preserve-3d' }}>
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                    className="w-full h-full rounded-full border border-t-cyan-300 border-b-transparent border-l-transparent border-r-transparent shadow-[0_0_10px_rgba(34,211,238,0.4)]"
+                  />
+                </div>
+
+                {/* Y-Axis Core ring */}
+                <div className="absolute w-40 h-40 border border-cyan-300/10 rounded-full" style={{ transform: 'rotateX(20deg) rotateY(72deg)', transformStyle: 'preserve-3d' }}>
+                  <motion.div 
+                    animate={{ rotate: -360 }}
+                    transition={{ duration: 14, repeat: Infinity, ease: "linear" }}
+                    className="w-full h-full rounded-full border border-dashed border-cyan-400/40"
+                  />
+                </div>
+
+                {/* Diagnostic circle frame with tracking information */}
+                <div className="absolute w-44 h-44 rounded-full" style={{ transform: 'rotateX(35deg) rotateY(-40deg)', transformStyle: 'preserve-3d' }}>
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+                    className="w-full h-full rounded-full border border-cyan-400/15 flex items-center justify-center"
+                  >
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[6px] text-cyan-300/80 font-mono tracking-[0.15em] bg-black/85 px-1 py-0.5 border border-cyan-400/30 rounded-sm select-none uppercase">
+                      SYS_SEC_LOCK
+                    </div>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[6px] text-cyan-300/80 font-mono tracking-[0.15em] bg-black/85 px-1 py-0.5 border border-cyan-400/30 rounded-sm select-none uppercase">
+                      HOLOGR_ON
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+
+              {/* The reactor center core (Singularity Eye) */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <motion.div
+                  animate={{
+                    scale: speaking ? [1, 1.25, 0.9, 1.15, 1] : [1, 1.05, 1],
+                    rotate: active ? [0, 360] : 0
+                  }}
+                  transition={{ 
+                    scale: { duration: speaking ? 1.2 : 5, repeat: Infinity, ease: "easeInOut" },
+                    rotate: { duration: 15, repeat: Infinity, ease: "linear" }
+                  }}
+                  className="w-20 h-20 rounded-full border border-cyan-400/40 flex items-center justify-center relative bg-cyan-950/20 shadow-[0_0_35px_rgba(34,211,238,0.25)]"
+                >
+                  {/* Rotating aperture hexagon shape */}
+                  <svg viewBox="0 0 100 100" className="w-16 h-16 absolute text-cyan-300/30">
+                    <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" fill="none" stroke="currentColor" strokeWidth="0.75" strokeDasharray="2 4" />
+                  </svg>
+                  
+                  {/* Core glowing nucleus */}
+                  <div className="w-10 h-10 rounded-full bg-cyan-300/10 border border-cyan-400/50 flex items-center justify-center relative">
+                    {/* Pulsing micro arcs */}
+                    <motion.div
+                      animate={{
+                        scale: speaking ? [0.6, 1.35, 0.6] : [0.95, 1.05, 0.95],
+                        opacity: speaking ? [0.5, 1, 0.5] : [0.8, 1, 0.8]
+                      }}
+                      transition={{ duration: 0.6, repeat: Infinity }}
+                      className="absolute w-5 h-5 rounded-full border-2 border-dashed border-cyan-300"
+                    />
+                    <div className="w-4 h-4 rounded-full bg-cyan-200 shadow-[0_0_15px_#22d3ee,0_0_30px_#22d3ee] flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            </motion.div>
+          </div>
+        );
+
       case 'superintelligence':
         return (
           <div className="relative flex items-center justify-center">
@@ -250,7 +571,7 @@ export const InfinityLogo = ({
                 key={i}
                 animate={{
                   rotate: i * 120 + (active ? 360 : 0),
-                  scale: speaking ? [1, 1.15, 1] : 1,
+                  scale: combinedSpeaking ? [1, 1.15, 1] : 1,
                   opacity: active ? [0.4, 0.7, 0.4] : 0.2
                 }}
                 transition={{
@@ -259,7 +580,7 @@ export const InfinityLogo = ({
                   ease: "linear"
                 }}
                 className={cn(
-                  "absolute rounded-[42%] border border-her-accent/20 transition-all duration-1000",
+                  "absolute rounded-full border border-her-accent/20 transition-all duration-1000",
                   i === 0 ? "w-28 h-28 md:w-44 md:h-44" : i === 1 ? "w-32 h-32 md:w-52 md:h-52" : "w-36 h-36 md:w-60 md:h-60"
                 )}
               />
@@ -276,9 +597,13 @@ export const InfinityLogo = ({
     )}>
       {/* Outer Glow */}
       <div className={cn(
-        "absolute inset-0 rounded-full transition-all duration-1000",
-        (active || speaking) ? (
-          style === 'superintelligence' ? "bg-blue-500/10 blur-[100px] scale-110" : "bg-her-accent/10 blur-[100px] scale-110"
+        "absolute inset-0 transition-all duration-1000",
+        style === 'wave' ? "rounded-3xl" : "rounded-full",
+        (active || combinedSpeaking) ? (
+          style === 'superintelligence' ? "bg-blue-500/10 blur-[100px] scale-110" : 
+          style === 'jarvis' ? "bg-cyan-500/15 blur-[120px] scale-110" :
+          style === 'wave' ? "bg-cyan-500/10 blur-[110px] scale-110" :
+          "bg-her-accent/10 blur-[100px] scale-110"
         ) : "bg-transparent"
       )} />
       
@@ -301,16 +626,27 @@ export const InfinityLogo = ({
       )}
 
       {/* Superintelligence Rings */}
-      {style === 'superintelligence' && (active || speaking) && (
+      {style === 'superintelligence' && (active || combinedSpeaking) && (
         <motion.div
           animate={{ rotate: [0, 360], scale: [1, 1.1, 1] }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           className="absolute inset-0 border border-blue-400/10 rounded-full"
         />
       )}
+
+      {/* Jarvis Decorative Cyber Ring */}
+      {style === 'jarvis' && (active || combinedSpeaking) && (
+        <motion.div
+          animate={{ rotate: [-0, -360], scale: combinedSpeaking ? [1, 1.05, 1] : 1 }}
+          transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
+          className="absolute -inset-4 border border-cyan-500/10 rounded-full border-dashed p-1"
+        >
+          <div className="w-full h-full border border-cyan-400/5 rounded-full" />
+        </motion.div>
+      )}
       
       {/* Speaking rings */}
-      {speaking && active && (
+      {combinedSpeaking && active && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           {[1, 2, 3].map((i) => (
             <motion.div
@@ -324,8 +660,14 @@ export const InfinityLogo = ({
                 ease: "easeOut"
               }}
               className={cn(
-                "absolute w-full h-full border rounded-full",
-                style === 'superintelligence' ? "border-blue-400/30" : "border-her-accent/30"
+                "absolute w-full h-full border",
+                style === 'wave' 
+                  ? "border-cyan-400/25 rounded-full" // Clean pristine circular ripple
+                  : style === 'superintelligence' 
+                    ? "border-blue-400/30 rounded-full" 
+                    : style === 'jarvis' 
+                      ? "border-cyan-400/30 rounded-full" 
+                      : "border-her-accent/30 rounded-full"
               )}
             />
           ))}

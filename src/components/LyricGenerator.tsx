@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Music, Wand2, Copy, Trash2, Download, Sparkles, BookOpen, Quote, PenTool, Hash, Mic2, Play, Pause, Loader2, Volume2 } from 'lucide-react';
 import { GoogleGenAI, Modality } from "@google/genai";
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
+import { InfinityLogo } from './InfinityLogo';
 
 export function LyricGenerator({ apiKeys }: { apiKeys: { gemini: string } }) {
   const [prompt, setPrompt] = useState('');
@@ -83,29 +84,34 @@ export function LyricGenerator({ apiKeys }: { apiKeys: { gemini: string } }) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-her-bg/50 overflow-hidden">
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Painel de Controle */}
-        <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-white/[0.05] p-6 flex flex-col gap-6 overflow-y-auto">
+    <div className="h-full flex flex-col bg-[#080808] overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden pb-[90px] md:pb-0">
+        {/* Painel de Controle - Sidebar Estilizada */}
+        <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-white/5 p-4 flex flex-col gap-6 bg-black/40 backdrop-blur-sm overflow-y-auto shrink-0 md:shrink custom-scrollbar">
           <div>
-            <h3 className="text-sm font-serif italic mb-4 flex items-center gap-2">
-              <Sparkles size={14} className="text-purple-400" />
-              Diretrizes Criativas
-            </h3>
-            
-            <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+                <Sparkles size={16} className="text-purple-400" />
+              </div>
               <div>
-                <label className="text-[10px] uppercase tracking-widest text-her-muted mb-2 block font-light">Estilo Musical</label>
+                <h3 className="text-xs font-serif italic text-white/90">Diretrizes Criativas</h3>
+                <p className="text-[9px] text-her-muted uppercase tracking-tighter">Molde sua inspiração</p>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 block font-medium opacity-50">Estilo Musical</label>
                 <div className="flex flex-wrap gap-2">
                   {styles.map(s => (
                     <button
                       key={s}
                       onClick={() => setStyle(s)}
                       className={cn(
-                        "px-3 py-1.5 rounded-lg text-[10px] transition-all border",
+                        "px-4 py-2 rounded-xl text-[10px] transition-all border duration-300",
                         style === s 
-                          ? "bg-purple-500/20 border-purple-500/40 text-purple-200" 
-                          : "bg-white/[0.03] border-transparent text-her-muted hover:bg-white/[0.06]"
+                          ? "bg-purple-500/20 border-purple-500/40 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.15)]" 
+                          : "bg-white/[0.02] border-white/5 text-her-muted hover:bg-white/[0.05] hover:text-white/70"
                       )}
                     >
                       {s}
@@ -115,17 +121,17 @@ export function LyricGenerator({ apiKeys }: { apiKeys: { gemini: string } }) {
               </div>
 
               <div>
-                <label className="text-[10px] uppercase tracking-widest text-her-muted mb-2 block font-light">Vibe / Sentimento</label>
+                <label className="text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 block font-medium opacity-50">Vibe / Sentimento</label>
                 <div className="flex flex-wrap gap-2">
                   {moods.map(m => (
                     <button
                       key={m}
                       onClick={() => setMood(m)}
                       className={cn(
-                        "px-3 py-1.5 rounded-lg text-[10px] transition-all border",
+                        "px-4 py-2 rounded-xl text-[10px] transition-all border duration-300",
                         mood === m 
-                          ? "bg-her-accent/20 border-her-accent/40 text-white" 
-                          : "bg-white/[0.03] border-transparent text-her-muted hover:bg-white/[0.06]"
+                          ? "bg-her-accent/20 border-her-accent/40 text-white shadow-[0_0_15px_rgba(124,58,237,0.15)]" 
+                          : "bg-white/[0.02] border-white/5 text-her-muted hover:bg-white/[0.05] hover:text-white/70"
                       )}
                     >
                       {m}
@@ -136,109 +142,129 @@ export function LyricGenerator({ apiKeys }: { apiKeys: { gemini: string } }) {
             </div>
           </div>
 
-          <div className="mt-auto">
-            <label className="text-[10px] uppercase tracking-widest text-her-muted mb-2 block font-light">Inspiração</label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Sobre o que você quer escrever?"
-              className="w-full bg-white/[0.03] border border-white/[0.05] rounded-xl p-3 text-xs focus:outline-none focus:border-purple-500/30 min-h-[100px] resize-none"
-            />
+          <div className="mt-auto space-y-4">
+            <div>
+              <label className="text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 block font-medium opacity-50">Semente da Inspiração</label>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Ex: Uma carta de despedida sob a chuva de neon..."
+                className="w-full bg-white/[0.02] border border-white/5 rounded-2xl p-4 text-xs focus:outline-none focus:border-purple-500/40 focus:bg-white/[0.04] transition-all min-h-[120px] resize-none leading-relaxed text-white/80 placeholder:text-white/10"
+              />
+            </div>
+            
             <button
               onClick={handleGenerate}
               disabled={isGenerating || !prompt}
-              className="w-full mt-4 py-3 bg-gradient-to-r from-purple-500 to-her-accent text-white rounded-xl text-[10px] uppercase tracking-[0.2em] font-medium hover:shadow-[0_0_20px_rgba(168,85,247,0.3)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-4 bg-gradient-to-r from-purple-600 via-purple-500 to-her-accent text-white rounded-2xl text-[10px] uppercase tracking-[0.3em] font-semibold hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] transition-all duration-500 disabled:opacity-30 disabled:hover:shadow-none flex items-center justify-center gap-3 active:scale-[0.98]"
             >
               {isGenerating ? (
-                <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                <Loader2 className="animate-spin h-4 w-4" />
               ) : (
                 <>
-                  <Wand2 size={14} />
-                  Compor Letra
+                  <PenTool size={14} className="opacity-70" />
+                  Manifestar Texto
                 </>
               )}
             </button>
-
-            {/* Vocalize button removed to prevent API errors */}
           </div>
         </div>
 
-        {/* Área da Letra */}
-        <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-gradient-to-br from-transparent to-purple-900/5">
-          <AnimatePresence mode="wait">
-            {lyrics ? (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="max-w-2xl mx-auto"
-              >
-                <div className="flex justify-between items-center mb-8">
-                  <div className="flex items-center gap-4">
-                    {vocalizedAudioUrl && (
-                      <div className="flex items-center gap-3 bg-purple-500/10 border border-purple-500/20 px-4 py-2 rounded-2xl">
+        {/* Área da Letra - Manuscrito Digital */}
+        <div className="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.03)_0%,transparent_100%)]">
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+          
+          <div className="h-full overflow-y-auto custom-scrollbar p-6 md:p-12 lg:p-20 flex flex-col">
+            <AnimatePresence mode="wait">
+              {lyrics ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -30 }}
+                  className="max-w-3xl mx-auto w-full flex flex-col"
+                >
+                  <div className="flex justify-between items-center mb-10 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-full bg-white/5">
+                        <BookOpen size={16} className="text-purple-400" />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-her-muted">Manuscrito Gerado</span>
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      {vocalizedAudioUrl && (
                         <button 
                           onClick={togglePlay}
-                          className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center text-white hover:scale-105 transition-transform"
+                          className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-[10px] uppercase tracking-[0.1em]"
                         >
-                          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
+                          {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                          {isPlaying ? 'Silenciar' : 'Escutar'}
                         </button>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase tracking-widest text-purple-300 font-medium">Voz Gerada</span>
-                          <div className="flex items-center gap-1">
-                            <Volume2 size={10} className="text-purple-400" />
-                            <div className="h-1 w-24 bg-white/10 rounded-full overflow-hidden">
-                              <motion.div 
-                                className="h-full bg-purple-500"
-                                animate={{ 
-                                  width: isPlaying ? ["0%", "100%"] : "0%"
-                                }}
-                                transition={{ 
-                                  duration: 30, // 30s is roughly the length of the clip
-                                  ease: "linear",
-                                  repeat: isPlaying ? Infinity : 0
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                        <audio 
-                          ref={audioRef} 
-                          src={vocalizedAudioUrl} 
-                          onEnded={() => setIsPlaying(false)}
-                          className="hidden"
-                        />
+                      )}
+                      <div className="h-8 w-[1px] bg-white/10 mx-2"></div>
+                      <button onClick={copyToClipboard} className="p-3 bg-white/[0.03] hover:bg-white/[0.08] rounded-2xl text-her-muted hover:text-white transition-all border border-white/5 group relative">
+                        <Copy size={16} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">Copiar</span>
+                      </button>
+                      <button onClick={() => { setLyrics(''); setVocalizedAudioUrl(null); }} className="p-3 bg-white/[0.03] hover:bg-red-500/10 rounded-2xl text-her-muted hover:text-red-400 transition-all border border-white/5 group relative">
+                        <Trash2 size={16} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-900 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">Limpar</span>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Digital Paper Surface */}
+                  <div className="relative mb-20">
+                    <div className="absolute -inset-4 bg-gradient-to-b from-purple-500/5 to-transparent blur-2xl rounded-[3rem] opacity-50"></div>
+                    
+                    <div className="relative bg-[#0d0d0d] border border-white/10 p-12 md:p-20 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden group min-h-[600px] flex flex-col">
+                      {/* Paper lines decoration */}
+                      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px)', backgroundSize: '100% 2rem' }}></div>
+                      
+                      <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-purple-500/20 via-transparent to-transparent"></div>
+                      <Quote className="absolute top-10 right-10 text-white/[0.02]" size={120} />
+                      
+                      <div className="relative z-10 whitespace-pre-wrap font-serif italic text-xl md:text-2xl leading-[1.8] text-white/70 selection:bg-purple-500/30">
+                        {lyrics}
                       </div>
-                    )}
+
+                      <div className="mt-auto pt-20 flex justify-center opacity-20 hover:opacity-100 transition-opacity duration-700">
+                        <div className="scale-50">
+                          <InfinityLogo active={false} speaking={false} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-3">
-                    <button onClick={copyToClipboard} className="p-2.5 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl text-her-muted hover:text-white transition-all border border-white/[0.05]">
-                      <Copy size={16} />
-                    </button>
-                    <button onClick={() => { setLyrics(''); setVocalizedAudioUrl(null); }} className="p-2.5 bg-white/[0.03] hover:bg-red-500/20 rounded-xl text-her-muted hover:text-red-400 transition-all border border-white/[0.05]">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                </motion.div>
+              ) : (
+                <div className="h-full w-full flex flex-col items-center justify-center text-center max-w-sm mx-auto">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative"
+                  >
+                    <div className="absolute inset-0 bg-purple-500/20 blur-[60px] rounded-full"></div>
+                    <BookOpen size={64} className="relative mb-8 text-white/20 mx-auto" strokeWidth={1} />
+                  </motion.div>
+                  <h4 className="font-serif italic text-2xl text-white/50 mb-4">A tela em branco...</h4>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-her-muted leading-relaxed opacity-40">
+                    Toda grande obra começou como um sussurro solitário. <br/>
+                    Dê-me uma semente de ideia e eu manifestarei o mundo.
+                  </p>
                 </div>
-                
-                <div className="bg-white/[0.02] border border-white/[0.05] p-10 rounded-[2rem] shadow-sm relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/0 via-purple-500/0 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
-                  <Quote className="absolute top-8 left-8 text-purple-500/10" size={64} />
-                  <div className="relative z-10 whitespace-pre-wrap font-serif italic text-lg leading-relaxed text-her-muted group-hover:text-white transition-colors duration-700">
-                    {lyrics}
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-20">
-                <BookOpen size={48} className="mb-4" />
-                <p className="font-serif italic text-lg">Inicie sua composição...</p>
-                <p className="text-[10px] uppercase tracking-widest mt-2">O papel em branco espera por sua alma.</p>
-              </div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
+      
+      {/* Audio Element hidden */}
+      <audio 
+        ref={audioRef} 
+        src={vocalizedAudioUrl || undefined} 
+        onEnded={() => setIsPlaying(false)}
+        className="hidden"
+      />
     </div>
   );
 }

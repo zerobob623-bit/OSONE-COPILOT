@@ -245,64 +245,6 @@ export const SettingsModal = ({
                         </div>
                       </div>
                     </div>
-
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Núcleo Manifestação (Orb)</label>
-                      <div className="grid grid-cols-1 gap-2">
-                        {[
-                          { id: 'classic', label: 'Classic Architecture', desc: 'Versão minimalista e fluida' },
-                          { id: 'superintelligence', label: 'Super AI Matrix', desc: 'Explosão binária e complexidade' },
-                          { id: 'neural', label: 'Neural Network', desc: 'Processamento orgânico e suave' },
-                          { id: 'shadow', label: 'O Olho Escarlate', desc: 'Protocolo de Observação Hostil' }
-                        ].map((style) => (
-                          <button
-                            key={style.id}
-                            onClick={() => setOrbStyle(style.id as OrbStyle)}
-                            className={cn(
-                              "px-5 py-4 rounded-2xl transition-all border text-left group",
-                              orbStyle === style.id 
-                                ? style.id === 'shadow' 
-                                  ? "bg-red-950/20 border-red-900/40"
-                                  : "bg-her-accent/10 border-her-accent/30" 
-                                : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05]"
-                            )}
-                          >
-                            <div className={cn(
-                              "text-xs font-bold uppercase tracking-tight",
-                              orbStyle === style.id 
-                                ? style.id === 'shadow' ? "text-red-500" : "text-her-accent" 
-                                : "text-her-ink/70"
-                            )}>{style.label}</div>
-                            <div className="text-[9px] text-her-muted/50 uppercase tracking-widest mt-1">{style.desc}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Espectro Visual (Tema)</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { id: 'her', label: 'OSONE (Padrão)' },
-                          { id: 'cyberpunk', label: 'Cyberpunk' },
-                          { id: 'monochrome', label: 'Monochrome' },
-                          { id: 'nature', label: 'Natureza' }
-                        ].map((theme) => (
-                          <button
-                            key={theme.id}
-                            onClick={() => setAppTheme(theme.id as AppTheme)}
-                            className={cn(
-                              "px-3 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border",
-                              appTheme === theme.id 
-                                ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
-                            )}
-                          >
-                            {theme.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </motion.div>
                 )}
 

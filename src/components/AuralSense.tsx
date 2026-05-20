@@ -131,20 +131,20 @@ export function AuralSense({ onBack, onMenuClick, keys }: { onBack?: () => void,
   return (
     <div className="flex-1 flex flex-col bg-[#020202] overflow-hidden text-white">
        {/* Glassmorphic Header */}
-       <div className="px-5 py-6 md:px-10 md:py-8 flex flex-col md:flex-row md:items-center justify-between bg-black/40 backdrop-blur-3xl shrink-0 gap-6">
-          <div className="flex items-center gap-6">
-            <div className="p-4 bg-her-accent/20 border border-her-accent/20">
-                <Activity className="text-her-accent animate-pulse" size={28} />
+       <div className="px-4 md:px-10 py-4 md:py-8 flex flex-col md:flex-row md:items-center justify-between bg-black/40 backdrop-blur-3xl shrink-0 gap-4 md:gap-6">
+          <div className="flex items-center gap-4 md:gap-6">
+            <div className="p-3 md:p-4 bg-her-accent/20 border border-her-accent/20 rounded-xl">
+                <Activity className="text-her-accent animate-pulse md:w-7 md:h-7" size={20} />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-light tracking-tight flex items-center gap-3">
-                Sentido Aural <span className="text-her-accent font-black tracking-widest text-[8px] md:text-xs uppercase bg-her-accent/10 px-2 py-1">Beta</span>
+              <h1 className="text-xl md:text-3xl font-light tracking-tight flex items-center gap-2 md:gap-3">
+                Sentido Aural <span className="text-her-accent font-black tracking-widest text-[7px] md:text-xs uppercase bg-her-accent/10 px-2 py-0.5 md:py-1">Beta</span>
               </h1>
-              <p className="text-[8px] md:text-xs text-white/30 uppercase tracking-[0.3em] mt-1 font-medium">Análise de Frequência Harmônica e Vibração Metafísica</p>
+              <p className="text-[7px] md:text-xs text-white/30 uppercase tracking-[0.2em] md:tracking-[0.3em] mt-0.5 md:mt-1 font-medium">Análise de Frequência e Vibração</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4 ml-14 md:ml-0">
             <button 
               onClick={isActive ? stopAnalysis : startAnalysis}
               disabled={isCalibrating}

@@ -15,7 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { cn } from '../lib/utils';
+import { cn, safeJsonParse } from '../lib/utils';
 import { WebtoonProject, Character, WebtoonPanel } from '../types';
 
 interface WebtoonCreatorProps {
@@ -126,7 +126,7 @@ export function WebtoonCreator({ apiKeys }: WebtoonCreatorProps) {
         }
       });
 
-      const scriptData = JSON.parse(scriptResponse.text);
+      const scriptData = safeJsonParse(scriptResponse.text, { panels: [] });
       const initialPanels: WebtoonPanel[] = scriptData.panels.map((p: any) => ({
         id: Math.random().toString(36).substr(2, 9),
         panelNumber: p.panelNumber,

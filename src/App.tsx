@@ -16,6 +16,7 @@ import {
   Send,
   Loader2,
   Zap,
+  Activity,
   FolderPlus,
   FilePlus,
   Download,
@@ -40,14 +41,19 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  LogIn
+  LogIn,
+  Sliders,
+  BookOpen,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn, safeJsonParse } from './lib/utils';
-import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, VideoTimelineState, VideoClip, VideoSubtitle } from './types';
+import ReactMarkdown from 'react-markdown';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
@@ -57,12 +63,12 @@ import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
-import { ViralFlow } from './components/ViralFlow';
-import { ViralStudio } from './components/ViralStudio';
+
 import { LyricGenerator } from './components/LyricGenerator';
 import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
+import { LocalControl } from './components/LocalControl';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
@@ -91,12 +97,41 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
   { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' }
 ];
 
+// Synthesizer for premium, ultra-responsive kinetic typewriter/keystroke sounds on demand
+const playMXKeySound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    const now = ctx.currentTime;
+    osc.type = Math.random() > 0.4 ? 'sine' : 'triangle';
+    const baseFreq = 480 + Math.random() * 260;
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.035);
+
+    // Ultra-brief envelope for crisp, subtle mechanical tap
+    gainNode.gain.setValueAtTime(0.03, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.04);
+  } catch (e) {
+    // browser blocked or context suspended
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
+  const [showUi, setShowUi] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'lyrics'>('text');
@@ -127,6 +162,31 @@ export default function App() {
     };
     window.addEventListener('osone_aural_update', handleAuralUpdate);
     return () => window.removeEventListener('osone_aural_update', handleAuralUpdate);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Do not toggle UI if user clicks on any standard interactive elements or modal components
+      if (
+        target.closest('button') || 
+        target.closest('input') || 
+        target.closest('textarea') || 
+        target.closest('select') || 
+        target.closest('a') ||
+        target.closest('[role="button"]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('#sidebar') ||
+        target.closest('.interactive') ||
+        target.closest('.sidebar-container') ||
+        target.closest('.modal-container')
+      ) {
+        return;
+      }
+      setShowUi(prev => !prev);
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
   }, []);
 
   useEffect(() => {
@@ -458,36 +518,17 @@ export default function App() {
     }
   };
 
-  const [orbStyle, setOrbStyle] = useState<OrbStyle>(() => {
-    return (localStorage.getItem('osone_orb_style') as OrbStyle) || 'classic';
-  });
+  const [orbStyle, setOrbStyle] = useState<OrbStyle>('wave');
 
   useEffect(() => {
-    localStorage.setItem('osone_orb_style', orbStyle);
+    localStorage.setItem('osone_orb_style', 'wave');
   }, [orbStyle]);
 
-  const [appTheme, setAppTheme] = useState<AppTheme>(() => {
-    return (localStorage.getItem('osone_app_theme') as AppTheme) || 'her';
-  });
-
-  const [timelineState, setTimelineState] = useState<VideoTimelineState>(() => {
-    const saved = localStorage.getItem('osone_video_timeline');
-    return saved ? JSON.parse(saved) : {
-      clips: [],
-      subtitles: [],
-      currentTime: 0,
-      totalDuration: 60,
-      isPlaying: false
-    };
-  });
+  const [appTheme, setAppTheme] = useState<AppTheme>('monochrome');
 
   useEffect(() => {
-    localStorage.setItem('osone_video_timeline', JSON.stringify(timelineState));
-  }, [timelineState]);
-
-  useEffect(() => {
-    localStorage.setItem('osone_app_theme', appTheme);
-    document.body.setAttribute('data-theme', appTheme);
+    localStorage.setItem('osone_app_theme', 'monochrome');
+    document.body.setAttribute('data-theme', 'monochrome');
   }, [appTheme]);
 
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
@@ -564,6 +605,58 @@ export default function App() {
     localStorage.setItem('osone_workspace_text', workspaceText);
   }, [workspaceText]);
 
+  // Settings states for enhanced writing mode
+  const [writingFont, setWritingFont] = useState<'serif' | 'sans' | 'mono'>(() => {
+    return (localStorage.getItem('osone_writing_font') as any) || 'serif';
+  });
+  const [writingFontSize, setWritingFontSize] = useState<number>(() => {
+    return Number(localStorage.getItem('osone_writing_font_size')) || 18;
+  });
+  const [writingTheme, setWritingTheme] = useState<'charcoal' | 'midnight' | 'sepia' | 'forest'>(() => {
+    return (localStorage.getItem('osone_writing_theme') as any) || 'charcoal';
+  });
+  const [writingFocusMode, setWritingFocusMode] = useState<boolean>(() => {
+    return localStorage.getItem('osone_writing_focus') === 'true';
+  });
+  const [writingWordGoal, setWritingWordGoal] = useState<number>(() => {
+    return Number(localStorage.getItem('osone_writing_word_goal')) || 300;
+  });
+  const [writingWidthMode, setWritingWidthMode] = useState<'compact' | 'classic' | 'wide'>(() => {
+    return (localStorage.getItem('osone_writing_width') as any) || 'classic';
+  });
+  const [writingSounds, setWritingSounds] = useState<boolean>(() => {
+    return localStorage.getItem('osone_writing_sounds') === 'true';
+  });
+  const [isSidebarSettingsOpen, setIsSidebarSettingsOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_font', writingFont);
+  }, [writingFont]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_font_size', String(writingFontSize));
+  }, [writingFontSize]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_theme', writingTheme);
+  }, [writingTheme]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_focus', String(writingFocusMode));
+  }, [writingFocusMode]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_word_goal', String(writingWordGoal));
+  }, [writingWordGoal]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_width', writingWidthMode);
+  }, [writingWidthMode]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_writing_sounds', String(writingSounds));
+  }, [writingSounds]);
+
   const [drawingObjects, setDrawingObjects] = useState<DrawingObject[]>(() => {
     try {
       const saved = localStorage.getItem('osone_drawing_objects');
@@ -578,128 +671,23 @@ export default function App() {
   }, [drawingObjects]);
   const [notifications, setNotifications] = useState<{ id: string; message: string; type: NotificationType }[]>([]);
 
-  // --- Firebase Auth & Sync ---
-  useEffect(() => {
-    if (!isFirebaseEnabled) {
-      setIsAuthLoading(false);
-      return;
-    }
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      setIsAuthLoading(false);
-
-      if (currentUser) {
-        // Fetch user data from Firestore
-        try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            if (data.aiProfile) setAiProfile(data.aiProfile);
-            if (data.healthData) setHealthData(data.healthData);
-            if (data.obsidianConfig) setAiProfile(prev => ({ ...prev, obsidianConfig: data.obsidianConfig }));
-            addNotification(`Bem-vindo de volta, ${currentUser.displayName}!`, "success");
-          } else {
-            // New user, create document
-            await setDoc(doc(db, 'users', currentUser.uid), {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              aiProfile,
-              healthData,
-              updatedAt: serverTimestamp()
-            });
-            addNotification("Perfil criado com sucesso!", "success");
-          }
-
-          // Fetch Chat History
-          const chatQuery = query(
-            collection(db, 'users', currentUser.uid, 'chatHistory'),
-            orderBy('timestamp', 'asc'),
-            limit(50)
-          );
-          const chatSnap = await getDocs(chatQuery);
-          if (!chatSnap.empty) {
-            const history = chatSnap.docs.map(d => ({
-              id: d.id,
-              role: d.data().role,
-              content: d.data().content,
-              imageUrl: d.data().imageUrl
-            })) as Message[];
-            setChatHistory(history);
-          } else if (currentUser && isFirebaseEnabled) {
-            // First time or empty history - Greeting
-            setTimeout(() => {
-              handleHomeChat("Olá! Realize o protocolo de ativação: apresente-se como OSONE, cite as horas, o clima e pergunte sobre nossos próximos projetos.");
-            }, 1000);
-          }
-        } catch (error) {
-          console.error("Error syncing user data:", error);
-          addNotification("Erro ao sincronizar dados na nuvem.", "error");
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    if (!isFirebaseEnabled) {
-      addNotification("Cérebro Desconectado. Configure as Chaves de API no menu Configurações para ativar a Nuvem.", "info");
-      return;
-    }
-    try {
-      await signInWithPopup(auth, googleProvider);
-      setIsGuestMode(false);
-    } catch (error) {
-      console.error("Login Error:", error);
-      addNotification("Falha no login com Google.", "error");
-    }
-  };
-
-  const handleLogout = async () => {
-    if (!isFirebaseEnabled) return;
-    try {
-      await auth.signOut();
-      setIsGuestMode(true);
-      // Não resetamos os estados locais aqui para permitir que o usuário continue 
-      // usando o sistema no modo "Visitante" com sua memória local intacta.
-      // Apenas notificamos que a sincronização em nuvem foi desativada.
-      addNotification("Sincronização em nuvem desativada. Operando em Modo Visitante.", "info");
-    } catch (error) {
-      console.error("Logout Error:", error);
-    }
-  };
-
-  const syncProfileToCloud = async (updatedProfile?: AIProfile, updatedHealth?: any) => {
-    if (!user) return;
-    try {
-      await setDoc(doc(db, 'users', user.uid), {
-        aiProfile: updatedProfile || aiProfile,
-        healthData: updatedHealth || healthData,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      console.error("Cloud Sync Error:", error);
-    }
-  };
-
-  const addMessageToCloud = async (message: Message) => {
-    if (!user) return;
-    try {
-      await addDoc(collection(db, 'users', user.uid, 'chatHistory'), {
-        ...message,
-        timestamp: serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error adding message to cloud:", error);
-    }
-  };
-
+  // --- Local Semantic State Manager ---
   const addMessage = (msg: Omit<Message, 'id'>) => {
     const newMessage = { ...msg, id: Math.random().toString(36).substr(2, 9) };
     setChatHistory(prev => [...prev, newMessage]);
-    if (user) {
-      addMessageToCloud(newMessage);
-    }
+  };
+
+  const handleLogin = async () => {
+    addNotification("Segurança total ativa: Operando 100% offline em Memória Semântica Local.", "info");
+  };
+
+  const handleLogout = async () => {
+    addNotification("Modo Seguro Local ativo.", "info");
+  };
+
+  const syncProfileToCloud = async (updatedProfile?: AIProfile, updatedHealth?: any) => {
+    if (updatedProfile) localStorage.setItem('osone_ai_profile', JSON.stringify(updatedProfile));
+    if (updatedHealth) localStorage.setItem('osone_health_data', JSON.stringify(updatedHealth));
   };
 
   const addNotification = (message: string, type: NotificationType = 'info') => {
@@ -1558,19 +1546,6 @@ export default function App() {
         }
       });
 
-      functionDeclarations.push({
-        name: "update_video_editor",
-        description: "Manipula a timeline do editor de vídeo viral. Use para adicionar clipes, legendas ou ajustar o tempo de visualização.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            action: { type: Type.STRING, enum: ["add_clip", "remove_clip", "add_subtitle", "remove_subtitle", "set_preview_time"] },
-            data: { type: Type.OBJECT, description: "Dados adicionais para a ação." }
-          },
-          required: ["action"]
-        }
-      });
-
       tools.push({ functionDeclarations });
       tools.push({ googleSearch: {} }); 
 
@@ -1879,24 +1854,6 @@ export default function App() {
               distortion: distortion !== undefined ? distortion : prev.distortion
             }));
             addNotification("Frequência Neural Ajustada pela IA", "info");
-          } else if (call.name === "update_video_editor") {
-            const { action, data } = call.args as any;
-            setTimelineState(prev => {
-              const newState = { ...prev };
-              if (action === 'add_clip') {
-                newState.clips = [...newState.clips, { id: Math.random().toString(36).substr(2, 9), ...data }];
-              } else if (action === 'remove_clip') {
-                newState.clips = newState.clips.filter((c: any) => c.id !== data.id);
-              } else if (action === 'add_subtitle') {
-                newState.subtitles = [...newState.subtitles, { id: Math.random().toString(36).substr(2, 9), ...data }];
-              } else if (action === 'remove_subtitle') {
-                newState.subtitles = newState.subtitles.filter((s: any) => s.id !== data.id);
-              } else if (action === 'set_preview_time') {
-                newState.currentTime = data.time || 0;
-              }
-              return newState;
-            });
-            addNotification(`Estúdio Viral: Ação ${action}`, "info");
           } else if (call.name === "play_sound_effect") {
             const name = (call.args as any).sound_name;
             const sound = soundLibrary.find(s => s.name.toLowerCase() === name.toLowerCase());
@@ -1963,7 +1920,7 @@ export default function App() {
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
-              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'webtoon' ? 'Webtoon' : mode === 'canvas' ? 'Interativo' : mode === 'viralflow' ? 'Fluxo Viral' : mode}.` 
+              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'webtoon' ? 'Webtoon' : mode === 'canvas' ? 'Interativo' : mode}.` 
             }]);
           } else if (call.name === 'show_notification') {
             const { message, type } = call.args as any;
@@ -2181,18 +2138,6 @@ export default function App() {
                   }
                 },
                 {
-                  name: "update_video_editor",
-                  description: "Manipula a timeline do editor de vídeo viral. Use para adicionar clipes, legendas ou ajustar o tempo de visualização.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      action: { type: Type.STRING, enum: ["add_clip", "remove_clip", "add_subtitle", "remove_subtitle", "set_preview_time"] },
-                      data: { type: Type.OBJECT, description: "Dados adicionais para a ação (ex: clipe, legenda)." }
-                    },
-                    required: ["action"]
-                  }
-                },
-                {
                   name: "read_web_page",
                   description: "Lê o conteúdo de texto de uma página web a partir de uma URL. Use para obter informações detalhadas de um site quando os resultados de pesquisa não forem suficientes.",
                   parameters: {
@@ -2263,13 +2208,13 @@ export default function App() {
                 },
                 {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), ViralFlow (Scripts Virais), Wellness (Saúde e Estilo), Sons ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), Wellness (Saúde e Estilo), Sons ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "webtoon", "viralflow", "sounds", "canvas", "wellness"],
+                        enum: ["home", "writing", "webtoon", "sounds", "canvas", "wellness"],
                         description: "O modo para o qual alternar."
                       }
                     },
@@ -2754,29 +2699,6 @@ export default function App() {
                       name: call.name,
                       id: call.id,
                       response: { result: "Osciladores neurais recalibrados. Minha voz agora opera nos novos parâmetros." }
-                    });
-                  } else if (call.name === "update_video_editor") {
-                    const { action, data } = call.args as any;
-                    setTimelineState(prev => {
-                      const newState = { ...prev };
-                      if (action === 'add_clip') {
-                        newState.clips = [...newState.clips, { id: Math.random().toString(36).substr(2, 9), ...data }];
-                      } else if (action === 'remove_clip') {
-                        newState.clips = newState.clips.filter((c: any) => c.id !== data.id);
-                      } else if (action === 'add_subtitle') {
-                        newState.subtitles = [...newState.subtitles, { id: Math.random().toString(36).substr(2, 9), ...data }];
-                      } else if (action === 'remove_subtitle') {
-                        newState.subtitles = newState.subtitles.filter((s: any) => s.id !== data.id);
-                      } else if (action === 'set_preview_time') {
-                        newState.currentTime = data.time || 0;
-                      }
-                      return newState;
-                    });
-                    addNotification(`Estúdio Neural: ${action} processado`, "info");
-                    responses.push({
-                      name: call.name,
-                      id: call.id,
-                      response: { result: `Timeline atualizada: ${action} concluído.` }
                     });
                   } else if (call.name === "search_chat_history") {
                     const query = (call.args as any).query.toLowerCase();
@@ -3322,73 +3244,6 @@ export default function App() {
     setIsSinging(false);
   };
 
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-her-void flex items-center justify-center p-6 text-her-ink">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="w-16 h-16 border-4 border-her-accent/20 border-t-her-accent rounded-full animate-spin" />
-          <p className="text-xs uppercase tracking-[0.3em] font-bold text-her-muted animate-pulse">Sincronizando Sistema</p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (!user && !isGuestMode) {
-    return (
-      <div className="min-h-screen bg-her-void flex flex-col items-center justify-center p-6 text-her-ink overflow-hidden relative">
-        {/* Background Accents */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-her-accent/5 rounded-full blur-[120px] pointer-events-none" />
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative z-10 flex flex-col items-center max-w-sm w-full text-center"
-        >
-          <div className="mb-8 p-4 bg-white/[0.02] border border-white/[0.05] rounded-[40px] shadow-2xl backdrop-blur-xl">
-            <InfinityLogo active={false} speaking={false} style="classic" />
-          </div>
-
-          <h1 className="text-4xl font-extralight tracking-tighter mb-4">OSONE <span className="font-bold text-her-accent">3</span></h1>
-          <p className="text-her-muted/60 text-sm mb-12 leading-relaxed font-light">
-            Sua interface neural personalizada. <br />
-            Conecte-se para sincronizar memórias e perfis.
-          </p>
-
-          <button 
-            onClick={handleLogin}
-            className="group relative w-full overflow-hidden rounded-2xl bg-white/[0.03] border border-white/[0.1] px-8 py-5 transition-all hover:bg-white/[0.06] hover:border-her-accent/30 active:scale-[0.98]"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-her-accent/0 via-her-accent/5 to-her-accent/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-            <div className="relative flex items-center justify-center gap-3">
-              <LogIn size={20} className="text-her-accent group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-medium tracking-wide">ENTRAR COM O GOOGLE</span>
-            </div>
-          </button>
-
-          <button 
-            onClick={() => setIsGuestMode(true)}
-            className="mt-4 w-full rounded-2xl bg-transparent border border-white/[0.05] px-8 py-4 text-xs text-her-muted hover:text-her-ink hover:bg-white/[0.02] transition-all uppercase tracking-widest"
-          >
-            Iniciar sem Login
-          </button>
-
-          <p className="mt-8 text-[10px] text-her-muted uppercase tracking-[0.2em] opacity-40">Neural Protocol Alpha 0.5</p>
-        </motion.div>
-
-        {/* Floating Notifications for Login Page */}
-        <div className="fixed bottom-8 right-8 z-50 flex flex-col gap-3">
-          {notifications.map(n => (
-            <NotificationToast key={n.id} id={n.id} message={n.message} type={n.type} onClose={() => setNotifications(prev => prev.filter(x => x.id !== n.id))} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <motion.div 
       onPanEnd={(e, info) => {
@@ -3518,18 +3373,20 @@ export default function App() {
       )}
 
       {/* Header */}
-      {workspaceMode !== 'viralflow' && (
-        <header className="relative z-30 flex justify-between items-center px-8 py-6 shrink-0 w-full border-b border-white/[0.03] bg-black/20">
+        <header className={cn(
+          "relative z-30 flex justify-between items-center px-4 md:px-8 py-4 md:py-6 shrink-0 w-full border-b border-white/[0.03] bg-black/20 transition-all duration-500",
+          !showUi && "opacity-0 pointer-events-none -translate-y-4"
+        )}>
           <button 
             onClick={() => setIsSidebarOpen(true)}
-            className="p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
+            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
           >
-            <Menu size={22} />
+            <Menu size={20} className="md:w-[22px] md:h-[22px]" />
           </button>
         
-        <div className="flex flex-col items-center gap-1">
-          <span className="hidden sm:block text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 4</span>
-          <div className="block">
+        <div className="flex flex-col items-center gap-0.5 md:gap-1">
+          <span className="text-[7px] md:text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 4</span>
+          <div className="block scale-90 md:scale-100">
             <PersonaSwitcher 
               selectedPersona={selectedPersona} 
               onPersonaChange={handlePersonaChange} 
@@ -3539,11 +3396,11 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <button 
             onClick={handleHandsFreeToggle}
             className={cn(
-              "px-4 py-2 border transition-all text-[10px] font-medium flex items-center gap-2",
+              "p-2 md:px-4 md:py-2 border transition-all text-[10px] font-medium flex items-center gap-2",
               isHandsFreeActive 
                 ? "bg-her-accent/10 border-her-accent/30 text-her-accent" 
                 : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
@@ -3557,7 +3414,7 @@ export default function App() {
           {showInstallButton && (
             <button 
               onClick={handleInstallClick}
-              className="px-4 py-2 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent text-xs font-medium border border-her-accent/20 flex items-center gap-2 transition-all"
+              className="p-2 md:px-4 md:py-2 bg-her-accent/10 hover:bg-her-accent/20 text-her-accent text-xs font-medium border border-her-accent/20 flex items-center gap-2 transition-all"
               title="Instalar App"
             >
               <Download size={14} />
@@ -3567,16 +3424,16 @@ export default function App() {
 
           <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
+            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
           >
-            <Settings size={22} />
+            <Settings size={20} className="md:w-[22px] md:h-[22px]" />
           </button>
 
           {/* Shadow Mode Activation Toggle */}
           <button 
             onClick={() => handlePersonaChange(isShadowMode ? PERSONAS[0] : PERSONAS.find(p => p.id === 'shadow')!)}
             className={cn(
-              "ml-1 p-2 border-l border-white/5 transition-all relative overflow-hidden group",
+              "ml-1 p-1.5 md:p-2 border-l border-white/5 transition-all relative overflow-hidden group",
               isShadowMode 
                 ? "bg-red-600/20 text-red-500 shadow-[0_0_25px_rgba(255,0,0,0.5)] scale-110" 
                 : "bg-black/20 text-red-900/50 hover:bg-red-900/10 hover:text-red-500/70"
@@ -3591,240 +3448,427 @@ export default function App() {
               animate={isShadowMode ? { scale: [1, 1.2, 1] } : {}}
               transition={{ duration: 0.5, repeat: Infinity }}
             >
-              <Eye size={20} className={isShadowMode ? "text-red-500 shadow-sm" : ""} />
+              <Eye size={16} className={cn("md:w-5 md:h-5", isShadowMode ? "text-red-500 shadow-sm" : "")} />
             </motion.div>
           </button>
         </div>
       </header>
-      )}
-
+      
       {/* Main Content Area */}
       <main className={cn(
-        "main-content flex-1 relative z-20 flex flex-col w-full min-h-0",
-        workspaceMode === 'viralflow' || workspaceMode === 'aural_control' ? "h-full overflow-hidden p-0" : "overflow-y-auto"
+        "main-content flex-1 relative z-20 flex flex-col w-full min-h-0 md:pb-0",
+        (workspaceMode === 'aural_control' || workspaceMode === 'writing' || workspaceMode === 'canvas') 
+          ? "h-full overflow-hidden p-0 pb-[80px] md:pb-0" 
+          : "overflow-y-auto pb-[100px] md:pb-0"
       )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
               key="workspace-writing"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="w-full flex-1 flex flex-col gap-0 min-h-0 bg-[#050505]"
+              initial={{ opacity: 0, scale: 0.995 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.995 }}
+              transition={{ duration: 0.25 }}
+              className={cn(
+                "w-full flex-1 flex flex-col gap-0 min-h-0 transition-colors duration-500",
+                writingTheme === 'charcoal' ? "bg-[#0c0d0f] text-zinc-100" :
+                writingTheme === 'midnight' ? "bg-[#000000] text-zinc-100" :
+                writingTheme === 'sepia' ? "bg-[#14110f] text-[#eddcd2]" :
+                "bg-[#050906] text-emerald-100"
+              )}
             >
-              {/* Modern Writing Header */}
-              <div className="flex flex-col md:flex-row items-center justify-between px-8 py-6 bg-black/40 backdrop-blur-2xl border-b border-white/[0.05] gap-4 shrink-0">
-                <div className="flex items-center gap-8">
+              {/* Header Fixo Ultra-Premium */}
+              <div className={cn(
+                "sticky top-0 z-[50] w-full flex items-center justify-between px-3 py-2 md:px-5 md:py-2.5 border-b shrink-0 transition-colors duration-300",
+                writingTheme === 'charcoal' ? "bg-[#08090b]/95 border-white/5" :
+                writingTheme === 'midnight' ? "bg-black/95 border-white/[0.03]" :
+                writingTheme === 'sepia' ? "bg-[#181412]/95 border-[#28211c]" :
+                "bg-[#070e0a]/95 border-emerald-950/20"
+              )}>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                   <button 
-                    onClick={() => setWorkspaceMode('home')}
-                    className="p-3 bg-white/[0.03] hover:bg-white/[0.08] rounded-xl transition-all text-her-muted border border-white/[0.05] group"
+                    onClick={() => setWritingSubMode('text')}
+                    className={cn(
+                      "px-3 py-1.5 text-[9px] uppercase tracking-wider font-mono rounded-md transition-all font-bold",
+                      writingSubMode === 'text' 
+                        ? (writingTheme === 'sepia' ? "bg-[#28211c] text-amber-300" : writingTheme === 'forest' ? "bg-emerald-950/40 text-emerald-400" : "bg-white/10 text-white") 
+                        : "text-white/20 hover:text-white/40"
+                    )}
                   >
-                    <ChevronRight size={18} className="rotate-180 group-hover:-translate-x-1 transition-transform" />
+                    Estúdio Prosa
                   </button>
+                  <button 
+                    onClick={() => setWritingSubMode('lyrics')}
+                    className={cn(
+                      "px-3 py-1.5 text-[9px] uppercase tracking-wider font-mono rounded-md transition-all font-bold",
+                      writingSubMode === 'lyrics' 
+                        ? "bg-purple-950/30 text-purple-400" 
+                        : "text-white/20 hover:text-white/40"
+                    )}
+                  >
+                    Antologia Lírica
+                  </button>
+                  <div className="w-[1px] h-3 bg-white/10 mx-2 shrink-0" />
                   
-                  <div className="flex flex-col">
-                    <h2 className="text-2xl font-serif italic font-light tracking-wide flex items-center gap-3">
-                      Estúdio de Escrita
-                      <div className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
-                    </h2>
-                    <span className="text-[9px] uppercase tracking-[0.4em] text-her-ink/30 font-medium">Arquitetura de Conteúdo Neural</span>
-                  </div>
-
-                  <div className="h-10 w-[1px] bg-white/[0.05] hidden md:block" />
-
-                  <div className="flex items-center p-1 bg-white/[0.03] rounded-full border border-white/[0.05]">
-                    <button 
-                      onClick={() => setWritingSubMode('text')}
-                      className={cn(
-                        "px-6 py-2 rounded-full text-[10px] uppercase tracking-widest font-black transition-all",
-                        writingSubMode === 'text' ? "bg-white/10 text-white shadow-xl" : "text-her-ink/40 hover:text-white"
-                      )}
-                    >
-                      Texto
-                    </button>
-                    <button 
-                      onClick={() => setWritingSubMode('lyrics')}
-                      className={cn(
-                        "px-6 py-2 rounded-full text-[10px] uppercase tracking-widest font-black transition-all flex items-center gap-2",
-                        writingSubMode === 'lyrics' ? "bg-purple-500/20 text-purple-200" : "text-her-ink/40 hover:text-white"
-                      )}
-                    >
-                      <Music size={10} />
-                      Letras
-                    </button>
-                  </div>
+                  <button 
+                    onClick={() => {
+                      if(window.confirm('Quer mesmo apagar todo o conteúdo atual? Esta ação é definitiva.')) {
+                        setWorkspaceText('');
+                      }
+                    }} 
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-red-500/40 hover:text-red-500 transition-colors shrink-0" 
+                    title="Limpar Tela"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleCopy();
+                      addNotification("Texto copiado para a área de transferência!", "success");
+                    }} 
+                    className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white transition-colors shrink-0" 
+                    title="Copiar Texto"
+                  >
+                    <Copy size={13} />
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center p-1 bg-white/[0.03] rounded-full border border-white/[0.05]">
-                    <button 
-                      onClick={handleCopy}
-                      className="p-3 hover:bg-white/10 rounded-full transition-all text-her-ink/40 hover:text-white"
-                      title="Copiar"
-                    >
-                      <Copy size={16} />
-                    </button>
-                    <button 
-                      onClick={() => setIsPreviewOpen(!isPreviewOpen)}
-                      className={cn(
-                        "p-3 rounded-full transition-all",
-                        isPreviewOpen ? "bg-her-accent/20 text-her-accent" : "hover:bg-white/10 text-her-ink/40 hover:text-white"
-                      )}
-                      title={isPreviewOpen ? "Ocultar Preview" : "Executar HTML"}
-                    >
-                      <Play size={16} />
-                    </button>
+                {/* Word counter and reading time details if text of interest */}
+                {!writingFocusMode && writingSubMode === 'text' && (
+                  <div className="hidden md:flex items-center gap-4 text-[10px] font-mono text-white/40">
+                    <div className="flex items-center gap-1" title="Meta de Palavras">
+                      <Zap size={10} className="text-amber-400" />
+                      <span>{workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length} / {writingWordGoal}p</span>
+                    </div>
+                    <div className="flex items-center gap-1" title="Tempo de Leitura">
+                      <BookOpen size={10} className="text-cyan-400" />
+                      <span>{Math.ceil((workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length) / 200)} min</span>
+                    </div>
                   </div>
+                )}
 
-                  <div className="flex -space-x-2 mr-2">
-                    {referenceImages.map((img, i) => (
-                      <div key={i} className="relative group/img">
-                        <img 
-                          src={img} 
-                          alt="Ref" 
-                          className="w-10 h-10 rounded-full border-2 border-[#050505] object-cover hover:scale-110 transition-transform cursor-zoom-in"
-                          onClick={() => setFullScreenImage(img)}
-                        />
-                      </div>
-                    ))}
-                    {referenceImages.length < 3 && (
-                      <label className="w-10 h-10 rounded-full bg-white/[0.05] border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/10 transition-all text-her-muted">
-                        <Plus size={16} />
-                        <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
-                      </label>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Dynamic metrics for small screens */}
+                  {writingSubMode === 'text' && (
+                    <div className="md:hidden flex items-center gap-2 text-[8px] font-mono opacity-40">
+                      <span>{workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length}p</span>
+                    </div>
+                  )}
+
+                  {/* Focus Mode selection */}
+                  <button
+                    onClick={() => setWritingFocusMode(!writingFocusMode)}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-all border shrink-0",
+                      writingFocusMode 
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-400" 
+                        : "border-white/5 hover:border-white/10 text-white/30 hover:text-white"
                     )}
-                  </div>
+                    title={writingFocusMode ? "Desativar Foco Absoluto" : "Foco Absoluto (Ocultar Distrações)"}
+                  >
+                    {writingFocusMode ? <Eye size={13} /> : <EyeOff size={13} />}
+                  </button>
+
+                  {/* Stylized sidebar launcher */}
+                  {writingSubMode === 'text' && (
+                    <button
+                      onClick={() => setIsSidebarSettingsOpen(!isSidebarSettingsOpen)}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all border shrink-0",
+                        isSidebarSettingsOpen 
+                          ? "bg-her-accent/15 border-her-accent/30 text-her-accent" 
+                          : "border-white/5 hover:border-white/10 text-white/30 hover:text-white"
+                      )}
+                      title="Ateliê de Customização"
+                    >
+                      <Sliders size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col lg:flex-row min-h-0 bg-black">
+              {/* Corpo de Trabalho */}
+              <div className="flex-1 flex flex-col lg:flex-row min-h-0 relative overflow-hidden">
                 {writingSubMode === 'text' ? (
-                  <div className={cn(
-                    "transition-all duration-700 flex flex-col min-h-0 relative",
-                    isPreviewOpen ? "w-full lg:w-1/2" : "w-full"
-                  )}>
-                    {/* Editor Container */}
-                    <div className="flex-1 flex flex-col min-h-0 relative group/editor bg-[#080808]/50 overflow-hidden">
-                      {/* Line Numbers Simulation or Decorative Element */}
-                      <div className="absolute left-0 top-0 bottom-0 w-14 border-r border-white/[0.03] flex flex-col items-center py-12 pointer-events-none opacity-10">
-                        {Array.from({length: 30}).map((_, i) => (
-                          <div key={i} className="text-[9px] font-mono mb-5 tracking-tighter">{i + 1}</div>
-                        ))}
+                  <div className="flex-1 flex flex-col min-h-0 w-full h-full relative transition-all duration-300">
+                    {/* Goal Progress Ring or Linear top bar */}
+                    {!writingFocusMode && (
+                      <div className="w-full h-[1.5px] bg-white/[0.03] shrink-0">
+                        <motion.div 
+                          className={cn(
+                            "h-full transition-all duration-300",
+                            writingTheme === 'sepia' ? "bg-amber-600" : writingTheme === 'forest' ? "bg-emerald-500" : "bg-her-accent"
+                          )}
+                          style={{
+                            width: `${Math.min(Math.round(((workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length) / writingWordGoal) * 100), 100)}%`
+                          }}
+                        />
                       </div>
+                    )}
 
-                      <textarea 
-                        value={workspaceText}
-                        onChange={(e) => setWorkspaceText(e.target.value)}
-                        className={cn(
-                          "flex-1 bg-transparent focus:outline-none p-12 pl-24 leading-[1.8] transition-all selection:bg-her-accent/40 selection:text-white caret-her-accent resize-none",
-                          (workspaceText.includes('<') || workspaceText.includes('{') || workspaceText.includes('function')) 
-                            ? "font-mono text-[15px] text-emerald-400/80 custom-scrollbar" 
-                            : "font-serif italic text-white/80 text-xl md:text-2xl custom-scrollbar"
-                        )}
-                        style={{ tabSize: 2 }}
-                        placeholder="O silêncio é a tela da sua criação. Comece a digitar..."
-                      />
-
-                      {/* Suggestions Overlay */}
-                      <AnimatePresence>
-                        {codeSuggestions.length > 0 && (
-                          <motion.div 
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
-                            className="absolute bottom-6 left-20 right-10 flex flex-wrap gap-2 z-50"
-                          >
-                            {codeSuggestions.map((suggestion, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => handleGenerate(suggestion)}
-                                disabled={isGenerating}
-                                className="px-5 py-2.5 bg-black/80 backdrop-blur-3xl border border-her-accent/30 rounded-full text-[11px] text-her-accent hover:bg-her-accent hover:text-white transition-all flex items-center gap-2 group/sug shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
-                              >
-                                <Sparkles size={12} />
-                                {suggestion}
-                              </button>
-                            ))}
-                            <button 
-                              onClick={() => setCodeSuggestions([])}
-                              className="w-10 h-10 flex items-center justify-center bg-black/60 backdrop-blur-xl border border-white/10 rounded-full text-white/40 hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                    {/* Paper Area centered with custom sizes and spacing */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar-editor p-4 md:p-8 flex justify-center w-full min-h-0 bg-transparent">
+                      <div className={cn(
+                        "w-full flex flex-col min-h-0 h-full transition-all duration-300",
+                        writingWidthMode === 'compact' ? "max-w-[650px]" :
+                        writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
+                      )}>
+                        <textarea 
+                          value={workspaceText}
+                          onChange={(e) => {
+                            setWorkspaceText(e.target.value);
+                            if (writingSounds) {
+                              playMXKeySound();
+                            }
+                          }}
+                          className={cn(
+                            "w-full h-full bg-transparent focus:outline-none transition-all resize-none overflow-y-auto scroll-smooth custom-scrollbar-editor pb-36",
+                            writingFont === 'sans' ? "font-sans leading-relaxed text-left tracking-wide" :
+                            writingFont === 'mono' ? "font-mono leading-relaxed text-left text-[14px] text-emerald-400" :
+                            "font-serif italic leading-loose text-left font-light"
+                          )}
+                          style={{ 
+                            fontSize: `${writingFontSize}px`,
+                            caretColor: writingTheme === 'sepia' ? '#d97706' : writingTheme === 'forest' ? '#10b981' : '#ff4e00'
+                          }}
+                          placeholder="Digite aqui sua obra... sinta as teclas... o silêncio conspira a seu favor."
+                        />
+                      </div>
                     </div>
 
-                    {/* Integrated Modern Input Bar */}
-                    <div className="p-6 md:p-10 bg-gradient-to-t from-black via-black/90 to-transparent shrink-0">
-                      <div className="max-w-4xl mx-auto relative">
-                        <div className="absolute inset-0 bg-her-accent/5 blur-[40px] rounded-full" />
-                        <div className="relative flex items-center bg-white/[0.03] backdrop-blur-3xl border border-white/10 rounded-3xl p-2 focus-within:border-her-accent/30 transition-all shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-                          <div className="p-4 text-her-accent">
-                            <Wand2 size={20} className={isGenerating ? "animate-spin" : ""} />
-                          </div>
-                          <input 
-                            type="text"
-                            value={workspacePrompt}
-                            onChange={(e) => setWorkspacePrompt(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                            placeholder={workspaceText ? "Refinar o pensamento acima..." : "Dê vida ao papel em branco. O que deseja criar?"}
-                            className="flex-1 bg-transparent py-4 focus:outline-none text-base font-light text-white placeholder:text-white/20"
-                          />
-                          <button 
-                            onClick={() => handleGenerate()}
-                            disabled={isGenerating || !workspacePrompt.trim()}
-                            className={cn(
-                              "w-12 h-12 flex items-center justify-center rounded-2xl transition-all",
-                              workspacePrompt.trim() ? "bg-her-accent text-white shadow-[0_0_20px_rgba(124,58,237,0.4)]" : "text-white/10"
-                            )}
-                          >
-                            {isGenerating ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-                          </button>
-                        </div>
-                        
-                        <div className="mt-4 flex items-center justify-center gap-10">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1 h-1 rounded-full bg-her-accent" />
-                            <span className="text-[9px] uppercase tracking-[0.3em] text-white/20">Modelo: Gemini Elite v4.0</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                             <div className="w-1 h-1 rounded-full bg-her-muted" />
-                             <span className="text-[9px] uppercase tracking-[0.3em] text-white/20">Contexto: Ativo</span>
-                          </div>
-                        </div>
+                    {/* AI Prompt Flutuante com design futurístico */}
+                    <div className={cn(
+                      "absolute bottom-5 left-4 right-4 z-40 transition-all duration-500 lg:bottom-7 lg:left-1/2 lg:-translate-x-1/2 lg:max-w-xl",
+                      writingFocusMode ? "opacity-10 hover:opacity-100 focus-within:opacity-100" : "opacity-100"
+                    )}>
+                      <div className="flex items-center bg-black/95 backdrop-blur-3xl border border-white/10 rounded-2xl p-1 shadow-2xl">
+                        <input 
+                          type="text"
+                          value={workspacePrompt}
+                          onChange={(e) => setWorkspacePrompt(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                          placeholder="Sussurrar comando criativo para a IA..."
+                          className="flex-1 bg-transparent px-4 py-2.5 focus:outline-none text-xs md:text-sm text-white/90 placeholder:text-white/20"
+                        />
+                        <button 
+                          onClick={() => handleGenerate()}
+                          disabled={isGenerating || !workspacePrompt.trim()}
+                          className={cn(
+                            "w-9 h-9 flex items-center justify-center rounded-xl transition-all shrink-0",
+                            workspacePrompt.trim() 
+                              ? (writingTheme === 'sepia' ? "bg-amber-600 text-white" : writingTheme === 'forest' ? "bg-emerald-600 text-white" : "bg-her-accent text-white") 
+                              : "text-white/10"
+                          )}
+                        >
+                          {isGenerating ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                        </button>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full bg-[#050505] overflow-hidden flex flex-col">
+                  <div className="w-full h-full bg-black overflow-hidden flex flex-col">
                     <LyricGenerator apiKeys={apiKeys} />
                   </div>
                 )}
 
-                {isPreviewOpen && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="w-full lg:w-1/2 h-full bg-black border-l border-white/5 overflow-hidden flex flex-col"
-                  >
-                    <div className="px-6 py-4 bg-white/[0.02] border-b border-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Monitor size={14} className="text-her-accent" />
-                        <span className="text-[10px] uppercase tracking-[0.2em] font-black text-white/40">Visualização em Tempo Real</span>
+                {/* Sidebar com Ferramentas & Assistentes Rápidos */}
+                <AnimatePresence>
+                  {isSidebarSettingsOpen && writingSubMode === 'text' && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: 280 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 280 }}
+                      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                      className={cn(
+                        "w-72 border-l shrink-0 flex flex-col h-full overflow-y-auto p-5 custom-scrollbar-preview z-40 relative",
+                        writingTheme === 'charcoal' ? "bg-[#0b0c0e] border-white/5" :
+                        writingTheme === 'midnight' ? "bg-[#050505] border-white/[0.03]" :
+                        writingTheme === 'sepia' ? "bg-[#161311] border-[#2c241e]" :
+                        "bg-[#040805] border-emerald-950/30"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-6 shrink-0 pb-2 border-b border-white/5">
+                        <span className="text-[10px] uppercase tracking-widest font-bold font-mono text-white/40">Customização</span>
+                        <button 
+                          onClick={() => setIsSidebarSettingsOpen(false)}
+                          className="hover:bg-white/5 p-1 rounded text-white/30 hover:text-white transition-colors"
+                        >
+                          <X size={15} />
+                        </button>
                       </div>
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 rounded-full bg-red-500/30" />
-                        <div className="w-2 h-2 rounded-full bg-yellow-500/30" />
-                        <div className="w-2 h-2 rounded-full bg-green-500/30" />
+
+                      {/* Font switcher */}
+                      <div className="mb-5">
+                        <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider mb-2 block">Família de Fonte</label>
+                        <div className="grid grid-cols-3 gap-1 bg-white/[0.02] border border-white/5 rounded-lg p-0.5">
+                          {(['serif', 'sans', 'mono'] as const).map((font) => (
+                            <button
+                              key={font}
+                              onClick={() => setWritingFont(font)}
+                              className={cn(
+                                "py-1 text-[9px] font-medium rounded transition-all text-center uppercase tracking-wider font-mono",
+                                writingFont === font 
+                                  ? "bg-white/10 text-white font-bold" 
+                                  : "text-white/30 hover:text-white"
+                              )}
+                            >
+                              {font}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex-1 bg-white">
-                      <CodePreview code={workspaceText} />
-                    </div>
-                  </motion.div>
-                )}
+
+                      {/* Font size */}
+                      <div className="mb-5">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider">Escala do Texto</label>
+                          <span className="text-[10px] font-mono text-white/50">{writingFontSize}px</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-white/[0.02] border border-white/5 rounded-lg p-0.5">
+                          <button 
+                            onClick={() => setWritingFontSize(prev => Math.max(14, prev - 1))}
+                            className="flex-1 py-1 text-xs hover:bg-white/5 text-white/50 font-mono transition-colors"
+                          >
+                            A-
+                          </button>
+                          <button 
+                            onClick={() => setWritingFontSize(18)}
+                            className="px-2 py-1 text-[8px] hover:bg-white/5 text-white/30 transition-all font-mono"
+                            title="Resetar"
+                          >
+                            <RotateCcw size={9} />
+                          </button>
+                          <button 
+                            onClick={() => setWritingFontSize(prev => Math.min(28, prev + 1))}
+                            className="flex-1 py-1 text-xs hover:bg-white/5 text-white/50 font-mono transition-colors"
+                          >
+                            A+
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Writing Themes */}
+                      <div className="mb-5">
+                        <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider mb-2 block">Paleta de Ambiente</label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(['charcoal', 'midnight', 'sepia', 'forest'] as const).map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => setWritingTheme(t)}
+                              className={cn(
+                                "py-2 px-1 text-[9px] uppercase tracking-wider font-mono rounded-lg border text-center transition-all",
+                                writingTheme === t 
+                                  ? (t === 'sepia' ? "border-amber-600/50 bg-amber-650/15 text-amber-300 font-bold" : t === 'forest' ? "border-emerald-500/50 bg-emerald-650/15 text-emerald-300 font-bold" : "border-her-accent bg-her-accent/5 text-her-accent font-bold") 
+                                  : "border-white/5 text-white/30 hover:border-white/10 hover:text-white"
+                              )}
+                            >
+                              {t === 'charcoal' ? 'Chumbo' : t === 'midnight' ? 'Onyx' : t === 'sepia' ? 'Sépia' : 'Floresta'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Margin Width */}
+                      <div className="mb-5">
+                        <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider mb-2 block">Foco da Margem</label>
+                        <div className="grid grid-cols-3 gap-1 bg-white/[0.02] border border-white/5 rounded-lg p-0.5">
+                          {(['compact', 'classic', 'wide'] as const).map((wm) => (
+                            <button
+                              key={wm}
+                              onClick={() => setWritingWidthMode(wm)}
+                              className={cn(
+                                "py-1.5 text-[9px] font-medium rounded transition-all text-center uppercase tracking-wider font-mono",
+                                writingWidthMode === wm 
+                                  ? "bg-white/10 text-white font-bold" 
+                                  : "text-white/30 hover:text-white"
+                              )}
+                            >
+                              {wm === 'compact' ? 'Fata' : wm === 'classic' ? 'Padrão' : 'Ampla'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Sound typing simulation */}
+                      <div className="mb-5">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider">Música das Teclas</label>
+                          <span className={cn(
+                            "text-[8px] px-1 py-0.5 font-mono uppercase tracking-widest rounded font-bold",
+                            writingSounds ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-white/20"
+                          )}>
+                            {writingSounds ? 'Sons On' : 'Sons Off'}
+                          </span>
+                        </div>
+                        <p className="text-[8px] text-white/35 font-mono leading-relaxed mb-2">
+                          Cliques de interruptores mecânicos virtuais gerados em tempo real na saída de áudio para amplificar foco.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setWritingSounds(!writingSounds);
+                            if(!writingSounds) setTimeout(playMXKeySound, 100);
+                          }}
+                          className={cn(
+                            "w-full py-1.5 rounded-lg text-[9px] uppercase font-bold tracking-widest transition-all",
+                            writingSounds 
+                              ? "bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10" 
+                              : "bg-white/5 hover:bg-white/10 text-white border border-white/5"
+                          )}
+                        >
+                          {writingSounds ? 'Silenciar' : 'Gerar Cliques'}
+                        </button>
+                      </div>
+
+                      {/* Daily word goal */}
+                      <div className="mb-5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[9px] uppercase font-mono text-white/30 tracking-wider">Meta de Palavras</label>
+                          <span className="text-[10px] font-mono text-white/50">{writingWordGoal}p</span>
+                        </div>
+                        <input 
+                          type="range" 
+                          min="100" 
+                          max="1500" 
+                          step="50"
+                          value={writingWordGoal}
+                          onChange={(e) => setWritingWordGoal(Number(e.target.value))}
+                          className="w-full mt-2 accent-her-accent"
+                        />
+                      </div>
+
+                      {/* Predefined prompts */}
+                      <div className="mt-4 pt-5 border-t border-white/5">
+                        <div className="flex items-center gap-1.5 mb-2.5">
+                          <Sparkles size={11} className="text-her-accent" />
+                          <span className="text-[10px] font-mono text-white/40 tracking-wider uppercase font-bold">Assistentes de Texto</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {[
+                            { label: 'Refinar Prosa', prompt: 'Melhore a fluidez, ritmo e elegância deste texto, tornando-o impecável:' },
+                            { label: 'Expandir Ideia', prompt: 'Desenvolva de forma profunda, imersiva e detalhada esta passagem:' },
+                            { label: 'Reescrever Lírico', prompt: 'Reescreva a seguinte passagem usando uma linguagem altamente poética e evocativa:' },
+                            { label: 'Corrigir Ortografia', prompt: 'Corrija erros ortográficos de coesão e pontuação sem alterar as ideias:' },
+                            { label: 'Gerar Títulos', prompt: 'Crie 5 sugestões de títulos incríveis e artísticos para o seguinte material:' }
+                          ].map((assist, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                setWorkspacePrompt(`${assist.prompt}\n\nGera com base nesse conteúdo: "${workspaceText ? workspaceText.slice(0, 800) : ''}"`);
+                                addNotification(`Instrução "${assist.label}" preenchida! Clique no botão Enviar de IA.`, "info");
+                              }}
+                              className="text-left p-2 rounded-lg bg-white/[0.01] hover:bg-white/[0.03] border border-white/5 hover:border-white/10 transition-all group"
+                            >
+                              <div className="text-[9px] font-bold text-white/70 group-hover:text-amber-400 transition-colors font-mono">{assist.label}</div>
+                              <div className="text-[7.5px] text-white/30 font-mono truncate mt-0.5">{assist.prompt}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* O painel de visualização lateral split foi retirado para focar no fluxo imersivo contínuo e espaçoso de escrita */}
               </div>
             </motion.div>
           ) : workspaceMode === 'canvas' ? (
@@ -3855,22 +3899,7 @@ export default function App() {
               </div>
               <WebtoonCreator apiKeys={apiKeys} />
             </motion.div>
-          ) : workspaceMode === 'viral_studio' ? (
-            <motion.div 
-              key="workspace-viralstudio"
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="w-full h-full flex flex-col overflow-hidden relative p-0"
-            >
-              <ViralStudio 
-                timeline={timelineState}
-                setTimeline={setTimelineState}
-                apiKeys={apiKeys}
-                onMenuClick={() => setIsSidebarOpen(true)}
-                onBack={() => setWorkspaceMode('home')}
-              />
-            </motion.div>
+
           ) : workspaceMode === 'wellness' ? (
             <motion.div 
               key="workspace-wellness"
@@ -3941,6 +3970,16 @@ export default function App() {
                 onClose={() => setWorkspaceMode('home')}
               />
             </motion.div>
+          ) : workspaceMode === 'local_control' ? (
+            <motion.div
+              key="workspace-local-control"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <LocalControl onClose={() => setWorkspaceMode('home')} />
+            </motion.div>
           ) : (
             <motion.div 
               key="home"
@@ -3950,7 +3989,10 @@ export default function App() {
               className="flex flex-col items-center w-full h-full relative"
             >
               {chatHistory.length === 0 && (
-                <div className="mb-2 md:mb-8 text-center shrink-0 hidden md:block">
+                <div className={cn(
+                  "mb-2 md:mb-8 text-center shrink-0 hidden md:block transition-all duration-500",
+                  !showUi && "opacity-0 scale-95 pointer-events-none"
+                )}>
                   <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 4</h1>
                   <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
                 </div>
@@ -3980,9 +4022,12 @@ export default function App() {
                     {liveState.status !== 'connected' && (
                       <motion.div
                         initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: [0.4, 0.7, 0.4], y: 0 }}
+                        animate={{ opacity: !showUi ? 0 : [0.4, 0.7, 0.4], y: 0 }}
                         transition={{ duration: 4, repeat: Infinity }}
-                        className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap"
+                        className={cn(
+                          "absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap transition-all duration-500",
+                          !showUi && "opacity-0 pointer-events-none scale-95"
+                        )}
                       >
                         <span className="text-[10px] md:text-sm font-serif italic tracking-[0.3em] text-her-muted/80 uppercase">
                           Me ative
@@ -3992,7 +4037,10 @@ export default function App() {
                   </div>
                   
                   {(chatHistory.length === 0 || liveState.status === 'connected') && (
-                    <div className="mt-4 flex flex-col items-center gap-2">
+                    <div className={cn(
+                      "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
+                      !showUi && "opacity-0 pointer-events-none scale-95"
+                    )}>
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-1.5 h-1.5 rounded-full transition-all duration-500",
@@ -4058,7 +4106,7 @@ export default function App() {
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
                   "flex-1 flex flex-col overflow-hidden w-full transition-all duration-700",
-                  (liveState.status === 'connected' || !isChatExpanded) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
+                  (liveState.status === 'connected' || !isChatExpanded || !showUi) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
                   chatHistory.length > 0 ? "pt-12 justify-start translate-z-0" : "justify-center"
                 )}>
                   {chatHistory.length > 0 && (
@@ -4192,7 +4240,10 @@ export default function App() {
                 </div>
 
                 {/* Chat Input Area */}
-                <div className="shrink-0 pt-0 w-full pb-0">
+                <div className={cn(
+                  "shrink-0 pt-0 w-full pb-20 md:pb-0 transition-all duration-500",
+                  !showUi && "opacity-0 pointer-events-none translate-y-4"
+                )}>
                   <div className={cn(
                     "flex justify-between items-center px-10 mb-0 transition-all duration-300",
                     !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-20"
@@ -4394,6 +4445,57 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      {/* Mobile Bottom Navigation */}
+      <nav className={cn(
+        "fixed bottom-0 left-0 right-0 z-[60] bg-[#050505]/90 backdrop-blur-3xl border-t border-white/[0.05] flex md:hidden items-center justify-around px-4 py-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-500",
+        !showUi && "opacity-0 pointer-events-none translate-y-4"
+      )}>
+        {[
+          { id: 'home', icon: Volume2, label: 'Início' },
+          { id: 'writing', icon: FileText, label: 'Escrita' },
+          { id: 'aural_control', icon: Activity, label: 'Sentido' },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setWorkspaceMode(item.id as WorkspaceMode)}
+            className={cn(
+              "flex flex-col items-center gap-1.5 p-2 transition-all relative group",
+              workspaceMode === item.id ? "text-her-accent" : "text-her-muted"
+            )}
+          >
+            <item.icon size={20} className={cn(
+              "transition-transform",
+              workspaceMode === item.id ? "scale-110" : "group-hover:scale-105"
+            )} />
+            <span className={cn(
+              "text-[8px] uppercase tracking-[0.2em] font-medium",
+              workspaceMode === item.id ? "opacity-100" : "opacity-40"
+            )}>
+              {item.label}
+            </span>
+            {workspaceMode === item.id && (
+              <motion.div 
+                layoutId="bottomNavDot"
+                className="absolute -top-3 left-1/2 -translate-x-1/2 w-1 h-1 bg-her-accent rounded-full shadow-[0_0_8px_rgba(255,78,0,0.8)]" 
+              />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Mobile Backdrop for Sidebar/Settings */}
+      <AnimatePresence>
+        {(isSidebarOpen || isSettingsOpen) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[45] bg-black/60 backdrop-blur-sm md:hidden"
+            onClick={() => { setIsSidebarOpen(false); setIsSettingsOpen(false); }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Modals & Overlays */}
       {/* Notifications Layer */}
       <div className="fixed top-8 right-8 z-[100] flex flex-col gap-3 pointer-events-none">
@@ -4477,7 +4579,7 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.8, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className="fixed bottom-20 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md overflow-hidden border border-white/20 shadow-2xl group"
+            className="fixed bottom-28 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md overflow-hidden border border-white/20 shadow-2xl group"
           >
             <video 
               ref={liveVideoRef} 

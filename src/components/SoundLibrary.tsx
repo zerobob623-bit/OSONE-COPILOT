@@ -142,53 +142,38 @@ export const SoundLibrary = ({ sounds, playingUrl, apiKeys, onAddSound, onUpdate
   return (
     <div className="flex flex-col h-full bg-her-bg/50 backdrop-blur-xl overflow-hidden w-full">
       {/* Header */}
-      <div className="p-10 flex items-center justify-between border-b border-white/[0.05] bg-black/20">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-her-accent/10 text-her-accent">
-            <Music size={24} />
+      <div className="p-4 md:p-10 flex items-center justify-between border-b border-white/[0.05] bg-black/20 shrink-0">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="p-3 md:p-4 bg-her-accent/10 text-her-accent">
+            <Music size={20} className="md:w-6 md:h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-serif italic">Biblioteca de Sons</h2>
-            <p className="text-[10px] text-her-muted uppercase tracking-[0.2em] font-light">Efeitos sonoros para o OSONE</p>
+            <h2 className="text-lg md:text-xl font-serif italic">Biblioteca de Sons</h2>
+            <p className="text-[8px] md:text-[10px] text-her-muted uppercase tracking-[0.2em] font-light">Efeitos sonoros para o OSONE</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {playingUrl && (
-            <button 
-              onClick={onStopSound}
-              className="flex items-center gap-2 px-6 py-4 bg-red-400/10 text-red-400 hover:bg-red-400/20 text-xs font-light border border-red-400/20 transition-all uppercase tracking-widest"
-            >
-              <Square size={14} fill="currentColor" />
-              <span>Parar Todos</span>
-            </button>
-          )}
-          <button 
-            onClick={onRestoreDefaults}
-            className="hidden md:flex items-center gap-2 px-6 py-4 bg-white/[0.05] text-her-muted hover:text-white text-xs font-light border border-white/[0.05] transition-all uppercase tracking-widest"
-          >
-            <span>Restaurar Padrões</span>
-          </button>
+        <div className="flex items-center gap-2 md:gap-3">
           <button 
             onClick={() => setIsAiModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-4 bg-gradient-to-r from-purple-500/20 to-her-accent/20 text-purple-200 text-xs font-light border border-purple-500/30 hover:from-purple-500/30 hover:to-her-accent/30 transition-all uppercase tracking-widest"
+            className="p-3 md:px-6 md:py-4 bg-gradient-to-r from-purple-500/20 to-her-accent/20 text-purple-200 border border-purple-500/30 hover:from-purple-500/30 hover:to-her-accent/30 transition-all uppercase tracking-widest rounded-lg"
           >
             <Sparkles size={16} className="text-purple-400" />
-            <span>Gerar com IA</span>
+            <span className="hidden md:inline ml-2 text-xs font-light">Gerar com IA</span>
           </button>
           <button 
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-4 bg-her-accent text-white text-xs font-light hover:bg-her-accent/90 transition-all uppercase tracking-widest"
+            className="p-3 md:px-6 md:py-4 bg-her-accent text-white hover:bg-her-accent/90 transition-all uppercase tracking-widest rounded-lg"
           >
             <Plus size={16} />
-            <span>Adicionar</span>
+            <span className="hidden md:inline ml-2 text-xs font-light">Adicionar</span>
           </button>
-          <button onClick={onClose} className="p-2.5 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted">
+          <button onClick={onClose} className="p-2 hover:bg-white/[0.03] rounded-full transition-colors text-her-muted">
             <X size={20} />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 p-10 gap-10">
+      <div className="flex-1 flex flex-col min-h-0 p-4 md:p-10 gap-6 md:gap-10 pb-[100px] md:pb-10">
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 shrink-0">
           <div className="flex-1 relative">

@@ -15,10 +15,10 @@ export interface ApiKeys {
   googleHomeToken?: string;
 }
 
-export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow';
+export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'viralflow' | 'viral_studio' | 'canvas' | 'wellness' | 'aural_control';
+export type WorkspaceMode = 'home' | 'writing' | 'webtoon' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control';
 
 export interface DrawingObject {
   id: string;
@@ -112,29 +112,4 @@ export interface VoiceModulation {
   distortion: number;
 }
 
-export interface VideoClip {
-  id: string;
-  title: string;
-  startTime: number;
-  duration: number;
-  sourceUrl: string;
-  sourceOffset: number;
-  type: 'video' | 'audio';
-  trackIndex: number;
-}
 
-export interface VideoSubtitle {
-  id: string;
-  text: string;
-  startTime: number;
-  duration: number;
-  style?: string;
-}
-
-export interface VideoTimelineState {
-  clips: VideoClip[];
-  subtitles: VideoSubtitle[];
-  currentTime: number;
-  totalDuration: number;
-  isPlaying: boolean;
-}

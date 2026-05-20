@@ -167,20 +167,20 @@ export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalDa
 
   return (
     <div className="h-full flex flex-col bg-transparent overflow-hidden">
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-[90px] md:pb-0">
         
-               <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-8 flex flex-col gap-10 overflow-y-auto bg-black/20">
+               <div className="w-full lg:w-1/3 border-b lg:border-b-0 lg:border-r border-white/[0.05] p-4 flex flex-col gap-4 overflow-y-auto bg-black/20 shrink-0 lg:shrink">
           <div>
-            <h3 className="text-sm font-serif italic mb-6 flex items-center gap-2">
-              <Stethoscope size={16} className="text-her-accent" />
-              Perfil Biométrico
+            <h3 className="text-xs font-serif italic mb-2 flex items-center gap-2">
+              <Stethoscope size={14} className="text-her-accent" />
+              Biológicos
             </h3>
             
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-her-muted font-light">
-                    <Calendar size={12} /> Idade
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-her-muted font-light">
+                    <Calendar size={10} /> Idade
                   </label>
                   <input 
                     type="number"
@@ -190,9 +190,9 @@ export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalDa
                     className="w-full bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-sm focus:outline-none focus:border-her-accent/30"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-her-muted font-light">
-                    <Heart size={12} /> Gênero
+                <div className="space-y-1">
+                  <label className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-her-muted font-light">
+                    <Heart size={10} /> Gênero
                   </label>
                   <select 
                     value={data.gender}
