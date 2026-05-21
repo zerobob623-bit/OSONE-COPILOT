@@ -55,6 +55,7 @@ import { cn, safeJsonParse } from './lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
+import { connectToLiveBridge } from './lib/live-bridge';
 import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
 import { SettingsModal } from './components/SettingsModal';
@@ -225,9 +226,10 @@ export default function App() {
   - Sua personalidade é: ${aiProfile.personality}
   - Seu jeito de escrever/falar é: ${aiProfile.writingStyle}
   
-  DIRETRIZES DE BOAS-VINDAS:
+  DIRETRIZES DE BOAS-VINDAS E AMBIENTE:
   - Evite ser um robô repetitivo. Mude as palavras, seja fluido.
-  - No início de uma sessão, você pode citar o clima ou a hora de forma orgânica, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
+  - Você possui a habilidade de ver e saber a temperatura local, horário exato do sistema e a localização física da pessoa em tempo real ativamente usando a ferramenta/skill 'getUserEnvironment'. Sempre que o usuário mencionar ou perguntar sobre clima, temperatura, hora ou onde ele está, use a ferramenta 'getUserEnvironment' imediatamente para obter as informações reais!
+  - No início de uma sessão ou quando apropriado, você pode citar o clima ou a hora de forma orgânica usando essa ferramenta, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
   
   MODULAÇÃO DE VOZ:
@@ -510,6 +512,47 @@ export default function App() {
     });
   };
 
+  const playSearchNetworkSound = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const now = ctx.currentTime;
+      
+      // Tone 1: short shimmery start representing connection/signal
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(600, now);
+      osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.12);
+      
+      gain1.gain.setValueAtTime(0.06, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.13);
+      
+      // Tone 2: slight delay shimmery accent representing request data
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(1000, now + 0.06);
+      osc2.frequency.exponentialRampToValueAtTime(1800, now + 0.22);
+      
+      gain2.gain.setValueAtTime(0.04, now + 0.06);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.06);
+      osc2.stop(now + 0.23);
+    } catch (e) {
+      console.warn("Could not play synthesized search sound:", e);
+    }
+  };
+
   const stopSoundEffect = () => {
     if (soundEffectAudioRef.current) {
       soundEffectAudioRef.current.pause();
@@ -746,6 +789,13 @@ export default function App() {
   useEffect(() => {
     isCameraActiveRef.current = isCameraActive;
   }, [isCameraActive]);
+
+  const [isVoiceOutputPaused, setIsVoiceOutputPaused] = useState(false);
+  const isVoiceOutputPausedRef = useRef(false);
+
+  useEffect(() => {
+    isVoiceOutputPausedRef.current = isVoiceOutputPaused;
+  }, [isVoiceOutputPaused]);
 
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -1053,7 +1103,7 @@ export default function App() {
   };
 
   const handleGenerateStructure = async (promptText: string) => {
-    const effectiveApiKey = apiKeys.gemini;
+    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
     if (!effectiveApiKey || effectiveApiKey.trim() === '') {
       setIsSettingsOpen(true);
       console.error('Por favor, configure sua API Key do Gemini nas configurações.');
@@ -1064,7 +1114,7 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.5-flash",
         contents: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
         Retorne APENAS um JSON no seguinte formato:
         [
@@ -1231,7 +1281,7 @@ export default function App() {
 
   const handleGenerate = async (explicitPrompt?: string) => {
     const finalPrompt = explicitPrompt || workspacePrompt;
-    const effectiveApiKey = apiKeys.gemini;
+    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
     if (!finalPrompt.trim() || !effectiveApiKey || effectiveApiKey.trim() === '') {
       if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
       return;
@@ -1284,7 +1334,7 @@ export default function App() {
   };
 
   const handleAnalyzeCode = async (codeToAnalyze = workspaceText) => {
-    const effectiveApiKey = apiKeys.gemini;
+    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
     if (!codeToAnalyze.trim() || !effectiveApiKey || effectiveApiKey.trim() === '' || isAnalyzingCode) return;
 
     setIsAnalyzingCode(true);
@@ -1320,7 +1370,7 @@ export default function App() {
   };
 
   const handleHomeChat = async (directMessage?: string) => {
-    const effectiveApiKey = apiKeys.gemini;
+    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
     if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !effectiveApiKey || effectiveApiKey.trim() === '') {
       if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
       return;
@@ -1349,7 +1399,7 @@ export default function App() {
     addMessage({ role: 'user' as const, content: fullMessage });
 
     try {
-      const effectiveApiKey = apiKeys.gemini;
+      const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
       if (!effectiveApiKey || effectiveApiKey.trim() === '') {
         setIsSettingsOpen(true);
         addMessage({ role: 'assistant', content: 'Por favor, vincule sua própria chave API Gemini nas configurações para interagir.' });
@@ -1360,6 +1410,14 @@ export default function App() {
       const tools: any[] = [];
       
       const functionDeclarations: any[] = [
+        {
+          name: "getUserEnvironment",
+          description: "Obtém as informações ambientais reais e exatas do usuário em tempo real: horário local do sistema, localização geográfica (cidade, estado, país) e a temperatura ou clima atual através de geolocalização e serviços de clima.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {}
+          }
+        },
         {
           name: "openUrl",
           description: "Abre uma URL em uma nova aba do navegador. Use para mostrar guias, sites ou pesquisas ao usuário.",
@@ -1655,7 +1713,17 @@ export default function App() {
       const functionCalls = result.functionCalls;
       if (functionCalls) {
         for (const call of functionCalls) {
-          if (call.name === 'openUrl') {
+          if (call.name === 'getUserEnvironment') {
+            getUserLocationAndTimeAndWeather().then(env => {
+              const info = `🌍 **Localização:** ${env.location}\n⏰ **Horário Local:** ${env.localTime}\n🌡️ **Temperatura:** ${env.temperature}`;
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: `Acesse seu ambiente em tempo real. Veja o que identifiquei:\n\n${info}`
+              }]);
+              addNotification("Dados de ambiente coletados", "success");
+            });
+          } else if (call.name === 'openUrl') {
             const url = (call.args as any).url;
             const title = (call.args as any).title || url;
             window.open(url, '_blank');
@@ -1681,6 +1749,7 @@ export default function App() {
             }]);
           } else if (call.name === 'read_web_page') {
             const url = (call.args as any).url;
+            playSearchNetworkSound();
             try {
               const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
               const data = await response.json();
@@ -1808,14 +1877,13 @@ export default function App() {
 
             try {
               const imageResult = await genAI.models.generateContent({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-2.5-flash-image',
                 contents: {
                   parts: [{ text: prompt }]
                 },
                 config: {
                   imageConfig: {
-                    aspectRatio: aspectRatio,
-                    imageSize: "1K"
+                    aspectRatio: aspectRatio
                   }
                 }
               });
@@ -1995,16 +2063,18 @@ export default function App() {
   };
 
   const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
-    const apiKey = apiKeys.gemini;
-    if (!apiKey || apiKey.trim() === '') {
+    const apiKey = apiKeys.gemini || '';
+    const hasSystemKey = !!process.env.GEMINI_API_KEY;
+    if (!apiKey && !hasSystemKey) {
       setIsSettingsOpen(true);
       return;
     }
 
+    setIsVoiceOutputPaused(false);
     setLiveState({ status: 'connecting' });
     
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: apiKey || (process.env.GEMINI_API_KEY as string) });
       
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer((active) => {
@@ -2026,6 +2096,14 @@ export default function App() {
       
       PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
+      PROTOCOLO DE SENSATEZ E FILTRAGEM COGNITIVA (INTELIGÊNCIA SOCIAL E AMBIENTAL):
+      - Se você já estiver conversando diretamente com o usuário em um diálogo normal de um-para-um, tudo ok, responda normalmente de forma ágil e útil.
+      - Se você sentir, ouvir ou perceber que o usuário está conversando com outra pessoa ou que você está inserido em uma conversa de grupo ou ambiente de áudio compartilhado, COMPORTE-SE de forma inteligente, prudente e polida:
+        1. Fique calado e de mentores, apenas analisando o fluxo da fala.
+        2. Não diga nada sobre o que não foi perguntado, chamado, guiado ou se ninguém pediu sua opinião direta. Evite intrometer-se sem necessidade.
+        3. Use o bom senso: avalie se a sua fala pode atrapalhar ou interromper a dinâmica do grupo. Se for esse o caso, opte pelo silêncio para não atrapalhar.
+        4. Entretanto, com educação e sutileza, caso você perceba que há uma dica de altíssimo valor ou um insight que realmente se encaixe com precisão e ajude os participantes, você pode dar essa contribuição com bom senso, sendo extremamente polido, educado e fornecendo o toque útil brevemente.
+
       CAPACIDADES VISUAIS (SKELETON VISION):
       Você tem acesso à visão em tempo real se receber frames de imagem.
       Mesmo que as instruções iniciais digam o contrário, se você receber imagens, elas são REAIS e ATUAIS.
@@ -2040,7 +2118,8 @@ export default function App() {
       Aja com base nas memórias: ${recentChatContext}
       `;
 
-      const sessionPromise = ai.live.connect({
+      const sessionPromise = connectToLiveBridge({
+        apiKey,
         model: "gemini-3.1-flash-live-preview",
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2065,6 +2144,14 @@ export default function App() {
           tools: [
             {
               functionDeclarations: [
+                {
+                  name: "getUserEnvironment",
+                  description: "Obtém as informações ambientais reais e exatas do usuário em tempo real: horário local do sistema, localização geográfica (cidade, estado, país) e a temperatura ou clima atual através de geolocalização e serviços de clima.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
                 {
                   name: "openUrl",
                   description: "Abre uma URL em uma nova aba do navegador. Use para mostrar guias, sites ou pesquisas ao usuário.",
@@ -2527,13 +2614,48 @@ export default function App() {
           },
           onmessage: async (message) => {
             sessionPromise.then(async (session) => {
+              // 1. Detect user transcription for voice command pause/play control
+              let userTranscriptText = "";
+              const rawServerContent = message.serverContent as any;
+              if (rawServerContent?.clientContent?.parts) {
+                userTranscriptText = rawServerContent.clientContent.parts
+                  .map((p: any) => p.text || "")
+                  .join(" ");
+              } else if (rawServerContent?.interimContent?.parts) {
+                userTranscriptText = rawServerContent.interimContent.parts
+                  .map((p: any) => p.text || "")
+                  .join(" ");
+              }
+
+              if (userTranscriptText) {
+                const lowerText = userTranscriptText.toLowerCase().trim();
+                console.log("[LIVE USER VOICE TRANSCRIPT]:", lowerText);
+                
+                const pausePhrases = ["pausa", "pause", "para de falar", "parar de falar", "fica quieto", "fica quieta", "cala a boca", "silêncio", "silencio", "shh", "shhh", "mute", "mutar", "pausar"];
+                const playPhrases = ["play", "voltar a falar", "volte a falar", "pode falar", "escutar", "despausar", "continuar", "falar", "retomar", "unmute", "desmutar"];
+
+                const matchesPause = pausePhrases.some(phrase => lowerText.includes(phrase));
+                const matchesPlay = playPhrases.some(phrase => lowerText.includes(phrase));
+
+                if (matchesPause) {
+                  setIsVoiceOutputPaused(true);
+                  audioPlayerRef.current?.stop();
+                  addNotification("Voz do OSONE pausada (ouvinte ativo)", "info");
+                } else if (matchesPlay) {
+                  setIsVoiceOutputPaused(false);
+                  addNotification("Voz do OSONE retomada", "success");
+                }
+              }
+
               if (message.serverContent?.modelTurn?.parts) {
                 const audioPart = message.serverContent.modelTurn.parts.find(p => p.inlineData);
                 const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
                 
                 // Use Gemini Audio
                 if (audioPart?.inlineData?.data) {
-                  audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
+                  if (!isVoiceOutputPausedRef.current) {
+                    audioPlayerRef.current?.playChunk(audioPart.inlineData.data);
+                  }
                 }
                 
                 if (textPart?.text) {
@@ -2750,12 +2872,13 @@ export default function App() {
                     });
                   } else if (call.name === "google_search") {
                     const query = call.args.query as string;
+                    playSearchNetworkSound();
                     try {
                       const searchResult = await ai.models.generateContent({ 
-                        model: "gemini-2.0-flash",
+                        model: "gemini-3.5-flash",
                         contents: [{ role: 'user', parts: [{ text: query }] }],
                         config: {
-                          tools: [{ googleSearchRetrieval: {} }] as any
+                          tools: [{ googleSearch: {} }]
                         }
                       });
                       const responseText = searchResult.text;
@@ -2774,6 +2897,7 @@ export default function App() {
                     }
                   } else if (call.name === "read_web_page") {
                     const url = call.args.url as string;
+                    playSearchNetworkSound();
                     try {
                       const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
                       const data = await response.json();
@@ -2955,6 +3079,29 @@ export default function App() {
                       id: call.id,
                       response: { result: `Conteúdo escrito no arquivo '${path}'.` }
                     });
+                  } else if (call.name === "getUserEnvironment") {
+                    try {
+                      const env = await getUserLocationAndTimeAndWeather();
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: {
+                            localTime: env.localTime,
+                            location: env.location,
+                            temperature: env.temperature,
+                            details: env.details
+                          }
+                        }
+                      });
+                      addNotification("Dados ambientais compartilhados com OSONE", "success");
+                    } catch (err: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: err.message }
+                      });
+                    }
                   } else if (call.name === "openUrl") {
                     const url = call.args.url as string;
                     const title = (call.args.title as string) || url;
@@ -3019,11 +3166,11 @@ export default function App() {
                       content: `Gerando imagem para: "${prompt}"...` 
                     });
                     
-                    const effectiveApiKey = apiKeys.gemini;
+                    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
                     if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
                     const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
                     genAI.models.generateContent({
-                      model: 'gemini-2.0-flash',
+                      model: 'gemini-2.5-flash-image',
                       contents: { parts: [{ text: prompt }] },
                       config: {
                         imageConfig: { aspectRatio }
@@ -3206,6 +3353,125 @@ export default function App() {
         setIsCameraActive(false);
       }
     }
+  };
+
+  const getUserLocationAndTimeAndWeather = async (): Promise<{
+    localTime: string;
+    location: string;
+    temperature: string;
+    coords: { latitude: number; longitude: number } | null;
+    details: any;
+  }> => {
+    const now = new Date();
+    const formatTime = (date: Date) => {
+      return date.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZoneName: 'short'
+      });
+    };
+
+    let coords: { latitude: number; longitude: number } | null = null;
+    let locationStr = "Desconhecido (Permissão de localização negada ou indisponível)";
+    let temperatureStr = "Não disponível";
+    let details: any = {};
+
+    // Try Geolocation API first (GPS with high accuracy)
+    try {
+      const getCoords = () => new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { 
+          enableHighAccuracy: true, 
+          timeout: 6000,
+          maximumAge: 0
+        });
+      });
+      const pos = await getCoords();
+      coords = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude
+      };
+      locationStr = `Coordenadas: Lat ${pos.coords.latitude.toFixed(4)}, Lng ${pos.coords.longitude.toFixed(4)} (GPS)`;
+      
+      // Try to reverse geocode the GPS coordinates using OpenStreetMap Nominatim
+      try {
+        const geoUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}&accept-language=pt-BR`;
+        const geoRes = await fetch(geoUrl, {
+          headers: {
+            'User-Agent': 'OSONE-Systems/4.0'
+          }
+        });
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          if (geoData && geoData.display_name) {
+            const city = geoData.address?.city || geoData.address?.town || geoData.address?.village || geoData.address?.suburb || geoData.address?.city_district || "";
+            const state = geoData.address?.state || "";
+            const country = geoData.address?.country || "";
+            const detailStr = city ? `${city}, ${state}, ${country}` : geoData.display_name;
+            locationStr = `${detailStr} (GPS - Alta Precisão)`;
+            details.gps_location = geoData;
+          }
+        }
+      } catch (geoErr) {
+        console.warn("Reverse geocoding failed, using raw coords:", geoErr);
+      }
+    } catch (e) {
+      console.log("Geolocation API failed or denied, using IP fallback...", e);
+    }
+
+    // Fallback or enrich with IP-based GeoIP ONLY if GPS coords are missing
+    if (!coords) {
+      try {
+        const ipRes = await fetch("https://ipapi.co/json/");
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          details = ipData;
+          if (ipData.latitude && ipData.longitude) {
+            coords = {
+              latitude: ipData.latitude,
+              longitude: ipData.longitude
+            };
+          }
+          if (ipData.city) {
+            locationStr = `${ipData.city || ""}, ${ipData.region || ""}, ${ipData.country_name || ""}`;
+            if (ipData.org) {
+              locationStr += ` (Estimado por IP - Provedor: ${ipData.org})`;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("IP Geo API fallback failed:", err);
+      }
+    }
+
+    // Get Weather if coordinates are retrieved
+    if (coords) {
+      try {
+        const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.latitude}&longitude=${coords.longitude}&current_weather=true`);
+        if (weatherRes.ok) {
+          const weatherData = await weatherRes.json();
+          const temp = weatherData.current_weather?.temperature;
+          const wind = weatherData.current_weather?.windspeed;
+          const weatherCode = weatherData.current_weather?.weathercode;
+          temperatureStr = `${temp}°C`;
+          details.weather = { temp, wind, weatherCode };
+        }
+      } catch (err) {
+        console.warn("Weather API failed:", err);
+      }
+    }
+
+    return {
+      localTime: formatTime(now),
+      location: locationStr,
+      temperature: temperatureStr,
+      coords,
+      details
+    };
   };
 
   const handleVoiceToggle = () => {
@@ -4000,14 +4266,23 @@ export default function App() {
 
               <div className="flex-1 w-full flex flex-col min-h-0 gap-2 md:gap-6 relative">
                 {/* Visualizer Area - Repositioned to 'ceiling' when chat active, or center when voice active */}
-                <div className={cn(
-                  "flex flex-col items-center justify-center py-2 transition-all duration-1000 ease-in-out z-50",
-                  liveState.status === 'connected'
-                    ? "relative flex-1 scale-110 md:scale-125" // Center large when voice active
-                    : (chatHistory.length > 0 || isChatExpanded)
-                      ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
-                      : "absolute inset-0 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-none"
-                )}>
+                <motion.div 
+                  layout
+                  transition={{
+                    type: "spring",
+                    stiffness: 90,
+                    damping: 18,
+                    mass: 0.85
+                  }}
+                  className={cn(
+                    "flex flex-col items-center justify-center py-2 z-50",
+                    liveState.status === 'connected'
+                      ? "relative flex-1 scale-110 md:scale-125" // Center large when voice active
+                      : (chatHistory.length > 0 || isChatExpanded)
+                        ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
+                        : "absolute inset-0 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-none"
+                  )}
+                >
                   <div onClick={handleVoiceToggle} className={cn(
                     "cursor-pointer transition-all duration-500 group relative",
                     liveState.status === 'connected' ? "pointer-events-auto" : "pointer-events-auto"
@@ -4076,6 +4351,22 @@ export default function App() {
                                 {liveState.error}
                               </p>
                             </motion.div>
+                          ) : isVoiceOutputPaused ? (
+                            <motion.button 
+                              key="paused"
+                              onClick={() => {
+                                setIsVoiceOutputPaused(false);
+                                addNotification("Voz do OSONE retomada", "success");
+                              }}
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -5 }}
+                              className="group flex items-center gap-1.5 text-[11px] font-sans text-amber-500 font-medium hover:text-amber-400 cursor-pointer pointer-events-auto px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full transition-all"
+                              title="Clique para retomar"
+                            >
+                              <VolumeX size={12} className="animate-pulse" />
+                              Voz Pausada (Escutando...)
+                            </motion.button>
                           ) : isSpeaking ? (
                             <motion.p 
                               key="speaking"
@@ -4101,7 +4392,7 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                </div>
+                </motion.div>
 
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
