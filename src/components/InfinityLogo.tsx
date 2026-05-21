@@ -4,6 +4,462 @@ import { cn } from '../lib/utils';
 import { OrbStyle } from '../types';
 import { VolumeX } from 'lucide-react';
 
+const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; speaking: boolean }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const userRmsRef = React.useRef(0);
+  const animationRef = React.useRef<number | null>(null);
+  
+  React.useEffect(() => {
+    const handleUserVoice = (e: any) => {
+      userRmsRef.current = active ? e.detail.rms : 0;
+    };
+    window.addEventListener('osone_user_voice', handleUserVoice);
+    return () => {
+      window.removeEventListener('osone_user_voice', handleUserVoice);
+    };
+  }, [active]);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Retina/high-res support
+    const dpr = window.devicePixelRatio || 1;
+    const width = 230;
+    const height = 230;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    ctx.scale(dpr, dpr);
+
+    const cx = width / 2;
+    const cy = height / 2;
+
+    // --- GEOMETRIC DUAL DEFINITIONS ---
+    const phi = (1 + Math.sqrt(5)) / 2;
+
+    // Dodecahedron (20 vertices)
+    const dodecahedronRaw = [
+      [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
+      [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1],
+      [0, 1/phi, phi], [0, 1/phi, -phi], [0, -1/phi, phi], [0, -1/phi, -phi],
+      [1/phi, phi, 0], [1/phi, -phi, 0], [-1/phi, phi, 0], [-1/phi, -phi, 0],
+      [phi, 0, 1/phi], [phi, 0, -1/phi], [-phi, 0, 1/phi], [-phi, 0, -1/phi],
+    ];
+    const dodecahedron = dodecahedronRaw.map(([x, y, z]) => {
+      const len = Math.hypot(x, y, z);
+      return { x: x / len, y: y / len, z: z / len };
+    });
+
+    // Icosahedron (12 vertices)
+    const icosahedronRaw = [
+      [0, 1, phi], [0, 1, -phi], [0, -1, phi], [0, -1, -phi],
+      [1, phi, 0], [1, -phi, 0], [-1, phi, 0], [-1, -phi, 0],
+      [phi, 0, 1], [phi, 0, -1], [-phi, 0, 1], [-phi, 0, -1],
+    ];
+    const icosahedron = icosahedronRaw.map(([x, y, z]) => {
+      const len = Math.hypot(x, y, z);
+      return { x: x / len, y: y / len, z: z / len };
+    });
+
+    // Match each Dodecahedron vertex with nearest Icosahedron vertex
+    const dodecaToIcosaMap = dodecahedron.map((dVertex) => {
+      let bestIdx = 0;
+      let maxDot = -Infinity;
+      icosahedron.forEach((iVertex, idx) => {
+        const dot = dVertex.x * iVertex.x + dVertex.y * iVertex.y + dVertex.z * iVertex.z;
+        if (dot > maxDot) {
+          maxDot = dot;
+          bestIdx = idx;
+        }
+      });
+      return bestIdx;
+    });
+
+    // Solve edges of Dodecahedron (normalized unit distance is < 0.75)
+    const dodecaEdges: { u: number; v: number }[] = [];
+    for (let i = 0; i < dodecahedron.length; i++) {
+      for (let j = i + 1; j < dodecahedron.length; j++) {
+        const dx = dodecahedron[i].x - dodecahedron[j].x;
+        const dy = dodecahedron[i].y - dodecahedron[j].y;
+        const dz = dodecahedron[i].z - dodecahedron[j].z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 0.75) {
+          dodecaEdges.push({ u: i, v: j });
+        }
+      }
+    }
+
+    // Solve face lists of Dodecahedron (each centered on one icosahedron vertex)
+    const dodecaFaces: number[][] = icosahedron.map((iVertex) => {
+      const withDistance = dodecahedron.map((dVertex, idx) => {
+        const dist = Math.hypot(dVertex.x - iVertex.x, dVertex.y - iVertex.y, dVertex.z - iVertex.z);
+        return { idx, dist };
+      });
+      withDistance.sort((a, b) => a.dist - b.dist);
+      return withDistance.slice(0, 5).map(item => item.idx);
+    });
+
+    // --- INITIALIZE DENSE PARTICLE CLOUD WITH GEOMETRICAL COGNITIVE SCAFFOLDING ---
+    interface CloudParticle {
+      dx: number;
+      dy: number;
+      dz: number;
+      ix: number;
+      iy: number;
+      iz: number;
+      phaseOffset: number;
+      speedMult: number;
+      size: number;
+      colorType: 'cyan' | 'blue' | 'white';
+      cloudFuzz: { x: number; y: number; z: number };
+    }
+
+    const cloudParticles: CloudParticle[] = [];
+    const PARTICLE_COUNT = 1800;
+
+    for (let k = 0; k < PARTICLE_COUNT; k++) {
+      const typeRand = Math.random();
+      let dx = 0, dy = 0, dz = 0;
+      let ix = 0, iy = 0, iz = 0;
+      let colorType: 'cyan' | 'blue' | 'white' = 'blue';
+      let size = 0.4 + Math.random() * 0.7;
+
+      if (typeRand < 0.25) {
+        // Vertex clusters (Glowing structural core knots of the neural network)
+        const vIdx = Math.floor(Math.random() * 20);
+        const dVert = dodecahedron[vIdx];
+        const iVert = icosahedron[dodecaToIcosaMap[vIdx]];
+
+        const fuzzScale = 0.08;
+        const fx = (Math.random() - 0.5) * fuzzScale;
+        const fy = (Math.random() - 0.5) * fuzzScale;
+        const fz = (Math.random() - 0.5) * fuzzScale;
+
+        dx = dVert.x + fx;
+        dy = dVert.y + fy;
+        dz = dVert.z + fz;
+
+        ix = iVert.x + fx;
+        iy = iVert.y + fy;
+        iz = iVert.z + fz;
+
+        colorType = Math.random() < 0.45 ? 'white' : 'cyan';
+        size = 0.6 + Math.random() * 0.8;
+      } else if (typeRand < 0.65) {
+        // Edge tubes (forms the beautiful continuous threads of the cloud)
+        if (dodecaEdges.length > 0) {
+          const edge = dodecaEdges[Math.floor(Math.random() * dodecaEdges.length)];
+          const weight = Math.random();
+
+          const dU = dodecahedron[edge.u];
+          const dV = dodecahedron[edge.v];
+          const dX_base = dU.x * (1 - weight) + dV.x * weight;
+          const dY_base = dU.y * (1 - weight) + dV.y * weight;
+          const dZ_base = dU.z * (1 - weight) + dV.z * weight;
+
+          const iU = icosahedron[dodecaToIcosaMap[edge.u]];
+          const iV = icosahedron[dodecaToIcosaMap[edge.v]];
+          const iX_base = iU.x * (1 - weight) + iV.x * weight;
+          const iY_base = iU.y * (1 - weight) + iV.y * weight;
+          const iZ_base = iU.z * (1 - weight) + iV.z * weight;
+
+          const fuzzScale = 0.12;
+          const fx = (Math.random() - 0.5) * fuzzScale;
+          const fy = (Math.random() - 0.5) * fuzzScale;
+          const fz = (Math.random() - 0.5) * fuzzScale;
+
+          dx = dX_base + fx;
+          dy = dY_base + fy;
+          dz = dZ_base + fz;
+
+          ix = iX_base + fx;
+          iy = iY_base + fy;
+          iz = iZ_base + fz;
+
+          colorType = Math.random() < 0.5 ? 'cyan' : 'blue';
+          size = 0.4 + Math.random() * 0.5;
+        } else {
+          dx = (Math.random() - 0.5) * 2;
+          dy = (Math.random() - 0.5) * 2;
+          dz = (Math.random() - 0.5) * 2;
+          ix = dx; iy = dy; iz = dz;
+        }
+      } else {
+        // Face volume panels (soft ambient background gas/cluster filling)
+        if (dodecaFaces.length > 0) {
+          const faceIdx = Math.floor(Math.random() * dodecaFaces.length);
+          const faceVertIds = dodecaFaces[faceIdx];
+
+          const rawWeights = Array.from({ length: 5 }, () => Math.random());
+          const sumWeights = rawWeights.reduce((a, b) => a + b, 0);
+          const weights = rawWeights.map(w => w / sumWeights);
+
+          let fx_d = 0, fy_d = 0, fz_d = 0;
+          let fx_i = 0, fy_i = 0, fz_i = 0;
+
+          for (let i = 0; i < 5; i++) {
+            const dV = dodecahedron[faceVertIds[i]];
+            const iV = icosahedron[dodecaToIcosaMap[faceVertIds[i]]];
+            const w = weights[i];
+
+            fx_d += dV.x * w;
+            fy_d += dV.y * w;
+            fz_d += dV.z * w;
+
+            fx_i += iV.x * w;
+            fy_i += iV.y * w;
+            fz_i += iV.z * w;
+          }
+
+          const fuzzScale = 0.18;
+          const fx = (Math.random() - 0.5) * fuzzScale;
+          const fy = (Math.random() - 0.5) * fuzzScale;
+          const fz = (Math.random() - 0.5) * fuzzScale;
+
+          dx = fx_d + fx;
+          dy = fy_d + fy;
+          dz = fz_d + fz;
+
+          ix = fx_i + fx;
+          iy = fy_i + fy;
+          iz = fz_i + fz;
+
+          colorType = Math.random() < 0.15 ? 'white' : (Math.random() < 0.6 ? 'cyan' : 'blue');
+          size = 0.3 + Math.random() * 0.4;
+        } else {
+          dx = (Math.random() - 0.5) * 2;
+          dy = (Math.random() - 0.5) * 2;
+          dz = (Math.random() - 0.5) * 2;
+          ix = dx; iy = dy; iz = dz;
+        }
+      }
+
+      cloudParticles.push({
+        dx, dy, dz,
+        ix, iy, iz,
+        phaseOffset: Math.random() * Math.PI * 2,
+        speedMult: 0.8 + Math.random() * 0.4,
+        size,
+        colorType,
+        cloudFuzz: {
+          x: (Math.random() - 0.5) * 0.04,
+          y: (Math.random() - 0.5) * 0.04,
+          z: (Math.random() - 0.5) * 0.04,
+        }
+      });
+    }
+
+    let frameId = 0;
+    const activeSparks = new Map<number, number>(); // particleIdx -> lifetime (20 down to 0)
+
+    const triggerSpark = () => {
+      const idx = Math.floor(Math.random() * PARTICLE_COUNT);
+      activeSparks.set(idx, 20); // 20 frames spike
+    };
+
+    let lastTime = performance.now();
+    const fpsTarget = 60;
+    const fpsInterval = 1000 / fpsTarget;
+    let smoothSpeak = 0;
+
+    const render = (currentTime: number = performance.now()) => {
+      animationRef.current = requestAnimationFrame(render);
+
+      const elapsed = currentTime - lastTime;
+      if (elapsed < fpsInterval) {
+        return;
+      }
+
+      // Adjust lastTime while mitigating latency drift
+      lastTime = currentTime - (elapsed % fpsInterval);
+
+      frameId++;
+      
+      // Clear canvas to stay fully transparent
+      ctx.clearRect(0, 0, width, height);
+
+      const time = frameId * 0.025;
+      const currentRms = userRmsRef.current;
+      const speakIntensity = speaking ? 1.0 : (currentRms * 12.0);
+      const isAudiblyActive = speaking || currentRms > 0.015;
+
+      // Update synaptic spark lifetime
+      activeSparks.forEach((life, idx) => {
+        if (life <= 1) {
+          activeSparks.delete(idx);
+        } else {
+          activeSparks.set(idx, life - 1);
+        }
+      });
+
+      if (isAudiblyActive && Math.random() < 0.28) {
+        triggerSpark();
+        triggerSpark();
+      } else if (Math.random() < 0.03) {
+        triggerSpark();
+      }
+
+      // Smoothly interpolate the speaker intensity to eliminate abrupt snaps or noise jumps (with soft damping)
+      smoothSpeak += (speakIntensity - smoothSpeak) * 0.07;
+
+      // 1. Calculate morph factor: smooth, graceful base shape morphing combined with voice reactions
+      const baseMorph = 0.5 + 0.3 * Math.sin(time * 0.4);
+      const morphFactor = active 
+        ? Math.max(0, Math.min(1, baseMorph + smoothSpeak * 0.12)) 
+        : baseMorph;
+
+      // 2. Compute 3D unrotated positions with universe expansion and neuroplastic waveforms
+      const coords3D = cloudParticles.map((p) => {
+        // Interpolating coordinates
+        let x = (1 - morphFactor) * p.dx + morphFactor * p.ix;
+        let y = (1 - morphFactor) * p.dy + morphFactor * p.iy;
+        let z = (1 - morphFactor) * p.dz + morphFactor * p.iz;
+
+        // Micro-vibrational living movement
+        const microTime = time * p.speedMult * 1.5 + p.phaseOffset;
+        x += Math.sin(microTime) * 0.015 + p.cloudFuzz.x;
+        y += Math.cos(microTime * 0.9) * 0.015 + p.cloudFuzz.y;
+        z += Math.sin(microTime * 1.3) * 0.015 + p.cloudFuzz.z;
+
+        const d = Math.hypot(x, y, z);
+        
+        // Neuroplastic undulation: structured waving that propagates through the core coordinates
+        const waveSpeed = 1.4;
+        const waveFrequency = 14.0;
+        const waveOffset = Math.sin((x + y + z) * waveFrequency + time * waveSpeed) * (1.1 + smoothSpeak * 2.8);
+        
+        // Very slow, deeply resting breathing multiplier when idle (almost static, no jerky motion)
+        const restingBreathing = 1.0 + 0.03 * Math.sin(time * 0.3);
+        // Precise universe expansion: expands and contracts directly and exclusively with voice energy (reduced magnitude)
+        const expansionVolume = 1.0 + smoothSpeak * 0.12;
+        
+        const radiusMultiplier = (72.0 * restingBreathing * expansionVolume) + waveOffset;
+        
+        return {
+          x: (x / d) * radiusMultiplier,
+          y: (y / d) * radiusMultiplier,
+          z: (z / d) * radiusMultiplier,
+        };
+      });
+
+      // 4. Smooth continuous 3D rotation angles (driven smoothly by smoothSpeak to prevent snaps)
+      const rotX = time * 0.15 + smoothSpeak * 0.10;
+      const rotY = time * 0.22 + smoothSpeak * 0.08;
+      const rotZ = time * 0.08;
+
+      const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+      const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+      const cosZ = Math.cos(rotZ), sinZ = Math.sin(rotZ);
+
+      // 5. Rotate and project all nodes
+      interface ProjectedNode {
+        x: number;
+        y: number;
+        z: number;
+        size: number;
+        rgba: string;
+        flashScale: number;
+      }
+
+      const projected: ProjectedNode[] = coords3D.map((c, idx) => {
+        const p = cloudParticles[idx];
+
+        // Rotate around X
+        let y1 = c.y * cosX - c.z * sinX;
+        let z1 = c.y * sinX + c.z * cosX;
+
+        // Rotate around Y
+        let x2 = c.x * cosY + z1 * sinY;
+        let z2 = -c.x * sinY + z1 * cosY;
+
+        // Rotate around Z
+        let x3 = x2 * cosZ - y1 * sinZ;
+        let y3 = x2 * sinZ + y1 * cosZ;
+
+        // Depth projection mapping
+        const dFactor = (z2 + 85) / 170; // Map depth factor normalized range
+        const perspective = 1 / (1 - (z2 / 240)); 
+        const screenX = cx + x3 * perspective;
+        const screenY = cy + y3 * perspective;
+
+        const isSparkNow = activeSparks.has(idx);
+        const sparkLife = activeSparks.get(idx) || 0;
+        const flashScale = isSparkNow ? (sparkLife / 20) : 0;
+
+        const baseAlpha = Math.max(0.12, Math.min(1.0, (0.35 + dFactor * 0.65)));
+        const alpha = isAudiblyActive ? baseAlpha * 1.25 : baseAlpha;
+
+        let color = '';
+        if (p.colorType === 'white') {
+          color = `rgba(255, 255, 255, ${Math.min(1, alpha * 0.95)})`;
+        } else if (p.colorType === 'cyan') {
+          color = `rgba(34, 211, 238, ${Math.min(0.85, alpha * 0.8)})`;
+        } else {
+          color = `rgba(96, 165, 250, ${Math.min(0.75, alpha * 0.6)})`;
+        }
+
+        return {
+          x: screenX,
+          y: screenY,
+          z: z2,
+          size: p.size * perspective,
+          rgba: color,
+          flashScale
+        };
+      });
+
+      // --- RENDERING PHASE ---
+      // 1. Draw Sorted Cloud Particles (Occlusion Depth buffer sorting)
+      const sortedIndices = Array.from({ length: projected.length }, (_, i) => i)
+        .sort((a, b) => projected[a].z - projected[b].z);
+
+      sortedIndices.forEach((idx) => {
+        const node = projected[idx];
+
+        ctx.beginPath();
+        if (node.flashScale > 0) {
+          // Glow and active shadow blur for synapic flashes
+          const sizeBonus = node.size * (1.1 + node.flashScale * 3.0);
+          ctx.arc(node.x, node.y, Math.max(1.0, sizeBonus), 0, Math.PI * 2);
+          ctx.shadowBlur = Math.round(14 * node.flashScale);
+          ctx.shadowColor = '#22d3ee';
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1.0, node.flashScale * 1.5)})`;
+          ctx.fill();
+          ctx.shadowBlur = 0; // reset optimization
+        } else {
+          const finalSize = Math.max(0.25, node.size * (isAudiblyActive ? 1.15 : 1.0));
+          ctx.arc(node.x, node.y, finalSize, 0, Math.PI * 2);
+          ctx.fillStyle = node.rgba;
+          ctx.fill();
+        }
+      });
+    };
+
+    // Start FPS controlled loop
+    animationRef.current = requestAnimationFrame(render);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [speaking, active]);
+
+  return (
+    <div className="relative w-44 h-44 md:w-56 md:h-56 flex items-center justify-center bg-transparent overflow-visible">
+      <div className="absolute inset-0 rounded-full bg-cyan-500/5 blur-[55px] pointer-events-none" />
+      <canvas 
+        ref={canvasRef} 
+        className="overflow-visible" 
+      />
+    </div>
+  );
+};
+
 export const InfinityLogo = ({ 
   active, 
   speaking, 
@@ -380,32 +836,8 @@ export const InfinityLogo = ({
 
       case 'neural':
         return (
-          <div className="relative flex items-center justify-center">
-            {/* Neural: Interconnected nodes */}
-            <div className="relative w-32 h-32 md:w-44 md:h-44">
-              {[...Array(8)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  animate={{
-                    scale: speaking ? [0.8, 1.2, 0.8] : active ? [0.9, 1.1, 0.9] : 1,
-                    opacity: active ? 0.8 : 0.4
-                  }}
-                  transition={{ duration: 2, repeat: Infinity, delay: i * 0.2 }}
-                  className="absolute w-2 h-2 bg-her-accent rounded-full"
-                  style={{
-                    left: '50%',
-                    top: '50%',
-                    transform: `rotate(${i * 45}deg) translate(60px)`
-                  }}
-                />
-              ))}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className={cn(
-                  "w-4 h-4 rounded-full transition-all duration-500",
-                  (active || speaking) ? "bg-her-accent shadow-[0_0_15px_rgba(255,78,0,0.5)]" : "bg-white/10"
-                )} />
-              </div>
-            </div>
+          <div className="relative flex items-center justify-center overflow-visible w-full h-full">
+            <NeuralConstellationCanvas active={active} speaking={speaking} />
           </div>
         );
 

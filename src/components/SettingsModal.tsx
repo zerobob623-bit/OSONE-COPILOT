@@ -168,28 +168,60 @@ export const SettingsModal = ({
                     exit={{ opacity: 0, x: 10 }}
                     className="space-y-8"
                   >
-                    <div>
-                      <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Voz do Sistema (Frequência)</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
-                          <button
-                            key={voice}
-                            onClick={() => setSelectedVoice(voice)}
-                            className={cn(
-                              "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
-                              selectedVoice === voice 
-                                ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
-                              voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
-                            )}
-                          >
-                            <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
-                            {selectedVoice === voice && <div className={cn(
-                              "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
-                              voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
-                            )} />}
-                          </button>
-                        ))}
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Voz do Sistema (Frequência)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                            <button
+                              key={voice}
+                              onClick={() => setSelectedVoice(voice)}
+                              className={cn(
+                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
+                                selectedVoice === voice 
+                                  ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
+                                voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
+                              )}
+                            >
+                              <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
+                              {selectedVoice === voice && <div className={cn(
+                                "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
+                                voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                              )} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Estilo do Orb de IA</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { id: 'classic', name: 'Clássico (Esfera)' },
+                            { id: 'wave', name: 'Fluidos (Alabastro)' },
+                            { id: 'neural', name: 'Constelação Neural' },
+                            { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
+                            { id: 'superintelligence', name: 'Superinteligência' },
+                            { id: 'shadow', name: 'Escarlate (Shadow)' },
+                          ].map((styleOption) => (
+                            <button
+                              key={styleOption.id}
+                              onClick={() => setOrbStyle(styleOption.id as OrbStyle)}
+                              className={cn(
+                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
+                                orbStyle === styleOption.id 
+                                  ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
+                              )}
+                            >
+                              <span>{styleOption.name}</span>
+                              {orbStyle === styleOption.id && (
+                                <div className="w-1.5 h-1.5 rounded-full bg-her-accent shadow-[0_0_8px_rgba(var(--her-accent),0.5)]" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
