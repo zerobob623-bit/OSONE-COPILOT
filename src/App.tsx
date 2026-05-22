@@ -561,10 +561,13 @@ export default function App() {
     }
   };
 
-  const [orbStyle, setOrbStyle] = useState<OrbStyle>('wave');
+  const [orbStyle, setOrbStyle] = useState<OrbStyle>(() => {
+    const saved = localStorage.getItem('osone_orb_style');
+    return (saved as OrbStyle) || 'neural';
+  });
 
   useEffect(() => {
-    localStorage.setItem('osone_orb_style', 'wave');
+    localStorage.setItem('osone_orb_style', orbStyle);
   }, [orbStyle]);
 
   const [appTheme, setAppTheme] = useState<AppTheme>('monochrome');
@@ -779,6 +782,7 @@ export default function App() {
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isModelSearching, setIsModelSearching] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
@@ -1398,6 +1402,7 @@ export default function App() {
 
     addMessage({ role: 'user' as const, content: fullMessage });
 
+    setIsGenerating(true);
     try {
       const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
       if (!effectiveApiKey || effectiveApiKey.trim() === '') {
@@ -1750,6 +1755,7 @@ export default function App() {
           } else if (call.name === 'read_web_page') {
             const url = (call.args as any).url;
             playSearchNetworkSound();
+            setIsModelSearching(true);
             try {
               const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
               const data = await response.json();
@@ -1769,6 +1775,8 @@ export default function App() {
               // Para simplificar neste chat básico, apenas exibimos.
             } catch (err: any) {
               addNotification("Erro ao ler página web", "error");
+            } finally {
+              setIsModelSearching(false);
             }
           } else if (call.name === 'save_to_obsidian') {
             const { title, content, mode } = call.args as any;
@@ -2027,7 +2035,9 @@ export default function App() {
       }
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
-    addMessage({ role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." });
+      addMessage({ role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." });
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -2873,6 +2883,7 @@ export default function App() {
                   } else if (call.name === "google_search") {
                     const query = call.args.query as string;
                     playSearchNetworkSound();
+                    setIsModelSearching(true);
                     try {
                       const searchResult = await ai.models.generateContent({ 
                         model: "gemini-3.5-flash",
@@ -2894,10 +2905,13 @@ export default function App() {
                         id: call.id,
                         response: { error: "Erro na pesquisa: " + err.message }
                       });
+                    } finally {
+                      setIsModelSearching(false);
                     }
                   } else if (call.name === "read_web_page") {
                     const url = call.args.url as string;
                     playSearchNetworkSound();
+                    setIsModelSearching(true);
                     try {
                       const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
                       const data = await response.json();
@@ -2920,6 +2934,8 @@ export default function App() {
                         id: call.id,
                         response: { error: "Erro ao ler a página: " + err.message }
                       });
+                    } finally {
+                      setIsModelSearching(false);
                     }
                   } else if (call.name === "write_text_to_workspace") {
                     setWorkspaceText(call.args.content as string);
@@ -4291,6 +4307,8 @@ export default function App() {
                       active={liveState.status === 'connected'} 
                       speaking={isSpeaking} 
                       style={orbStyle}
+                      thinking={isGenerating || isAnalyzingCode || isTranscribing}
+                      searching={isModelSearching}
                     />
                     
                     {/* Floating invitation */}

@@ -4,7 +4,17 @@ import { cn } from '../lib/utils';
 import { OrbStyle } from '../types';
 import { VolumeX } from 'lucide-react';
 
-const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; speaking: boolean }) => {
+const NeuralConstellationCanvas = ({ 
+  active, 
+  speaking, 
+  thinking = false, 
+  searching = false 
+}: { 
+  active: boolean; 
+  speaking: boolean; 
+  thinking?: boolean; 
+  searching?: boolean; 
+}) => {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const userRmsRef = React.useRef(0);
   const animationRef = React.useRef<number | null>(null);
@@ -265,6 +275,7 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
     const fpsTarget = 60;
     const fpsInterval = 1000 / fpsTarget;
     let smoothSpeak = 0;
+    let smoothThinking = 0;
 
     const render = (currentTime: number = performance.now()) => {
       animationRef.current = requestAnimationFrame(render);
@@ -296,7 +307,11 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
         }
       });
 
-      if (isAudiblyActive && Math.random() < 0.28) {
+      if (thinking || searching) {
+        if (Math.random() < 0.42) {
+          triggerSpark();
+        }
+      } else if (isAudiblyActive && Math.random() < 0.28) {
         triggerSpark();
         triggerSpark();
       } else if (Math.random() < 0.03) {
@@ -306,26 +321,46 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
       // Smoothly interpolate the speaker intensity to eliminate abrupt snaps or noise jumps (with soft damping)
       smoothSpeak += (speakIntensity - smoothSpeak) * 0.07;
 
+      // Smoothly interpolate thinking state for galaxy transitions
+      const targetThinking = (thinking || searching) ? 1.0 : 0.0;
+      smoothThinking += (targetThinking - smoothThinking) * 0.08;
+
       // 1. Calculate morph factor: smooth, graceful base shape morphing combined with voice reactions
       const baseMorph = 0.5 + 0.3 * Math.sin(time * 0.4);
       const morphFactor = active 
         ? Math.max(0, Math.min(1, baseMorph + smoothSpeak * 0.12)) 
         : baseMorph;
 
-      // 2. Compute 3D unrotated positions with universe expansion and neuroplastic waveforms
+      // 2. Compute 3D unrotated positions with universe expansion, contraction and galactic spiral winding
       const coords3D = cloudParticles.map((p) => {
         // Interpolating coordinates
         let x = (1 - morphFactor) * p.dx + morphFactor * p.ix;
         let y = (1 - morphFactor) * p.dy + morphFactor * p.iy;
         let z = (1 - morphFactor) * p.dz + morphFactor * p.iz;
 
-        // Micro-vibrational living movement
-        const microTime = time * p.speedMult * 1.5 + p.phaseOffset;
-        x += Math.sin(microTime) * 0.015 + p.cloudFuzz.x;
-        y += Math.cos(microTime * 0.9) * 0.015 + p.cloudFuzz.y;
-        z += Math.sin(microTime * 1.3) * 0.015 + p.cloudFuzz.z;
+        // Apply galactic flattening along Z axis (from sphere shell to thin disk)
+        z = z * (1.0 - smoothThinking * 0.88);
 
-        const d = Math.hypot(x, y, z);
+        // Apply galactic spiral arm twist in the X-Y plane
+        if (smoothThinking > 0.01) {
+          const r = Math.hypot(x, y) || 0.001;
+          const twistAngle = smoothThinking * (4.5 * Math.exp(-r * 1.5) + (1.3 * r));
+          const cosT = Math.cos(twistAngle);
+          const sinT = Math.sin(twistAngle);
+          const tx = x * cosT - y * sinT;
+          const ty = x * sinT + y * cosT;
+          x = tx;
+          y = ty;
+        }
+
+        // Micro-vibrational living movement + rapid thinking tremor/vibration
+        const microTime = time * p.speedMult * 1.5 + p.phaseOffset;
+        const tremor = smoothThinking * 0.025 * Math.sin(frameId * 0.7); // high speed computing tremor
+        x += Math.sin(microTime) * 0.015 + p.cloudFuzz.x + tremor * (Math.random() - 0.5);
+        y += Math.cos(microTime * 0.9) * 0.015 + p.cloudFuzz.y + tremor * (Math.random() - 0.5);
+        z += Math.sin(microTime * 1.3) * 0.015 + p.cloudFuzz.z + tremor * (Math.random() - 0.5);
+
+        const d = Math.hypot(x, y, z) || 0.001;
         
         // Neuroplastic undulation: structured waving that propagates through the core coordinates
         const waveSpeed = 1.4;
@@ -337,7 +372,12 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
         // Precise universe expansion: expands and contracts directly and exclusively with voice energy (reduced magnitude)
         const expansionVolume = 1.0 + smoothSpeak * 0.12;
         
-        const radiusMultiplier = (72.0 * restingBreathing * expansionVolume) + waveOffset;
+        // Contraction scale factor
+        const scaleFactor = 1.0 - smoothThinking * 0.65; // contracts by 65% towards the center
+        // Core density contraction (pulls inner bulge particles even closer to make dense nucleus)
+        const coreContractionMultiplier = 1.0 - smoothThinking * 0.25 * Math.exp(-Math.hypot(x, y) * 2.0);
+
+        const radiusMultiplier = ((72.0 * restingBreathing * expansionVolume) + waveOffset) * scaleFactor * coreContractionMultiplier;
         
         return {
           x: (x / d) * radiusMultiplier,
@@ -347,9 +387,10 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
       });
 
       // 4. Smooth continuous 3D rotation angles (driven smoothly by smoothSpeak to prevent snaps)
-      const rotX = time * 0.15 + smoothSpeak * 0.10;
-      const rotY = time * 0.22 + smoothSpeak * 0.08;
-      const rotZ = time * 0.08;
+      // When thinking/searching, rotate fast around Z (perpendicular to disk plane) and slow down other axes
+      const rotX = time * 0.15 * (1.0 - smoothThinking * 0.6) + smoothSpeak * 0.10;
+      const rotY = time * 0.22 * (1.0 - smoothThinking * 0.6) + smoothSpeak * 0.08;
+      const rotZ = time * 0.08 + (frameId * 0.045) * smoothThinking;
 
       const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
       const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
@@ -447,7 +488,7 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [speaking, active]);
+  }, [speaking, active, thinking, searching]);
 
   return (
     <div className="relative w-44 h-44 md:w-56 md:h-56 flex items-center justify-center bg-transparent overflow-visible">
@@ -463,11 +504,15 @@ const NeuralConstellationCanvas = ({ active, speaking }: { active: boolean; spea
 export const InfinityLogo = ({ 
   active, 
   speaking, 
-  style = 'classic'
+  style = 'neural',
+  thinking = false,
+  searching = false
 }: { 
   active: boolean; 
   speaking: boolean; 
   style?: OrbStyle;
+  thinking?: boolean;
+  searching?: boolean;
 }) => {
   const [userRms, setUserRms] = React.useState(0);
 
@@ -837,7 +882,12 @@ export const InfinityLogo = ({
       case 'neural':
         return (
           <div className="relative flex items-center justify-center overflow-visible w-full h-full">
-            <NeuralConstellationCanvas active={active} speaking={speaking} />
+            <NeuralConstellationCanvas 
+              active={active} 
+              speaking={speaking} 
+              thinking={thinking}
+              searching={searching}
+            />
           </div>
         );
 

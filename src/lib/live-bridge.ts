@@ -1,7 +1,9 @@
+import { GoogleGenAI } from "@google/genai";
+
 /**
- * Local WebSocket Bridge helper to connect to the server-side proxy
+ * Direct client-side connection to Gemini Live Multimodal API
  */
-export function connectToLiveBridge(options: {
+export async function connectToLiveBridge(options: {
   model: string;
   config: any;
   callbacks: {
@@ -12,66 +14,62 @@ export function connectToLiveBridge(options: {
   };
   apiKey: string;
 }) {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/api/live-ws?apiKey=${encodeURIComponent(options.apiKey)}`;
-  
-  const ws = new WebSocket(wsUrl);
-  
-  const session = {
-    sendRealtimeInput: (input: any) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'realtime_input', input }));
-      }
-    },
-    sendToolResponse: (payload: any) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'tool_response', payload }));
-      }
-    },
-    close: () => {
-      ws.close();
-    }
-  };
+  console.log("OSONE 4 Client: Estabelecendo conexão direta com os canais neurais do Gemini...");
 
-  ws.onopen = () => {
-    // Send the config setup payload as the very first packet
-    ws.send(JSON.stringify({
-      type: 'setup',
-      model: options.model,
-      config: options.config
-    }));
-    
-    if (options.callbacks?.onopen) {
-      options.callbacks.onopen();
-    }
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'error') {
-        if (options.callbacks?.onerror) {
-          options.callbacks.onerror(new Error(msg.error));
+  try {
+    const ai = new GoogleGenAI({
+      apiKey: options.apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build-client',
         }
-      } else if (options.callbacks?.onmessage) {
-        options.callbacks.onmessage(msg);
       }
-    } catch (err) {
-      console.error("Error parsing websocket message from bridge:", err);
-    }
-  };
+    });
 
-  ws.onclose = () => {
-    if (options.callbacks?.onclose) {
-      options.callbacks.onclose();
-    }
-  };
+    // Start direct client-side bi-directional stream using the isomorphic SDK
+    const bidiSession = await ai.live.connect({
+      model: options.model || "gemini-3.1-flash-live-preview",
+      config: options.config,
+      callbacks: {
+        onopen: () => {
+          console.log("OSONE 4 Direct: Conectado com sucesso à API do Gemini!");
+          if (options.callbacks?.onopen) {
+            options.callbacks.onopen();
+          }
+        },
+        onmessage: (liveResponse: any) => {
+          if (options.callbacks?.onmessage) {
+            options.callbacks.onmessage(liveResponse);
+          }
+        },
+        onclose: () => {
+          console.log("OSONE 4 Direct: Conexão encerrada.");
+          if (options.callbacks?.onclose) {
+            options.callbacks.onclose();
+          }
+        },
+        onerror: (err: any) => {
+          console.error("OSONE 4 Direct: Erro na conexão neural:", err);
+          if (options.callbacks?.onerror) {
+            options.callbacks.onerror(err);
+          }
+        }
+      }
+    });
 
-  ws.onerror = (err) => {
-    if (options.callbacks?.onerror) {
-      options.callbacks.onerror(err);
-    }
-  };
-
-  return Promise.resolve(session);
+    return {
+      sendRealtimeInput: (input: any) => {
+        bidiSession.sendRealtimeInput(input);
+      },
+      sendToolResponse: (payload: any) => {
+        bidiSession.sendToolResponse(payload);
+      },
+      close: () => {
+        bidiSession.close();
+      }
+    };
+  } catch (err) {
+    console.error("OSONE 4 Direct: Falha ao estabelecer conexão direta com a API do Gemini:", err);
+    throw err;
+  }
 }

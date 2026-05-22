@@ -1,5 +1,16 @@
 import React, { StrictMode, Component, ReactNode, ErrorInfo } from 'react';
 import {createRoot} from 'react-dom/client';
+
+// Safe global process mockup for client-side static environments (e.g. Vercel)
+if (typeof window !== 'undefined') {
+  const g = window as any;
+  g.process = g.process || {};
+  g.process.env = g.process.env || {};
+  if (typeof g.process.env.GEMINI_API_KEY === 'undefined') {
+    g.process.env.GEMINI_API_KEY = '';
+  }
+}
+
 import App from './App.tsx';
 import './index.css';
 
