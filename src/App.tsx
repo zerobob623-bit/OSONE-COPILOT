@@ -1208,10 +1208,10 @@ export default function App() {
       cancelAnimationFrame(liveAnimationFrameRef.current);
       liveAnimationFrameRef.current = null;
     }
-    audioProcessorRef.current?.stopRecording();
-    audioPlayerRef.current?.stop();
+    audioProcessorRef.current?.stopRecording?.();
+    audioPlayerRef.current?.stop?.();
     stopScreenSharing();
-    liveSessionRef.current?.close();
+    liveSessionRef.current?.close?.();
     liveSessionRef.current = null;
     setIsListening(false);
     setIsSpeaking(false);
