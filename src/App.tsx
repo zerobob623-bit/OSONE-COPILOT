@@ -64,8 +64,6 @@ import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WebtoonCreator } from './components/WebtoonCreator';
-
-import { LyricGenerator } from './components/LyricGenerator';
 import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
@@ -135,7 +133,7 @@ export default function App() {
   const [showUi, setShowUi] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
-  const [writingSubMode, setWritingSubMode] = useState<'text' | 'lyrics'>('text');
+  const [writingSubMode, setWritingSubMode] = useState<'text' | 'preview'>('text');
   const [selectedPersona, setSelectedPersona] = useState<Persona>(() => {
     const saved = localStorage.getItem('osone_selected_persona');
     return saved ? (PERSONAS.find(p => p.id === saved) || PERSONAS[0]) : PERSONAS[0];
@@ -2163,6 +2161,14 @@ export default function App() {
                   }
                 },
                 {
+                  name: "disconnectLiveSession",
+                  description: "Encerra, desliga e fecha a conversa de voz (sessão Live) imediatamente quando o usuário pedir para desligar, parar ou encerrar a chamada de voz.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
                   name: "openUrl",
                   description: "Abre uma URL em uma nova aba do navegador. Use para mostrar guias, sites ou pesquisas ao usuário.",
                   parameters: {
@@ -2641,7 +2647,38 @@ export default function App() {
                 const lowerText = userTranscriptText.toLowerCase().trim();
                 console.log("[LIVE USER VOICE TRANSCRIPT]:", lowerText);
                 
-                const pausePhrases = ["pausa", "pause", "para de falar", "parar de falar", "fica quieto", "fica quieta", "cala a boca", "silêncio", "silencio", "shh", "shhh", "mute", "mutar", "pausar"];
+                // Triggers to turn off/disconnect the conversation by voice
+                const disconnectPhrases = [
+                  "desligar a conversa", "desligar conversa", "desliga a conversa", "desliga conversa",
+                  "desconectar a conversa", "desconectar conversa", "desconecta a conversa", "desconecta conversa",
+                  "encerrar a conversa", "encerrar conversa", "encerra a conversa", "encerra conversa",
+                  "fechar a conversa", "fechar conversa", "fecha a conversa", "fecha conversa",
+                  "parar a conversa", "parar conversa", "para a conversa", "para conversa",
+                  "desliga a chamada", "desliga chamada", "desligar a chamada", "desligar chamada",
+                  "encerra a chamada", "encerra chamada", "encerrar a chamada", "encerrar chamada",
+                  "pode desligar", "pode desconectar", "pode encerrar", "desconecta agora", "desliga agora",
+                  "desligar agora", "desconectar agora", "desliga por voz", "desligar por voz",
+                  "parar de falar", "para de falar", "para a chamada", "parar chamada", "parar de conversar",
+                  "para de conversar"
+                ];
+
+                const standaloneDisconnectWords = [
+                  "desligar", "desliga", "desconectar", "desconecta", "encerrar", "encerra",
+                  "desconectar-se", "desconectarse", "tchau", "adeus", "shutdown"
+                ];
+
+                const matchesDisconnect = disconnectPhrases.some(phrase => lowerText.includes(phrase)) ||
+                  standaloneDisconnectWords.includes(lowerText) ||
+                  lowerText.endsWith("tchau") || lowerText.startsWith("tchau osone") ||
+                  lowerText === "bye bye";
+
+                if (matchesDisconnect) {
+                  stopLiveSession();
+                  addNotification("Chamada de voz finalizada por comando de voz", "success");
+                  return;
+                }
+
+                const pausePhrases = ["pausa", "pause", "fica quieto", "fica quieta", "silêncio", "silencio", "shh", "shhh", "mute", "mutar", "pausar"];
                 const playPhrases = ["play", "voltar a falar", "volte a falar", "pode falar", "escutar", "despausar", "continuar", "falar", "retomar", "unmute", "desmutar"];
 
                 const matchesPause = pausePhrases.some(phrase => lowerText.includes(phrase));
@@ -2691,7 +2728,17 @@ export default function App() {
                 const responses: any[] = [];
 
                 for (const call of calls) {
-                  if (call.name === "update_wellness_data") {
+                  if (call.name === "disconnectLiveSession") {
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Chamada de voz de áudio Live encerrada com sucesso." }
+                    });
+                    setTimeout(() => {
+                      stopLiveSession();
+                      addNotification("Chamada de voz finalizada por comando de voz", "success");
+                    }, 500);
+                  } else if (call.name === "update_wellness_data") {
                     const healthDataStr = localStorage.getItem('osone_health_data');
                     const currentData = healthDataStr ? JSON.parse(healthDataStr) : {
                       age: '', weight: '', height: '', gender: 'masculino', stylePreference: 'casual'
@@ -3780,15 +3827,15 @@ export default function App() {
                     Estúdio Prosa
                   </button>
                   <button 
-                    onClick={() => setWritingSubMode('lyrics')}
+                    onClick={() => setWritingSubMode('preview')}
                     className={cn(
                       "px-3 py-1.5 text-[9px] uppercase tracking-wider font-mono rounded-md transition-all font-bold",
-                      writingSubMode === 'lyrics' 
-                        ? "bg-purple-950/30 text-purple-400" 
+                      writingSubMode === 'preview' 
+                        ? (writingTheme === 'sepia' ? "bg-[#28211c] text-amber-300" : writingTheme === 'forest' ? "bg-emerald-950/40 text-emerald-400" : "bg-white/10 text-white") 
                         : "text-white/20 hover:text-white/40"
                     )}
                   >
-                    Antologia Lírica
+                    Visualizador HTML
                   </button>
                   <div className="w-[1px] h-3 bg-white/10 mx-2 shrink-0" />
                   
@@ -3948,8 +3995,17 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-full bg-black overflow-hidden flex flex-col">
-                    <LyricGenerator apiKeys={apiKeys} />
+                  <div className="w-full h-full overflow-hidden flex flex-col p-4 md:p-6 bg-[#030303]/40 border border-white/5 rounded-xl m-2 md:m-4">
+                    <div className="flex items-center justify-between mb-3.5 px-1 pb-1 border-b border-white/[0.03]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+                        <span className="text-[10px] uppercase tracking-widest font-bold font-mono text-white/50">Prévia do Código HTML & Tailwind</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-white/30 hidden sm:inline">Renderização dinâmica e ágil via IFrame</span>
+                    </div>
+                    <div className="flex-1 min-h-0 w-full rounded-lg overflow-hidden bg-white/5 text-black">
+                      <CodePreview code={workspaceText} />
+                    </div>
                   </div>
                 )}
 
@@ -4157,7 +4213,7 @@ export default function App() {
             <div key="workspace-canvas" className="flex-1 w-full flex flex-col min-h-0">
               <InteractiveCanvas 
                 objects={drawingObjects}
-                onDraw={(obj) => setDrawingObjects(prev => [...prev, obj])}
+                setObjects={setDrawingObjects}
                 onClear={() => setDrawingObjects([])}
                 isAIProcessing={isSpeaking || isListening} // Simple heuristic for AI activity
               />
