@@ -610,35 +610,47 @@ export default function App() {
   const handleApprovePlan = (id: string) => {
     setProposedPlan(prev => prev ? { ...prev, status: 'approved' } : null);
     
-    // Determine which message to send back to AI to continue
-    const approvalMsg = "PLANO APROVADO. PODE EXECUTAR EXATAMENTE COMO PLANEJADO.";
+    const approvalMsg = "PLANO APROVADO. PODE EXECUTAR EXATAMENTE COMO PLANEJADO. Inicie as modificações técnicas ou crie o material/código solicitado baseado exatamente nos termos do seu plano.";
     
-    if (workspaceMode === 'writing') {
-      setWorkspacePrompt(approvalMsg);
-      // We can't easily trigger handleGenerate here because it's an async function in scope, 
-      // but we can set the state and let the user click or try to call it if it's accessible.
-      // Actually, since I'm editing the code, I can make it accessible or just trigger it.
-    } else {
-      setHomePrompt(approvalMsg);
-    }
-    
-    addNotification("Plano aprovado. A IA prosseguirá com a execução.", "success");
-    // Clear the plan from view
+    addNotification("Plano aprovado. A IA está executando o trabalho agora mesmo de forma autônoma!", "success");
     setProposedPlan(null);
+
+    // Se estiver conectado à Live Session por voz, manda o feedback
+    if (liveSessionRef.current && liveState.status === 'connected') {
+      liveSessionRef.current.sendRealtimeInput({ text: "PLANO DE PROGRAMAÇÃO APROVADO PELO USUÁRIO. Pode iniciar a execução e entregar o resultado final com as modificações necessárias." });
+      return;
+    }
+
+    // Executa a IA automaticamente dependendo de onde o usuário está
+    if (workspaceMode === 'writing') {
+      setWorkspacePrompt('');
+      handleGenerate(approvalMsg);
+    } else {
+      setHomePrompt('');
+      handleHomeChat(approvalMsg);
+    }
   };
 
   const handleRejectPlan = (id: string, reason?: string) => {
     setProposedPlan(prev => prev ? { ...prev, status: 'rejected' } : null);
     
-    const rejectionMsg = "Plano rejeitado. Preciso de ajustes: ";
-    if (workspaceMode === 'writing') {
-      setWorkspacePrompt(rejectionMsg);
-    } else {
-      setHomePrompt(rejectionMsg);
-    }
-    
-    addNotification("Plano rejeitado. Por favor, forneça o feedback para a IA.", "error");
+    const feedback = reason ? `PLANO REJEITADO. Feedback do usuário: ${reason}` : "PLANO REJEITADO. Por favor, ajuste o planejamento.";
+    addNotification("Plano rejeitado. Feedback enviado para a IA reformular o planejamento.", "error");
     setProposedPlan(null);
+
+    // Se estiver conectado à Live Session por voz, envia o cancelamento por voz
+    if (liveSessionRef.current && liveState.status === 'connected') {
+      liveSessionRef.current.sendRealtimeInput({ text: feedback });
+      return;
+    }
+
+    if (workspaceMode === 'writing') {
+      setWorkspacePrompt(feedback);
+      handleGenerate(feedback);
+    } else {
+      setHomePrompt(feedback);
+      handleHomeChat(feedback);
+    }
   };
 
   const [workspaceText, setWorkspaceText] = useState(() => {
@@ -1607,6 +1619,19 @@ export default function App() {
         }
       });
 
+      functionDeclarations.push({
+        name: "propose_skeleton_plan",
+        description: "Propõe um plano de execução técnica (Skeleton Brain) para o usuário validar em um popup. Use SEMPRE antes de gerar códigos complexos, arquiteturas ou mudanças estruturais no projeto no modo 'writing'. O usuário verá e poderá Aprovar ou Rejeitar.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING, description: "Título do plano político/técnico." },
+            content: { type: Type.STRING, description: "Conteúdo do plano detalhado em Markdown (fases do Skeleton Brain)." }
+          },
+          required: ["title", "content"]
+        }
+      });
+
       tools.push({ functionDeclarations });
       tools.push({ googleSearch: {} }); 
 
@@ -1698,14 +1723,20 @@ export default function App() {
           - Texto atual no Espaço de Escrita: "${workspaceText}"
           - Estado Atual do Canvas: ${canvasSummary}
 
-          PROTOCOLO DE PENSAMENTO (SKELETON BRAIN):
-          Antes de gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
-          Siga estas fases internamente:
-          1. RECEPÇÃO (SINAL): Captura bruta, tom e contexto.
-          2. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar?
-          3. ARQUITETURA (PLAN): Definir escopo, componentes e sequência lógica.
-          4. VERIFICAÇÃO (CHECK): Identificar riscos e definir critério de "pronto".
-          IMPORTANTE: A ferramenta 'propose_skeleton_plan' abrirá um popup para o usuário. Se o usuário aprovar, ele enviará uma mensagem confirmando. NÃO escreva o plano no chat, use a FERRAMENTA.
+          PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
+          Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+          Siga estas fases rigorosamente antes de prosseguir:
+          1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita (${workspaceText}). Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido sugerir ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for HTML/Tailwind, continue nele; se for React JSX, continue nele). Mantenha total compatibilidade estrutural!
+          2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
+          3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
+          4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
+          5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
+          
+          IMPORTANTE:
+          - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
+          - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
+          - NÃO envie o plano completo no chat principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
+          - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
 
           Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
           tools: tools,
@@ -1999,6 +2030,19 @@ export default function App() {
           } else if (call.name === 'show_notification') {
             const { message, type } = call.args as any;
             addNotification(message, type || 'info');
+          } else if (call.name === 'propose_skeleton_plan') {
+            const { title, content } = call.args as any;
+            setProposedPlan({
+              id: Math.random().toString(36).substr(2, 9),
+              title: title,
+              content: content,
+              status: 'pending'
+            });
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `Propus o plano técnico de programação **"${title}"** no popup para sua análise. Por favor, confira e aprove para eu iniciar o trabalho automaticamente.` 
+            }]);
           } else if (call.name === 'draw_on_canvas') {
             const { objects, clearFirst } = call.args as any;
             if (clearFirst) {
@@ -2119,6 +2163,21 @@ export default function App() {
 
       CONCEITOS:
       - SINCERIDADE: Descreva o ambiente de forma técnica e honesta se solicitado.
+      
+      PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
+      Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+      Siga estas fases rigorosamente antes de prosseguir:
+      1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita "${workspaceText}". Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido propor ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for React JSX, continue nele). Mantenha total compatibilidade estrutural!
+      2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
+      3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
+      4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
+      5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
+      
+      IMPORTANTE:
+      - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
+      - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
+      - NÃO envie o plano completo na conversa de voz principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
+      - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
       
       CONTEXTO:
       - Workspace: ${workspaceMode}
