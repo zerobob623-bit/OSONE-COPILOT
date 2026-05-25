@@ -63,7 +63,6 @@ import { Sidebar } from './components/Sidebar';
 import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
-import { WebtoonCreator } from './components/WebtoonCreator';
 import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
@@ -1317,7 +1316,7 @@ export default function App() {
         : finalPrompt;
 
       const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.5-flash",
         contents: [{ parts: [{ text: contents }] }],
         config: { 
           systemInstruction,
@@ -1357,7 +1356,7 @@ export default function App() {
       const prompt = `Analise este código e forneça exatamente 3 sugestões CURTAS e acionáveis (uma frase cada) para melhorá-lo (performance, bugs, estilo ou features). Retorne APENAS um array JSON de strings como ["Sugestão 1", "Sugestão 2", "Sugestão 3"]. Code:\n\n${codeToAnalyze}`;
       
       const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.5-flash",
         contents: [{ parts: [{ text: prompt }] }],
         config: { responseMimeType: "application/json" }
       });
@@ -1674,7 +1673,7 @@ export default function App() {
         : "O Canvas está limpo.";
 
       const result = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.5-flash",
         contents: historyContents,
         config: {
           systemInstruction: `${profileInstruction}
@@ -2025,7 +2024,7 @@ export default function App() {
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
-              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'webtoon' ? 'Webtoon' : mode === 'canvas' ? 'Interativo' : mode}.` 
+              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'canvas' ? 'Interativo' : mode}.` 
             }]);
           } else if (call.name === 'show_notification') {
             const { message, type } = call.args as any;
@@ -2370,13 +2369,13 @@ export default function App() {
                 },
                 {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Webtoon (Criador de Histórias), Wellness (Saúde e Estilo), Sons ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Wellness (Saúde e Estilo), Sons ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "webtoon", "sounds", "canvas", "wellness"],
+                        enum: ["home", "writing", "sounds", "canvas", "wellness"],
                         description: "O modo para o qual alternar."
                       }
                     },
@@ -3053,11 +3052,11 @@ export default function App() {
                     });
                   } else if (call.name === "generate_project_structure") {
                     handleGenerateStructure(call.args.description as string);
-                    setWorkspaceMode('webtoon');
+                    setWorkspaceMode('writing');
                     responses.push({
                       name: call.name,
                       id: call.id,
-                      response: { result: "Estrutura de projeto sendo gerada na aba de Construção de Pastas." }
+                      response: { result: "Estrutura de projeto sendo gerada na aba de Escrita / Arquivos." }
                     });
                   } else if (call.name === "create_folder") {
                     const path = call.args.path as string;
@@ -3089,11 +3088,11 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('webtoon');
+                    setWorkspaceMode('writing');
                     responses.push({
                       name: call.name,
                       id: call.id,
-                      response: { result: `Pasta '${path}' criada com sucesso.` }
+                      response: { result: `Pasta '${path}' criada com sucesso no gerenciador de arquivos.` }
                     });
                   } else if (call.name === "create_file") {
                     const path = call.args.path as string;
@@ -3125,11 +3124,11 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('webtoon');
+                    setWorkspaceMode('writing');
                     responses.push({
                       name: call.name,
                       id: call.id,
-                      response: { result: `Arquivo '${path}' criado com sucesso.` }
+                      response: { result: `Arquivo '${path}' criado com sucesso no gerenciador de arquivos.` }
                     });
                   } else if (call.name === "write_to_file") {
                     const path = call.args.path as string;
@@ -3195,11 +3194,11 @@ export default function App() {
                       });
                     }
                     
-                    setWorkspaceMode('webtoon');
+                    setWorkspaceMode('writing');
                     responses.push({
                       name: call.name,
                       id: call.id,
-                      response: { result: `Conteúdo escrito no arquivo '${path}'.` }
+                      response: { result: `Conteúdo escrito no arquivo '${path}' no gerenciador de arquivos.` }
                     });
                   } else if (call.name === "getUserEnvironment") {
                     try {
@@ -4277,26 +4276,6 @@ export default function App() {
                 isAIProcessing={isSpeaking || isListening} // Simple heuristic for AI activity
               />
             </div>
-          ) : workspaceMode === 'webtoon' ? (
-            <motion.div 
-              key="workspace-webtoon"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full flex-1 flex flex-col gap-0 min-h-0"
-            >
-              <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/5 w-full">
-                <button 
-                  onClick={() => setWorkspaceMode('home')}
-                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border border-white/[0.05]"
-                >
-                  <ChevronRight size={18} className="rotate-180" />
-                </button>
-                <h2 className="text-xl font-serif italic font-light">Webtoon Creator</h2>
-              </div>
-              <WebtoonCreator apiKeys={apiKeys} />
-            </motion.div>
-
           ) : workspaceMode === 'wellness' ? (
             <motion.div 
               key="workspace-wellness"
@@ -4696,18 +4675,21 @@ export default function App() {
                         </button>
                       </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "flex items-center",
+                    !isChatExpanded ? "justify-center w-full gap-2.5 max-w-lg mx-auto py-2 px-4 rounded-full bg-white/[0.01] border border-white/[0.03] backdrop-blur-xl" : "gap-2"
+                  )}>
                     <button 
                       onClick={handleTranscriptionToggle}
                       className={cn(
-                        "w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
+                        "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
                         isTranscribing 
                           ? "bg-her-accent/20 text-her-accent border border-her-accent/30 mic-glow" 
                           : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
                       )}
                       title={isTranscribing ? "Parar Transcrição" : "Transcrever Áudio"}
                     >
-                      {isTranscribing ? <MicOff size={18} /> : <Mic size={18} />}
+                      {isTranscribing ? <MicOff size={16} /> : <Mic size={16} />}
                     </button>
                     
                     <div className={cn(
@@ -4715,47 +4697,67 @@ export default function App() {
                       isChatExpanded ? "flex-1" : "flex-none"
                     )}>
                       {!isChatExpanded ? (
-                        <div className="flex items-center">
+                        <div className="flex items-center gap-2">
+                          <input 
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={(e) => {
+                              handleFileSelect(e);
+                              setIsChatExpanded(true); // Expands to show uploaded documents and provide quick context details
+                            }}
+                            multiple
+                            className="hidden"
+                          />
+                          
+                          {/* Clipe / Enviar documentos para análise */}
+                          <button 
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            title="Anexar documentos para análise"
+                          >
+                            <Paperclip size={16} />
+                          </button>
+
                           <button 
                             onClick={() => setIsChatExpanded(true)}
-                            className="w-20 h-20 bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-r border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Escrever mensagem"
                           >
-                            <MessageSquare size={18} />
+                            <MessageSquare size={16} />
                           </button>
                           
                           <button 
                             onClick={() => setIsPersonaSwitcherOpen(true)}
-                            className="w-20 h-20 bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-r border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Modos de Personalidade"
                           >
-                            <UserIcon size={18} />
+                            <UserIcon size={16} />
                           </button>
 
                           <button 
                             onClick={toggleCamera}
                             className={cn(
-                              "w-20 h-20 flex items-center justify-center transition-all border-r",
+                              "w-10 h-10 rounded-full flex items-center justify-center transition-all border",
                               isCameraActive 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
                                 : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-her-accent"
                             )}
                             title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
                           >
-                            {isCameraActive ? <Eye size={18} className="animate-pulse" /> : <EyeOff size={18} />}
+                            {isCameraActive ? <Eye size={16} className="animate-pulse" /> : <EyeOff size={16} />}
                           </button>
 
                           <button 
                             onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                             className={cn(
-                              "w-20 h-20 flex items-center justify-center transition-all border-r",
+                              "w-10 h-10 rounded-full flex items-center justify-center transition-all border",
                               isScreenSharing 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30" 
                                 : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05]"
                             )}
                             title={isScreenSharing ? "Compartilhar Tela" : "Parar Tela"}
                           >
-                            {isScreenSharing ? <MonitorOff size={18} /> : <Monitor size={18} />}
+                            {isScreenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
                           </button>
                         </div>
                       ) : (

@@ -19,15 +19,73 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Handle upgrade event manually to route to the /api/live-ws websocket bridge
-  server.on("upgrade", (request, socket, head) => {
-    const { pathname } = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
-    
-    if (pathname === "/api/live-ws") {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
+  // POST endpoint for generating step-by-step simple integration plans
+  app.post("/api/integrations/plan", async (req, res) => {
+    try {
+      const { targetIntegration, clientApiKey } = req.body;
+      
+      if (!targetIntegration || typeof targetIntegration !== "string") {
+        return res.status(400).json({ error: "O nome da integração é obrigatório." });
+      }
+
+      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        return res.status(400).json({ 
+          error: "A chave API do Gemini não está definida no OSONE ou nos segredos. Por favor, configure sua chave nos Ajustes." 
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
       });
-    } else {
+
+      const prompt = `Gere um guia de plano de integração extremamente simples, didático e prático, estruturado em passos numerados fáceis (de 3 a 5 passos), explicando detalhadamente o que o usuário precisa preparar, configurar e programar em seu app para conseguir integrar o sistema desejado.
+      
+      Algumas pessoas não sabem por onde começar ou o que precisam (como Chave de API, URLs de retorno, webhook, bibliotecas). Explique de forma amigável, acolhedora e encorajadora para que qualquer pessoa (mesmo leigos) consiga entender o que precisa fazer e o que precisa obter nos painéis parceiros.
+
+      Sistema que o usuário deseja integrar: "${targetIntegration}"
+
+      Siga exatamente esta estrutura no seu resultado Markdown:
+      1. **Introdução**: Uma introdução breve, encorajadora e amigável em português explicando o que é o sistema e confirmando que é super viável integrá-lo.
+      2. **Passo a Passo**: Divida em passos claramente numerados (ex: # 1, # 2, etc.), usando palavras simples e destacando termos técnicos essenciais em negrito (ex: **Token de Acesso**, **Painel de Desenvolvedor**, **Webhooks**, **Servidor**).
+      3. **Dica Pro**: Uma dica rápida para manter as senhas protegidas ou sobre como testar de forma simulada.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: "Você é um Engenheiro de API de Software experiente, empático e de linguagem extremamente clara e acessível."
+        }
+      });
+
+      res.json({ plan: response.text || "Ops! Não foi possível gerar o plano. Tente novamente." });
+    } catch (error: any) {
+      console.error("Erro no endpoint de planejador de integrações:", error);
+      res.status(500).json({ error: error?.message || "Erro interno ao gerar o plano de integração." });
+    }
+  });
+
+  // Handle upgrade event manually to route to the /api/live-ws or /api/blender-ws websocket bridge
+  server.on("upgrade", (request, socket, head) => {
+    try {
+      const urlObj = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
+      const pathname = urlObj.pathname;
+      
+      if (pathname === "/api/live-ws") {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit("connection", ws, request);
+        });
+      } else {
+        socket.destroy();
+      }
+    } catch (e) {
+      console.error("Upgrade routing failed:", e);
       socket.destroy();
     }
   });
