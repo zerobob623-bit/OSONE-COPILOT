@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -117,6 +117,16 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <Cpu size={18} />
                   <span>Computador Local</span>
+                </button>
+                <button 
+                  onClick={() => { setMode('whatsapp'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'whatsapp' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <MessageSquare size={18} />
+                  <span>WhatsApp Evolution</span>
                 </button>
               </div>
             </div>

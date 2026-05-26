@@ -67,6 +67,8 @@ import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { LocalControl } from './components/LocalControl';
+import { WhatsAppIntegration } from './components/WhatsAppIntegration';
+import { SemanticMemory } from './components/SemanticMemory';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
@@ -229,6 +231,10 @@ export default function App() {
   - No início de uma sessão ou quando apropriado, você pode citar o clima ou a hora de forma orgânica usando essa ferramenta, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
   
+  DIRETRIZES DE MEMÓRIA SEMÂNTICA DE LONGO PRAZO:
+  - IMPORTANTE: Identifique e guarde ativamente preferências de código, hábitos, fatos marcantes sobre o usuário, gostos e conteúdos de diálogos considerados muito relevantes que o usuário menciona na conversa através de 'update_long_term_memory'.
+  - O critério principal para acionar essa memória é prever se essa informação ou escolha poderá ser útil ou citável em diálogos futuros que venham à tona a qualquer momento. Se o usuário te disser preferências do projeto, regras de negócio ou segredos pessoais, atualize a memória imediatamente com 'update_long_term_memory'!
+  
   MODULAÇÃO DE VOZ:
   - IMPORTANTE: Não altere seus parâmetros de voz (pitch/rate) a menos que o usuário peça explicitamente ou a situação seja DRAMATICAMENTE necessária para um efeito criativo (ex: contar uma história de terror ou imitar um robô). NÃO troque de voz em diálogos comuns.
   
@@ -258,6 +264,7 @@ export default function App() {
   };
 
   const [isPersonaSwitcherOpen, setIsPersonaSwitcherOpen] = useState(false);
+  const [isSemanticMemoryOpen, setIsSemanticMemoryOpen] = useState(false);
 
   // PWA Install Logic
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -1425,6 +1432,22 @@ export default function App() {
       
       const functionDeclarations: any[] = [
         {
+          name: "start_screen_share",
+          description: "Inicia o compartilhamento de tela técnica do usuário para que o assistente possa ver o que o usuário está fazendo e auxiliá-lo em tempo real.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {}
+          }
+        },
+        {
+          name: "stop_screen_share",
+          description: "Interrompe e encerra o compartilhamento de tela do usuário.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {}
+          }
+        },
+        {
           name: "getUserEnvironment",
           description: "Obtém as informações ambientais reais e exatas do usuário em tempo real: horário local do sistema, localização geográfica (cidade, estado, país) e a temperatura ou clima atual através de geolocalização e serviços de clima.",
           parameters: {
@@ -1619,6 +1642,18 @@ export default function App() {
       });
 
       functionDeclarations.push({
+        name: "query_semantic_memory",
+        description: "Consulta a memória semântica por associação de palavras, tags de ativação ou tópicos para trazer de volta lembranças e preferências úteis do usuário.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: { type: Type.STRING, description: "Palavras-chave de ativação ou termos associativos para procurar lembranças conexas." }
+          },
+          required: ["query"]
+        }
+      });
+
+      functionDeclarations.push({
         name: "propose_skeleton_plan",
         description: "Propõe um plano de execução técnica (Skeleton Brain) para o usuário validar em um popup. Use SEMPRE antes de gerar códigos complexos, arquiteturas ou mudanças estruturais no projeto no modo 'writing'. O usuário verá e poderá Aprovar ou Rejeitar.",
         parameters: {
@@ -1746,7 +1781,30 @@ export default function App() {
       const functionCalls = result.functionCalls;
       if (functionCalls) {
         for (const call of functionCalls) {
-          if (call.name === 'getUserEnvironment') {
+          if (call.name === 'start_screen_share') {
+            startScreenSharing().then(() => {
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: "🖥️ Transmitindo! Iniciei o compartilhamento de tela com sucesso."
+              }]);
+              addNotification("Compartilhamento de tela iniciado", "success");
+            }).catch(err => {
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: `⚠️ Não consegui ativar o compartilhamento de tela: ${err?.message || err}. Se estiver usando o iframe do estúdio, por favor clique no botão 'Abrir em Nova Aba' no canto superior direito para liberar permissões!`
+              }]);
+            });
+          } else if (call.name === 'stop_screen_share') {
+            stopScreenSharing();
+            setChatHistory(prev => [...prev, {
+              id: Math.random().toString(36).substr(2, 9),
+              role: 'assistant' as const,
+              content: "🛑 Compartilhamento de tela finalizado."
+            }]);
+            addNotification("Compartilhamento de tela encerrado", "info");
+          } else if (call.name === 'getUserEnvironment') {
             getUserLocationAndTimeAndWeather().then(env => {
               const info = `🌍 **Localização:** ${env.location}\n⏰ **Horário Local:** ${env.localTime}\n🌡️ **Temperatura:** ${env.temperature}`;
               setChatHistory(prev => [...prev, {
@@ -2024,7 +2082,50 @@ export default function App() {
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
-              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'canvas' ? 'Interativo' : mode}.` 
+              content: `Entendido. Alterei o espaço de trabalho para: ${mode === 'home' ? 'Início' : mode === 'writing' ? 'Escrita' : mode === 'canvas' ? 'Interativo' : mode === 'whatsapp' ? 'WhatsApp Evolution' : mode}.` 
+            }]);
+          } else if (call.name === 'update_long_term_memory') {
+            const insight = (call.args as any).insight;
+            const prevMemory = localStorage.getItem('osone_long_term_memory') || "";
+            const newMemory = `${prevMemory}\n- ${new Date().toLocaleDateString()}: ${insight}`;
+            localStorage.setItem('osone_long_term_memory', newMemory);
+            addNotification("Memória de Longo Prazo Atualizada", "success");
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: `*Gravado no cérebro semântico:* "${insight}"` 
+            }]);
+          } else if (call.name === 'query_semantic_memory') {
+            const queryParam = (call.args as any).query || "";
+            const raw = localStorage.getItem('osone_long_term_memory') || "";
+            const lines = raw.split('\n').filter(line => line.trim().length > 0);
+            
+            const queryWords = queryParam.toLowerCase()
+              .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "")
+              .split(/\s+/)
+              .filter((w: string) => w.length > 2);
+
+            const scored = lines.map((line) => {
+              const text = line.toLowerCase();
+              let score = 0;
+              queryWords.forEach((word: string) => {
+                if (text.includes(word)) {
+                  score += 2;
+                }
+              });
+              return { line, score };
+            }).filter(item => item.score > 0)
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 4);
+
+            const resultMsg = scored.length > 0
+              ? `Encontrei as seguintes recordações associadas:\n${scored.map(s => s.line).join('\n')}`
+              : "Não encontrei nada gravado com essa associação.";
+            
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: resultMsg
             }]);
           } else if (call.name === 'show_notification') {
             const { message, type } = call.args as any;
@@ -2211,6 +2312,22 @@ export default function App() {
             {
               functionDeclarations: [
                 {
+                  name: "start_screen_share",
+                  description: "Inicia o compartilhamento de tela técnica do usuário para que o assistente possa ver o que o usuário está fazendo e auxiliá-lo em tempo real.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
+                  name: "stop_screen_share",
+                  description: "Interrompe e encerra o compartilhamento de tela do usuário.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
+                  }
+                },
+                {
                   name: "getUserEnvironment",
                   description: "Obtém as informações ambientais reais e exatas do usuário em tempo real: horário local do sistema, localização geográfica (cidade, estado, país) e a temperatura ou clima atual através de geolocalização e serviços de clima.",
                   parameters: {
@@ -2273,6 +2390,17 @@ export default function App() {
                       insight: { type: Type.STRING, description: "O novo aprendizado ou informação a ser persistida." }
                     },
                     required: ["insight"]
+                  }
+                },
+                {
+                  name: "query_semantic_memory",
+                  description: "Consulta a memória semântica por associação de palavras, tags de ativação ou tópicos para trazer de volta lembranças e preferências úteis do usuário.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: { type: Type.STRING, description: "Palavras-chave de ativação ou termos associativos para procurar lembranças conexas." }
+                    },
+                    required: ["query"]
                   }
                 },
                 {
@@ -2369,13 +2497,13 @@ export default function App() {
                 },
                 {
                   name: "switch_workspace_mode",
-                  description: "Altera o modo de visualização do workspace (Escrita, Wellness (Saúde e Estilo), Sons ou Início).",
+                  description: "Altera o modo de visualização do workspace (Escrita, Wellness (Saúde e Estilo), Sons, WhatsApp Evolution ou Início).",
                   parameters: {
                     type: Type.OBJECT,
                     properties: {
                       mode: {
                         type: Type.STRING,
-                        enum: ["home", "writing", "sounds", "canvas", "wellness"],
+                        enum: ["home", "writing", "sounds", "canvas", "wellness", "whatsapp"],
                         description: "O modo para o qual alternar."
                       }
                     },
@@ -2786,7 +2914,26 @@ export default function App() {
                 const responses: any[] = [];
 
                 for (const call of calls) {
-                  if (call.name === "disconnectLiveSession") {
+                  if (call.name === "start_screen_share") {
+                    startScreenSharing().then(() => {
+                      addNotification("Compartilhamento de tela iniciado com sucesso", "success");
+                    }).catch(err => {
+                      addNotification("Não foi possível iniciar o compartilhamento de tela", "error");
+                    });
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Processo de compartilhamento de tela iniciado. O usuário verá a janela de seleção." }
+                    });
+                  } else if (call.name === "stop_screen_share") {
+                    stopScreenSharing();
+                    addNotification("Compartilhamento de tela finalizado", "info");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: "Compartilhamento de tela interrompido com sucesso." }
+                    });
+                  } else if (call.name === "disconnectLiveSession") {
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -2985,6 +3132,50 @@ export default function App() {
                       id: call.id,
                       response: { result: "Insight registrado com sucesso." }
                     });
+                  } else if (call.name === "query_semantic_memory") {
+                    try {
+                      const queryParam = (call.args as any).query || "";
+                      const raw = localStorage.getItem('osone_long_term_memory') || "";
+                      const lines = raw.split('\n').filter(line => line.trim().length > 0);
+                      
+                      const queryWords = queryParam.toLowerCase()
+                        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "")
+                        .split(/\s+/)
+                        .filter((w: string) => w.length > 2);
+
+                      if (queryWords.length === 0 && queryParam.trim().length > 0) {
+                        queryWords.push(queryParam.toLowerCase().trim());
+                      }
+
+                      const scored = lines.map((line) => {
+                        const text = line.toLowerCase();
+                        let score = 0;
+                        queryWords.forEach((word: string) => {
+                          if (text.includes(word)) {
+                            score += 2;
+                          }
+                        });
+                        return { line, score };
+                      }).filter(item => item.score > 0)
+                        .sort((a, b) => b.score - a.score)
+                        .slice(0, 8);
+
+                      const resultMsg = scored.length > 0
+                        ? `Memórias conexas encontradas por associação:\n${scored.map(s => s.line).join('\n')}`
+                        : "Nenhuma lembrança correspondente foi encontrada com este termo associativo.";
+
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: resultMsg }
+                      });
+                    } catch (e: any) {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: e.message }
+                      });
+                    }
                   } else if (call.name === "google_search") {
                     const query = call.args.query as string;
                     playSearchNetworkSound();
@@ -3809,6 +4000,18 @@ export default function App() {
             </button>
           )}
 
+          {/* Semantic Memory Pulsing Brain Node Dot */}
+          <button 
+            onClick={() => setIsSemanticMemoryOpen(true)}
+            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted flex items-center justify-center relative md:mx-1"
+            title="Memória Semântica OSONE (Longo Prazo)"
+          >
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.85)]"></span>
+            </span>
+          </button>
+
           <button 
             onClick={() => setIsSettingsOpen(true)}
             className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
@@ -4355,6 +4558,16 @@ export default function App() {
               className="w-full flex-1 flex flex-col min-h-0"
             >
               <LocalControl onClose={() => setWorkspaceMode('home')} />
+            </motion.div>
+          ) : workspaceMode === 'whatsapp' ? (
+            <motion.div
+              key="workspace-whatsapp"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <WhatsAppIntegration defaultGeminiKey={apiKeys.gemini} />
             </motion.div>
           ) : (
             <motion.div 
@@ -4946,6 +5159,11 @@ export default function App() {
         user={user}
         onLogout={handleLogout}
         onLogin={handleLogin}
+      />
+      <SemanticMemory 
+        isOpen={isSemanticMemoryOpen} 
+        onClose={() => setIsSemanticMemoryOpen(false)} 
+        onAddNotification={addNotification}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 
