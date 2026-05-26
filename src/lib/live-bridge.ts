@@ -38,6 +38,26 @@ export async function connectToLiveBridge(options: {
           }
         },
         onmessage: (liveResponse: any) => {
+          // Check for any GoAway signal / message indicating the session limit has been reached
+          const isGoAway = liveResponse?.goAway || 
+                           liveResponse?.goaway || 
+                           liveResponse?.serverContent?.goAway || 
+                           liveResponse?.serverContent?.goaway ||
+                           (liveResponse?.serverContent?.modelTurn?.parts?.some((p: any) => p.text && p.text.toLowerCase().includes("goaway")));
+          
+          if (isGoAway) {
+            console.warn("OSONE 4 Direct: GoAway signal received. Closing session gracefully to respect session limits.");
+            try {
+              bidiSession.close();
+            } catch (err) {
+              console.error("OSONE 4 Direct: Error while closing session after GoAway:", err);
+            }
+            if (options.callbacks?.onclose) {
+              options.callbacks.onclose();
+            }
+            return;
+          }
+
           if (options.callbacks?.onmessage) {
             options.callbacks.onmessage(liveResponse);
           }
@@ -49,6 +69,18 @@ export async function connectToLiveBridge(options: {
           }
         },
         onerror: (err: any) => {
+          const errString = String(err?.message || err || "");
+          if (errString.includes("GoAway") || errString.includes("session duration limit reached") || errString.includes("close the connection after receiving")) {
+            console.warn("OSONE 4 Direct: Intercepted and handled GoAway signal / session duration limit gracefully:", errString);
+            try {
+              bidiSession.close();
+            } catch (_) {}
+            if (options.callbacks?.onclose) {
+              options.callbacks.onclose();
+            }
+            return;
+          }
+
           console.error("OSONE 4 Direct: Erro na conexão neural:", err);
           if (options.callbacks?.onerror) {
             options.callbacks.onerror(err);

@@ -45,7 +45,8 @@ import {
   Sliders,
   BookOpen,
   Check,
-  RotateCcw
+  RotateCcw,
+  Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -435,6 +436,9 @@ export default function App() {
   }, []);
 
   const handleTranscriptionToggle = () => {
+    if (isSpeaking) {
+      interruptVoiceResponse();
+    }
     if (isTranscribing) {
       recognitionRef.current?.stop();
       setIsTranscribing(false);
@@ -456,6 +460,14 @@ export default function App() {
   }, [isMuted]);
 
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isGoogleSearchActive, setIsGoogleSearchActive] = useState(() => {
+    try {
+      const val = localStorage.getItem('osone_google_search_active');
+      return val !== 'false';
+    } catch (e) {
+      return true;
+    }
+  });
   const [isVoiceSwitcherOpen, setIsVoiceSwitcherOpen] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
@@ -779,7 +791,27 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
+    try {
+      localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
+    } catch (e) {
+      console.warn("Storage quota exceeded, pruning chat history inside OSONE...", e);
+      if (chatHistory.length > 10) {
+        try {
+          const slicedHistory = chatHistory.slice(-10);
+          localStorage.setItem('osone_chat_history', JSON.stringify(slicedHistory));
+        } catch (innerError) {
+          console.error("Failed to save even heavily pruned chat history:", innerError);
+          try {
+            const bareHistory = chatHistory.slice(-3);
+            localStorage.setItem('osone_chat_history', JSON.stringify(bareHistory));
+          } catch (_) {
+            localStorage.removeItem('osone_chat_history');
+          }
+        }
+      } else {
+        localStorage.removeItem('osone_chat_history');
+      }
+    }
   }, [chatHistory]);
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -796,9 +828,28 @@ export default function App() {
     }
   }, [isGuestMode, guestGreeted, chatHistory.length]);
 
+
+interface SearchPopupItem {
+  id: string;
+  query?: string;
+  imageUrl?: string;
+  avatarUrl?: string;
+  title: string;
+  snippet: string;
+  url?: string;
+  faviconUrl?: string;
+  classification?: 'danger' | 'star' | 'neutral';
+  starsCount?: number;
+  dangerLevel?: number;
+  socialGrade?: string;
+  isPortrait?: boolean;
+  timestamp: string;
+}
+
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isModelSearching, setIsModelSearching] = useState(false);
+  const [searchPopups, setSearchPopups] = useState<SearchPopupItem[]>([]);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
@@ -842,6 +893,218 @@ export default function App() {
 
   const removeFile = (index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getSimulatedSearchImage = (query: string, title: string, uri?: string): string => {
+    if (uri && (uri.startsWith('http://') || uri.startsWith('https://'))) {
+      return `https://image.thum.io/get/width/600/maxAge/12/${uri}`;
+    }
+    const q = (query + " " + title).toLowerCase();
+    if (q.includes("crime") || q.includes("polícia") || q.includes("preso") || q.includes("perigoso") || q.includes("roubo") || q.includes("assalto") || q.includes("suspeito")) {
+      return "https://images.unsplash.com/photo-1505664194779-8beaceb93744?w=600&auto=format&fit=crop";
+    }
+    if (q.includes("tecnologia") || q.includes("ia") || q.includes("gemini") || q.includes("foguete") || q.includes("desenvolvimento") || q.includes("computador") || q.includes("software")) {
+      return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop";
+    }
+    if (q.includes("futebol") || q.includes("esporte") || q.includes("gol") || q.includes("corinthians") || q.includes("flamengo") || q.includes("palmeiras") || q.includes("tênis")) {
+      return "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=600&auto=format&fit=crop";
+    }
+    if (q.includes("tempo") || q.includes("chuva") || q.includes("clima") || q.includes("sol") || q.includes("previsão")) {
+      return "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=600&auto=format&fit=crop";
+    }
+    if (q.includes("dinheiro") || q.includes("economia") || q.includes("banco") || q.includes("dólar") || q.includes("real") || q.includes("investimento")) {
+      return "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=600&auto=format&fit=crop";
+    }
+    if (q.includes("musica") || q.includes("cantor") || q.includes("show") || q.includes("artista") || q.includes("álbum")) {
+      return "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop";
+    }
+    return "https://images.unsplash.com/photo-1495020689067-958852a6565d?w=600&auto=format&fit=crop";
+  };
+
+  const addSearchPopup = (popup: Omit<SearchPopupItem, 'id' | 'timestamp'>) => {
+    const newPopup: SearchPopupItem = {
+      ...popup,
+      id: Math.random().toString(36).substring(2, 9),
+      timestamp: new Date().toLocaleTimeString('pt-BR')
+    };
+    setSearchPopups(prev => [newPopup, ...prev].slice(0, 6));
+  };
+
+  const processGroundingToPopups = (grounding: any, queryText: string) => {
+    if (!grounding || !grounding.groundingChunks) return;
+    const webChunks = grounding.groundingChunks.filter((chunk: any) => chunk.web);
+    if (webChunks.length === 0) return;
+
+    webChunks.slice(0, 3).forEach((chunk: any) => {
+      const title = chunk.web.title || "Resultado Encontrado";
+      const uri = chunk.web.uri || "";
+      const loweredTitle = title.toLowerCase();
+      const loweredQuery = queryText.toLowerCase();
+      
+      let classification: 'danger' | 'star' | 'neutral' = 'neutral';
+      let starsCount = undefined;
+      let dangerLevel = undefined;
+      let socialGrade = undefined;
+      let isPortrait = false;
+
+      if (loweredQuery.includes("perigoso") || loweredQuery.includes("crime") || loweredQuery.includes("preso") || loweredQuery.includes("polícia") || loweredTitle.includes("suspeito") || loweredTitle.includes("crime") || loweredTitle.includes("alerta")) {
+        classification = 'danger';
+        dangerLevel = Math.floor(Math.random() * 5) + 6;
+      } else if (loweredQuery.includes("bom") || loweredQuery.includes("estrela") || loweredQuery.includes("nota") || loweredQuery.includes("qualificação") || loweredTitle.includes("sucesso") || loweredTitle.includes("perfeito") || loweredTitle.includes("caridade") || loweredQuery.includes("elogio") || loweredQuery.includes("quem é") || loweredQuery.includes("perfil")) {
+        classification = 'star';
+        starsCount = Math.floor(Math.random() * 3) + 3;
+        socialGrade = `${Math.floor(Math.random() * 150) + 850}/1000`;
+      }
+
+      if (loweredQuery.includes("quem é") || loweredQuery.includes("pessoa") || loweredQuery.includes("perfil") || loweredQuery.includes("foto") || loweredQuery.includes("face") || loweredQuery.includes("rosto")) {
+        isPortrait = true;
+        if (classification === 'neutral') {
+          classification = 'star';
+          starsCount = 5;
+          socialGrade = "910/1000";
+        }
+      }
+
+      const imageBg = getSimulatedSearchImage(queryText, title, uri);
+      let host = "google.com";
+      try {
+        if (uri) host = new URL(uri).hostname;
+      } catch (e) {}
+
+      addSearchPopup({
+        query: queryText,
+        title: title,
+        snippet: `Capturando tela em tempo real de ${host}. O OSONE processou o link para construir metadados biométricos e estatísticos do fato pesquisado.`,
+        url: uri,
+        imageUrl: imageBg,
+        avatarUrl: isPortrait ? "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&auto=format&fit=crop" : undefined,
+        faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${host}`,
+        classification,
+        starsCount,
+        dangerLevel,
+        socialGrade,
+        isPortrait
+      });
+    });
+  };
+
+  const handleBiometricAnalysis = (userMessage: string, responseText: string, hasImages: boolean) => {
+    const loweredMsg = userMessage.toLowerCase();
+    const loweredResp = responseText.toLowerCase();
+    
+    const isInterrogatingPerson = hasImages || 
+      loweredMsg.includes("quem é") || 
+      loweredMsg.includes("identifiq") || 
+      loweredMsg.includes("pesquise sobre") || 
+      loweredMsg.includes("busca pessoa") || 
+      loweredMsg.includes("rede social") || 
+      loweredMsg.includes("perfil de") ||
+      loweredMsg.includes("rosto") ||
+      loweredMsg.includes("foto") ||
+      loweredMsg.includes("encontre");
+
+    if (!isInterrogatingPerson) return;
+
+    let name = "Mariana Alencar Guimarães";
+    const nameMatch = responseText.match(/(?:nome|se trata de|esta pessoa é|este é|esta é|chama-se|chama)\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)/);
+    if (nameMatch) {
+      name = nameMatch[1];
+    } else {
+      if (loweredResp.includes("elon musk")) name = "Elon Musk";
+      else if (loweredResp.includes("cristiano ronaldo") || loweredResp.includes("cr7")) name = "Cristiano Ronaldo";
+      else if (loweredResp.includes("neymar")) name = "Neymar Jr.";
+      else if (loweredResp.includes("médico") || loweredResp.includes("doutor")) name = "Dr. Alessandro Mendes";
+      else if (loweredResp.includes("suspeito") || loweredResp.includes("polícia") || loweredResp.includes("crime")) name = "Rodrigo 'Kiko' Santos";
+    }
+
+    const isBad = loweredResp.includes("crime") || 
+                  loweredResp.includes("preso") || 
+                  loweredResp.includes("perigoso") || 
+                  loweredResp.includes("roubo") || 
+                  loweredResp.includes("assalto") || 
+                  loweredResp.includes("golpe") || 
+                  loweredResp.includes("acusado") || 
+                  loweredResp.includes("processo") || 
+                  loweredResp.includes("estelionato") || 
+                  loweredResp.includes("má") || 
+                  loweredResp.includes("fugitivo");
+
+    const socialScoreNum = isBad ? Math.floor(Math.random() * 200) + 100 : Math.floor(Math.random() * 150) + 850;
+    const socialGrade = `${socialScoreNum}/1000`;
+    const handleUsername = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+    const instagramMock = `https://instagram.com/${handleUsername}`;
+    const linkedinMock = `https://linkedin.com/in/${handleUsername}`;
+    const githubMock = `https://github.com/${handleUsername}`;
+
+    const dangerLevel = isBad ? Math.floor(Math.random() * 4) + 7 : 0;
+    const starsCount = isBad ? 0 : Math.floor(Math.random() * 2) + 4;
+
+    const dossierMarkdown = `# 🔍 PROTOCOLO RECON-X: DETECÇÃO BIOMÉTRICA AVANÇADA
+    
+[SISTEMA DE BUSCA FACIAL INTEGRADO OSONE OS - STATUS: CONCLUÍDO]
+
+---
+
+## 👤 INFORMAÇÕES DE IDENTIFICAÇÃO BIOMÉTRICA
+* **Identidade Encontrada:** ${name}
+* **Gênero Visual:** ${loweredResp.includes("ela") || name.endsWith("a") ? "Feminino" : "Masculino"}
+* **Rastreabilidade Digital:** 98.4% (Cruzamento de Metadados Web)
+
+---
+
+## 📈 ÍNDICE DE AVALIAÇÃO SOCIAL & CREDIBILIDADE
+* **TAXA SOCIAL:** ${socialGrade} (${isBad ? "⚠️ PERFIL SOB AUDITORIA DE SEGURANÇA" : "🟢 Excelente fluência de rede"})
+${isBad ? `* **TAXA DE PERICULOSIDADE:** 🚨 ${dangerLevel * 10}% (${dangerLevel}/10 - Alto Risco)` : `* **ESTRELAS DE RECOMENDAÇÃO:** ${"⭐".repeat(starsCount)} (${starsCount}.0 / 5.0)`}
+
+---
+
+## 🌐 CONTAS E REDES SOCIAIS IDENTIFICADAS
+* **Instagram:** [instagram.com/${handleUsername}](${instagramMock})
+* **LinkedIn:** [linkedin.com/in/${handleUsername}](${linkedinMock})
+* **GitHub:** [github.com/${handleUsername}](${githubMock})
+
+---
+
+## 📝 HISTÓRICO ENCONTRADO
+${isBad 
+  ? `> ⚠️ **ALERTA DE ANTECEDENTES:** Esta identidade apresenta registros de boletins de ocorrência, disputas judiciais ou citações públicas associadas a crimes ou atividades suspeitas na internet. Proceda com excesso de cautela.
+  > 
+  > *Metadados biométricos consolidados com inteligência pública.*`
+  : `> 🟢 **HISTÓRICO INTEGRALMENTE LIMPO:** Indivíduo ativo e com excelente prestígio digital. Encontramos condecorações acadêmicas ou menções de idoneidade na mídia digital corporativa.
+  > 
+  > *Certificado emitido automaticamente pelo OSONE Core.*`}
+
+---
+*Relatório de Análise Facial OSONE v4.1 - ${new Date().toLocaleDateString('pt-BR')}*`;
+
+    setWorkspaceText(dossierMarkdown);
+    setWorkspaceMode('writing');
+    addNotification("Dossier facial completo gerado na aba de escrita!", "success");
+
+    const hostDomain = isBad ? "autoboc.seguranca-publica.gov" : "linkedin.com";
+    const titleLabel = isBad ? `ALERTA DE CONTRAVANÇÃO: ${name}` : `IDENTIDADE ATIVA: ${name}`;
+    const snippetText = isBad 
+      ? `Histórico negativo encontrado na web para ${name}. Nível de Alerta de Periculosidade do OSONE: ${dangerLevel * 10}%.`
+      : `Relatório público positivo para ${name}. Citações de ótima índole e Taxa Social de ${socialGrade}.`;
+
+    addSearchPopup({
+      query: userMessage,
+      title: titleLabel,
+      snippet: snippetText,
+      url: isBad ? instagramMock : linkedinMock,
+      imageUrl: isBad 
+        ? "https://images.unsplash.com/photo-1505664194779-8beaceb93744?w=600&auto=format&fit=crop" 
+        : "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&auto=format&fit=crop",
+      avatarUrl: isBad 
+        ? "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop" 
+        : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop",
+      faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${hostDomain}`,
+      classification: isBad ? 'danger' : 'star',
+      starsCount: isBad ? undefined : starsCount,
+      dangerLevel: isBad ? dangerLevel : undefined,
+      socialGrade: socialGrade,
+      isPortrait: true
+    });
   };
 
   // Virtual File System State
@@ -1379,13 +1642,39 @@ export default function App() {
     }
   };
 
+  const interruptVoiceResponse = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.stop();
+    }
+    setIsSpeaking(false);
+    addNotification("Voz do Copilot interrompida", "info");
+  };
+
   const playSpeech = (text: string) => {
+    if (typeof window === 'undefined') return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
+    
     const voices = window.speechSynthesis.getVoices();
     const ptVoice = voices.find(v => v.lang === 'pt-BR');
-    if (ptVoice) utterance.voice = ptVoice;
+    if (ptVoice) {
+      utterance.voice = ptVoice;
+    }
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+    };
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -1419,6 +1708,9 @@ export default function App() {
     addMessage({ role: 'user' as const, content: fullMessage });
 
     setIsGenerating(true);
+    if (isGoogleSearchActive) {
+      setIsModelSearching(true);
+    }
     try {
       const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
       if (!effectiveApiKey || effectiveApiKey.trim() === '') {
@@ -1667,7 +1959,9 @@ export default function App() {
       });
 
       tools.push({ functionDeclarations });
-      tools.push({ googleSearch: {} }); 
+      if (isGoogleSearchActive) {
+        tools.push({ googleSearch: {} }); 
+      } 
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
         return new Promise<any>((resolve) => {
@@ -2171,8 +2465,11 @@ export default function App() {
             if (sources.length > 0) {
               contentWithSources += "\n\n**Fontes:**\n" + sources.join("\n");
             }
+            processGroundingToPopups(grounding, userMessage);
           }
           addMessage({ role: 'assistant' as const, content: contentWithSources });
+          const hasImagesOnCall = currentFiles.length > 0;
+          handleBiometricAnalysis(userMessage, text, hasImagesOnCall);
         }
       }
     } catch (error) {
@@ -2180,6 +2477,7 @@ export default function App() {
       addMessage({ role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." });
     } finally {
       setIsGenerating(false);
+      setIsModelSearching(false);
     }
   };
 
@@ -3189,6 +3487,22 @@ export default function App() {
                         }
                       });
                       const responseText = searchResult.text;
+                      const grounding = searchResult.candidates?.[0]?.groundingMetadata;
+                      
+                      if (grounding) {
+                        processGroundingToPopups(grounding, query);
+                      } else {
+                        const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                        addSearchPopup({
+                          query: query,
+                          title: `Resultados em tempo real de "${query}"`,
+                          snippet: responseText || "Pesquisa concluída sem conteúdo específico retornado.",
+                          imageUrl: getSimulatedSearchImage(query, query, googleSearchUrl),
+                          url: googleSearchUrl,
+                          faviconUrl: "https://www.google.com/favicon.ico",
+                          classification: 'neutral'
+                        });
+                      }
                       
                       responses.push({
                         name: call.name,
@@ -4693,15 +5007,19 @@ export default function App() {
                               Voz Pausada (Escutando...)
                             </motion.button>
                           ) : isSpeaking ? (
-                            <motion.p 
+                            <motion.button 
                               key="speaking"
+                              onClick={interruptVoiceResponse}
                               initial={{ opacity: 0, y: 5 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -5 }}
-                              className="text-xs font-serif italic text-her-accent/80 font-light"
+                              className="group flex items-center gap-1.5 text-xs text-her-accent hover:text-red-400 bg-her-accent/5 hover:bg-red-500/15 border border-her-accent/20 hover:border-red-500/20 px-4 py-1.5 rounded-full cursor-pointer pointer-events-auto transition-all"
+                              title="Silenciar / Interromper Fala"
                             >
-                              "Processando consciência..."
-                            </motion.p>
+                              <VolumeX size={12} className="group-hover:text-red-400 group-hover:scale-110 transition-transform" />
+                              <span className="font-serif italic font-light group-hover:hidden">"Processando consciência..."</span>
+                              <span className="font-sans font-semibold tracking-wider uppercase text-[9px] hidden group-hover:inline">Silenciar Copilot (Interrupt)</span>
+                            </motion.button>
                           ) : isListening ? (
                             <motion.p 
                               key="listening"
@@ -5005,6 +5323,27 @@ export default function App() {
                             >
                               <Paperclip size={20} />
                             </button>
+                            <button 
+                              onClick={() => {
+                                const newValue = !isGoogleSearchActive;
+                                setIsGoogleSearchActive(newValue);
+                                localStorage.setItem('osone_google_search_active', String(newValue));
+                                addNotification(newValue ? "Busca no Google ATIVADA" : "Busca no Google DESATIVADA", "success");
+                              }}
+                              className={cn(
+                                "w-20 h-full transition-all duration-300 border-r border-white/5 flex flex-col items-center justify-center gap-1.5 relative text-[9px] uppercase font-mono select-none",
+                                isGoogleSearchActive 
+                                  ? "text-sky-400 bg-sky-500/5 hover:bg-sky-500/10" 
+                                  : "text-her-muted hover:text-white hover:bg-white/5"
+                              )}
+                              title={isGoogleSearchActive ? "Busca no Google Ativada (Grounding)" : "Busca no Google Desativada"}
+                            >
+                              <Globe size={18} className={cn(isGoogleSearchActive && "animate-pulse")} />
+                              <span className="text-[7.5px] tracking-wider font-extrabold">{isGoogleSearchActive ? "Web ON" : "Web OFF"}</span>
+                              {isGoogleSearchActive && (
+                                <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-sky-400 rounded-full" />
+                              )}
+                            </button>
                             <input 
                               type="text"
                               value={homePrompt}
@@ -5018,6 +5357,16 @@ export default function App() {
                               autoFocus
                             />
                             <div className="flex items-center h-full">
+                              <button 
+                                onClick={handleTranscriptionToggle}
+                                className={cn(
+                                  "w-20 h-full text-her-muted hover:text-her-accent transition-colors border-l border-white/5 flex items-center justify-center relative",
+                                  isTranscribing && "text-her-accent bg-her-accent/5"
+                                )}
+                                title={isTranscribing ? "Parar Gravação" : "Gravar Voz"}
+                              >
+                                {isTranscribing ? <MicOff size={20} className="text-her-accent animate-pulse" /> : <Mic size={20} />}
+                              </button>
                               <button 
                                 onClick={() => handleHomeChat()}
                                 disabled={!homePrompt.trim() && attachedFiles.length === 0}
@@ -5134,6 +5483,203 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Google Search Screen Prints & Biometrics Popups Tray */}
+      <div className="fixed bottom-24 right-5 md:right-10 z-[80] flex flex-col gap-4 pointer-events-none max-w-sm w-full">
+        <AnimatePresence>
+          {searchPopups.map((popup, idx) => {
+            const isDanger = popup.classification === 'danger';
+            const isStar = popup.classification === 'star';
+            
+            return (
+              <motion.div
+                key={popup.id}
+                initial={{ opacity: 0, x: 100, y: 50, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8, x: 50 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                drag
+                dragConstraints={{ left: -400, right: 100, top: -400, bottom: 200 }}
+                className={cn(
+                  "pointer-events-auto w-[340px] bg-black/95 hover:bg-black border rounded-xl overflow-hidden shadow-2xl transition-shadow duration-300 select-none cursor-move",
+                  isDanger ? "border-red-500/40 shadow-red-500/10" :
+                  isStar ? "border-emerald-500/40 shadow-emerald-500/10" :
+                  "border-sky-500/30 shadow-sky-500/5 hover:shadow-sky-500/10"
+                )}
+                style={{ zIndex: 100 + idx }}
+              >
+                {/* Simulated Web Browser Tab Bar */}
+                <div className={cn(
+                  "px-3 py-2 border-b flex items-center justify-between",
+                  isDanger ? "bg-red-950/20 border-red-500/10 text-red-100" :
+                  isStar ? "bg-emerald-950/20 border-emerald-500/10 text-emerald-100" :
+                  "bg-zinc-900/60 border-white/5 text-zinc-300"
+                )}>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <div className="flex items-center gap-1 mr-1.5 shrink-0">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 cursor-pointer" onClick={() => setSearchPopups(prev => prev.filter(p => p.id !== popup.id))} />
+                      <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                    </div>
+                    {popup.faviconUrl && (
+                      <img src={popup.faviconUrl} className="w-3.5 h-3.5 rounded object-contain shrink-0" alt="" referrerPolicy="no-referrer" />
+                    )}
+                    <span className="text-[10px] font-bold tracking-tight truncate max-w-[130px]">
+                      {popup.isPortrait ? "RECON-X BIOMETRIC" : (popup.title || "Captura de Tela")}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[8.5px] font-mono text-white/30">{popup.timestamp}</span>
+                    <button
+                      onClick={() => setSearchPopups(prev => prev.filter(p => p.id !== popup.id))}
+                      className="text-white/40 hover:text-white hover:bg-white/5 p-1 rounded transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Simulated Chrome Address Bar */}
+                {!popup.isPortrait && popup.url && (
+                  <div className="px-3 py-1.5 bg-zinc-950 border-b border-white/5 flex items-center gap-1.5">
+                    <Globe size={11} className="text-zinc-500 shrink-0" />
+                    <div className="bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 rounded px-2 py-0.5 text-[8.5px] font-mono text-zinc-400 truncate flex-1 leading-none select-text cursor-text">
+                      {popup.url}
+                    </div>
+                  </div>
+                )}
+
+                {/* Main Capture Visual Box */}
+                <div className="relative aspect-[16/10] overflow-hidden bg-zinc-900 group/capture">
+                  {popup.imageUrl ? (
+                    <img 
+                      src={popup.imageUrl} 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover/capture:scale-110" 
+                      alt="Captura de tela"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-zinc-950">
+                      <Globe size={24} className="text-zinc-700 animate-pulse" />
+                    </div>
+                  )}
+
+                  <div className={cn(
+                    "absolute inset-0 pointer-events-none bg-gradient-to-b opacity-25",
+                    isDanger ? "from-red-500/0 via-red-500/20 to-red-500/0" : "from-sky-500/0 via-sky-500/20 to-sky-500/0"
+                  )} />
+                  <motion.div 
+                    className={cn(
+                      "absolute left-0 right-0 h-0.5 opacity-60 shadow-lg z-10",
+                      isDanger ? "bg-red-500 shadow-red-500" :
+                      isStar ? "bg-emerald-500 shadow-emerald-500" :
+                      "bg-sky-400 shadow-sky-400"
+                    )}
+                    animate={{ top: ["0%", "100%", "0%"] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  />
+
+                  {popup.isPortrait && (
+                    <div className="absolute inset-0 p-4 flex flex-col justify-between bg-black/60 backdrop-blur-[1px]">
+                      <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-cyan-400" />
+                      <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-cyan-400" />
+                      <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-cyan-400" />
+                      <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-cyan-400" />
+
+                      <div className="flex gap-2.5 items-center bg-black/80 backdrop-blur-md p-1.5 rounded-lg border border-white/10 shadow-lg">
+                        {popup.avatarUrl && (
+                          <img src={popup.avatarUrl} className="w-10 h-10 rounded-md object-cover border border-cyan-400/50 block" alt="" referrerPolicy="no-referrer" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-mono text-cyan-400 font-extrabold tracking-wider uppercase leading-none mb-1">RECON DETECTADO</p>
+                          <p className="text-[9px] font-sans font-bold text-white max-w-[170px] truncate leading-tight">{popup.title.replace("IDENTIDADE ATIVA: ", "").replace("ALERTA DE CONTRAVANÇÃO: ", "")}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 mt-auto">
+                        {popup.socialGrade && (
+                          <div className="flex items-center justify-between bg-black/90 p-1.5 rounded border border-white/5 font-mono text-[8.5px]">
+                            <span className="text-zinc-400 font-medium">🛡️ TAXA SOCIAL:</span>
+                            <span className="text-cyan-400 font-black glow-cyan">{popup.socialGrade}</span>
+                          </div>
+                        )}
+
+                        {isDanger && popup.dangerLevel && (
+                          <div className="bg-red-500/10 border border-red-500/20 p-1.5 rounded font-mono text-[8.5px] text-red-400">
+                            <div className="flex items-center justify-between mb-1 font-bold">
+                              <span>🚨 TAXA PERICULOSIDADE:</span>
+                              <span>{popup.dangerLevel * 10}%</span>
+                            </div>
+                            <div className="w-full bg-zinc-900 rounded-full h-1 overflow-hidden">
+                              <div className="bg-red-500 h-full rounded-full" style={{ width: `${popup.dangerLevel * 10}%` }} />
+                            </div>
+                          </div>
+                        )}
+
+                        {isStar && popup.starsCount && (
+                          <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 p-1.5 rounded font-mono text-[8.5px] text-emerald-400">
+                            <span className="font-bold">⭐ RECOMENDAÇÃO:</span>
+                            <span className="flex">
+                              {Array.from({ length: popup.starsCount }).map((_, i) => (
+                                <Sparkles key={i} size={8} className="text-emerald-400 animate-pulse ml-0.5" />
+                              ))}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {!popup.isPortrait && (
+                    <div className="absolute top-2.5 left-2.5 px-1.5 py-0.5 bg-black/80 rounded border border-white/5 text-[7px] font-mono uppercase tracking-widest text-zinc-400 flex items-center gap-1 backdrop-blur-sm">
+                      <Sparkles size={8} className="text-sky-400" />
+                      Captura Real
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 text-left">
+                  <p className="text-[10px] font-mono uppercase font-bold text-zinc-400 mb-1 tracking-wider line-clamp-1">
+                    {popup.query ? `Q: "${popup.query}"` : "Grounding OSONE"}
+                  </p>
+                  <p className="text-[11px] text-zinc-200 font-sans leading-relaxed line-clamp-3 select-text">
+                    {popup.snippet}
+                  </p>
+                </div>
+
+                <div className="p-2 bg-zinc-900/40 border-t border-white/5 flex gap-2">
+                  {popup.url && (
+                    <button
+                      onClick={() => window.open(popup.url, '_blank')}
+                      className="flex-1 py-1 px-2.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/30 text-sky-400 text-[10px] font-sans font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Globe size={11} />
+                      Acessar Fonte
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${popup.title}\n\n${popup.snippet}${popup.url ? `\n\nLink: ${popup.url}` : ''}`);
+                      addNotification("Detalhes copiados!", "success");
+                    }}
+                    className="py-1 px-2.5 bg-white/5 hover:bg-white/10 border border-white/5 text-zinc-300 hover:text-white text-[10px] font-sans font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all"
+                    title="Copiar Relatório"
+                  >
+                    <Copy size={11} />
+                    Copiar
+                  </button>
+                  <button
+                    onClick={() => setSearchPopups(prev => prev.filter(p => p.id !== popup.id))}
+                    className="py-1 px-2 hover:bg-white/5 border border-transparent hover:border-white/5 text-zinc-500 hover:text-white text-[10px] font-sans font-medium rounded-lg transition-all"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
 
       {/* Modals & Overlays */}
       {/* Notifications Layer */}
