@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
 
-type TabId = 'general' | 'interface' | 'profile' | 'automation';
+type TabId = 'general' | 'elevenlabs' | 'interface' | 'profile' | 'automation';
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error';
 
 export const SettingsModal = ({ 
@@ -52,6 +52,8 @@ export const SettingsModal = ({
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionMessage, setConnectionMessage] = useState('');
+  const [elVerificationStatus, setElVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [elVerificationMessage, setElVerificationMessage] = useState('');
 
   const handleTestConnection = async () => {
     setConnectionStatus('testing');
@@ -72,8 +74,48 @@ export const SettingsModal = ({
     }
   };
 
+  const handleVerifyElevenLabs = async () => {
+    if (!keys.elevenLabsApiKey || !keys.elevenLabsApiKey.trim()) {
+      setElVerificationStatus('error');
+      setElVerificationMessage('Por favor, configure sua chave de API ElevenLabs nas configurações antes de validar.');
+      return;
+    }
+    setElVerificationStatus('testing');
+    setElVerificationMessage('Handshake local ativo. Solicitando dados detalhados para Elevenlabs...');
+    try {
+      const response = await fetch('/api/elevenlabs/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          elevenLabsApiKey: keys.elevenLabsApiKey,
+          elevenLabsVoiceId: keys.elevenLabsVoiceId
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setElVerificationStatus('success');
+        setElVerificationMessage(data.message);
+        if (onAddNotification) {
+          onAddNotification('Handshake ElevenLabs validado com sucesso!', 'success');
+        }
+      } else {
+        setElVerificationStatus('error');
+        setElVerificationMessage(data.message || 'Chave de API ou Voice ID recusados pelo servidor.');
+        if (onAddNotification) {
+          onAddNotification(data.message || 'Falha ao validar credenciais ElevenLabs.', 'error');
+        }
+      }
+    } catch (err: any) {
+      setElVerificationStatus('error');
+      setElVerificationMessage('Erro de rede: sem resposta dos servidores de validação.');
+    }
+  };
+
   const tabs = [
     { id: 'general', label: 'Chaves', icon: Key },
+    { id: 'elevenlabs', label: 'ElevenLabs', icon: Volume2 },
     { id: 'interface', label: 'Interface', icon: Palette },
     { id: 'profile', label: 'Perfil', icon: UserCircle },
     { id: 'automation', label: 'Automação', icon: Cpu },
@@ -164,43 +206,231 @@ export const SettingsModal = ({
                         placeholder="Insira sua chave Gemini..."
                       />
                       <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
-                        Chave necessária para o processamento de linguagem natural e visão computacional.
+                        Chave necessária para o processamento de linguagem natural, transcrição de voz e visão computacional integrada do OSONE.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {activeTab === 'elevenlabs' && (
+                  <motion.div
+                    key="elevenlabs"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="space-y-6"
+                  >
+                    <div className="p-5 bg-white/[0.02] border border-white/[0.05] rounded-3xl space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-her-accent font-medium">
+                          <Volume2 size={15} />
+                          <span className="text-xs font-serif italic">Canal de Voz ElevenLabs</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const nextEngine = voiceEngine === 'elevenlabs' ? 'gemini' : 'elevenlabs';
+                            setVoiceEngine(nextEngine);
+                            if (onAddNotification) {
+                              onAddNotification(nextEngine === 'elevenlabs' ? "Motor ElevenLabs ativado como canal principal de voz" : "Gemini 3.1 TTS ativado", "info");
+                            }
+                          }}
+                          className={cn(
+                            "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                            voiceEngine === 'elevenlabs' ? "bg-her-accent" : "bg-white/10"
+                          )}
+                        >
+                          <span className={cn(
+                            "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                            voiceEngine === 'elevenlabs' ? "translate-x-5" : "translate-x-0"
+                          )} />
+                        </button>
+                      </div>
+                      <p className="text-[10px] sm:text-xs text-her-muted/80 leading-relaxed font-light">
+                        Ative o motor de síntese de fala mais avançado e realista do mundo para as interações. O handshaking e a latência de resposta dependem do modelo de latência selecionado abaixo.
                       </p>
                     </div>
 
-                    <div className="pt-4 border-t border-white/5 space-y-6">
+                    <div className="space-y-4">
                       <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <Cpu size={12} className="text-her-accent" />
-                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Elevenlabs API Key</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Chave de API ElevenLabs</label>
+                          <span 
+                            className="text-[9.5px] text-her-accent font-medium hover:underline cursor-pointer flex items-center gap-1"
+                            onClick={() => window.open('https://elevenlabs.io', '_blank')}
+                          >
+                            Obter Chave <Info size={10} />
+                          </span>
                         </div>
                         <input 
                           type="password"
                           value={keys.elevenLabsApiKey || ''}
                           onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
-                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/20"
-                          placeholder="Insira sua chave ElevenLabs..."
+                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3.5 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-her-ink/80 placeholder:text-her-muted/20"
+                          placeholder="Insira sua xi-api-key da Elevenlabs..."
                         />
-                        <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
-                          Chave opcional para sintetizar narrativas ultrarrealistas utilizando ElevenLabs.
-                        </p>
                       </div>
 
                       <div>
-                        <div className="flex items-center gap-2 mb-3">
-                          <UserCircle size={12} className="text-her-accent" />
-                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">ID da Voz ElevenLabs</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">ID da Voz Clone (Voice ID)</label>
+                          <span className="text-[9.5px] text-her-muted/40 font-mono">Rachel default</span>
                         </div>
                         <input 
                           type="text"
                           value={keys.elevenLabsVoiceId || ''}
                           onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
-                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/20 text-xs font-mono"
+                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3.5 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-zinc-300 placeholder:text-her-muted/25"
                           placeholder="Ex: 21m00Tcm4TlvDq8ikWAM..."
                         />
-                        <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
-                          Insira o ID de voz ElevenLabs customizado que deseja usar para as leituras e narrativas.
-                        </p>
+                      </div>
+
+                      <button
+                        onClick={handleVerifyElevenLabs}
+                        disabled={elVerificationStatus === 'testing'}
+                        className={cn(
+                          "w-full py-3.5 rounded-2xl text-[10px] uppercase tracking-[0.15em] font-bold transition-all flex items-center justify-center gap-2 group",
+                          elVerificationStatus === 'testing' ? "bg-white/5 text-her-muted cursor-wait" :
+                          elVerificationStatus === 'success' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                          elVerificationStatus === 'error' ? "bg-red-500/10 text-red-500 border border-red-500/20" :
+                          "bg-her-accent/10 text-her-accent border border-her-accent/20 hover:bg-her-accent/20 active:scale-[0.98]"
+                        )}
+                      >
+                        {elVerificationStatus === 'testing' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-her-accent" />
+                            Validando conexão ElevenLabs...
+                          </>
+                        ) : elVerificationStatus === 'success' ? (
+                          <>
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            Conexão Estabelecida com Sucesso
+                          </>
+                        ) : elVerificationStatus === 'error' ? (
+                          <>
+                            <AlertCircle size={13} className="text-red-500" />
+                            Falha na Conexão. Tentar Novamente
+                          </>
+                        ) : (
+                          <>
+                            <Activity size={13} className="group-hover:animate-pulse" />
+                            Testar e Validar Conexão
+                          </>
+                        )}
+                      </button>
+
+                      {elVerificationStatus !== 'idle' && (
+                        <div className={cn(
+                          "p-4 rounded-2xl text-xs leading-relaxed font-light flex items-start gap-3 border animate-in fade-in slide-in-from-top-2 duration-200",
+                          elVerificationStatus === 'success' ? "bg-emerald-500/5 text-emerald-300/90 border-emerald-500/10" :
+                          "bg-red-500/5 text-red-300/95 border-red-500/10"
+                        )}>
+                          {elVerificationStatus === 'success' ? (
+                            <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                          ) : (
+                            <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-400" />
+                          )}
+                          <div className="space-y-1">
+                            <p className="font-medium text-[11px] uppercase tracking-wider">
+                              {elVerificationStatus === 'success' ? 'Sucesso de Handshake' : 'Verificação Recusada'}
+                            </p>
+                            <p className="font-sans text-[11px] opacity-80">{elVerificationMessage}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-white/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Parâmetros de Ajuste Vocal</label>
+                        <button 
+                          onClick={() => setKeys({ 
+                            ...keys, 
+                            elevenLabsStability: 0.5, 
+                            elevenLabsSimilarityBoost: 0.75, 
+                            elevenLabsStyle: 0.0,
+                            elevenLabsSpeakerBoost: true,
+                            elevenLabsModel: 'eleven_turbo_v2_5'
+                          })}
+                          className="text-[9px] uppercase tracking-widest text-her-accent hover:underline font-bold"
+                        >
+                          Resetar Ajustes
+                        </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 font-bold">Modelo Língua & Latência</label>
+                        <select 
+                          value={keys.elevenLabsModel || 'eleven_turbo_v2_5'}
+                          onChange={(e) => setKeys({ ...keys, elevenLabsModel: e.target.value })}
+                          className="w-full bg-[#111111] border border-white/[0.05] rounded-xl px-4 py-3 focus:outline-none focus:border-her-accent/30 text-xs text-zinc-300 custom-select"
+                        >
+                          <option value="eleven_turbo_v2_5" className="bg-[#111111]">Eleven Turbo v2.5 (Bilateral - Recom. Baixa Latência)</option>
+                          <option value="eleven_flash_v2_5" className="bg-[#111111]">Eleven Flash v2.5 (Altíssima Velocidade)</option>
+                          <option value="eleven_multilingual_v2" className="bg-[#111111]">Eleven Multilingual v2 (Premium Riqueza Tonal)</option>
+                          <option value="eleven_turbo_v2" className="bg-[#111111]">Eleven Turbo v2 (Clássico Rápido)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-4 p-5 bg-white/[0.01] border border-white/[0.03] rounded-3xl">
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] text-her-muted/70 uppercase font-medium">
+                            <span>Estabilidade (Stability)</span>
+                            <span className="text-her-accent font-mono">{(keys.elevenLabsStability ?? 0.5).toFixed(2)}</span>
+                          </div>
+                          <input 
+                            type="range" min="0.0" max="1.0" step="0.05"
+                            value={keys.elevenLabsStability ?? 0.5}
+                            onChange={(e) => setKeys({ ...keys, elevenLabsStability: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                          <p className="text-[8.5px] text-her-muted/40 italic">Valores menores geram vozes mais expressivas e dinâmicas, porém menos consistentes.</p>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-white/[0.02]">
+                          <div className="flex justify-between text-[10px] text-her-muted/70 uppercase font-medium">
+                            <span>Fidelidade (Similarity Boost)</span>
+                            <span className="text-her-accent font-mono">{(keys.elevenLabsSimilarityBoost ?? 0.75).toFixed(2)}</span>
+                          </div>
+                          <input 
+                            type="range" min="0.0" max="1.0" step="0.05"
+                            value={keys.elevenLabsSimilarityBoost ?? 0.75}
+                            onChange={(e) => setKeys({ ...keys, elevenLabsSimilarityBoost: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                          <p className="text-[8.5px] text-her-muted/40 italic">Aumente para reforçar a similaridade exata com o clone de voz original cadastrado.</p>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-white/[0.02]">
+                          <div className="flex justify-between text-[10px] text-her-muted/70 uppercase font-medium">
+                            <span>Exagero de Estilo (Style Out)</span>
+                            <span className="text-her-accent font-mono">{(keys.elevenLabsStyle ?? 0.0).toFixed(2)}</span>
+                          </div>
+                          <input 
+                            type="range" min="0.0" max="1.0" step="0.05"
+                            value={keys.elevenLabsStyle ?? 0.0}
+                            onChange={(e) => setKeys({ ...keys, elevenLabsStyle: parseFloat(e.target.value) })}
+                            className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between pt-3 border-t border-white/[0.02]">
+                          <div className="flex flex-col text-left space-y-0.5">
+                            <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-wider">Impulso de Locução (Speaker Boost)</span>
+                            <span className="text-[8.5px] text-her-muted/60 leading-normal">Oferece um boost adicional na inteligibilidade fonética</span>
+                          </div>
+                          <button
+                            onClick={() => setKeys({ ...keys, elevenLabsSpeakerBoost: !(keys.elevenLabsSpeakerBoost ?? true) })}
+                            className={cn(
+                              "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                              (keys.elevenLabsSpeakerBoost ?? true) ? "bg-her-accent" : "bg-white/10"
+                            )}
+                          >
+                            <span className={cn(
+                              "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                              (keys.elevenLabsSpeakerBoost ?? true) ? "translate-x-5" : "translate-x-0"
+                            )} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </motion.div>
@@ -216,31 +446,6 @@ export const SettingsModal = ({
                   >
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Motor de Voz (Tecnologia)</label>
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                          {[
-                            { id: 'gemini', label: 'Gemini 3.1 TTS', desc: 'Voz Inteligente por IA' },
-                            { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Voz Customizada Ultrarrealista' }
-                          ].map((eng) => (
-                            <button
-                              key={eng.id}
-                              onClick={() => setVoiceEngine(eng.id as 'gemini' | 'elevenlabs')}
-                              className={cn(
-                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex flex-col gap-1",
-                                voiceEngine === eng.id 
-                                  ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
-                              )}
-                            >
-                              <div className="flex items-center justify-between w-full">
-                                <span className="font-medium">{eng.label}</span>
-                                {voiceEngine === eng.id && <div className="w-1.5 h-1.5 rounded-full bg-her-accent shadow-[0_0_8px_rgba(var(--her-accent),0.5)]" />}
-                              </div>
-                              <span className="text-[8px] opacity-60 font-light">{eng.desc}</span>
-                            </button>
-                          ))}
-                        </div>
-
                         {voiceEngine === 'gemini' ? (
                           <>
                             <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 font-bold">Voz do Sistema (Frequência)</label>
@@ -267,74 +472,13 @@ export const SettingsModal = ({
                             </div>
                           </>
                         ) : (
-                          <div className="p-5 bg-white/[0.02] border border-white/[0.05] rounded-3xl space-y-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold flex items-center gap-1.5">
-                                <Cpu size={12} className="text-her-accent" />
-                                Customização ElevenLabs
-                              </span>
-                              {keys.elevenLabsVoiceId && keys.elevenLabsApiKey ? (
-                                <span className="bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full text-[8.5px] text-emerald-400 uppercase tracking-widest font-bold flex items-center gap-1 flex-row">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                  Ativa
-                                </span>
-                              ) : (
-                                <span className="bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-full text-[8.5px] text-amber-400 uppercase tracking-widest font-bold flex items-center gap-1 flex-row">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                  Pendente
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="space-y-3.5">
-                              <div>
-                                <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 mb-1.5 font-bold">Chave de API ElevenLabs</label>
-                                <input 
-                                  type="password"
-                                  value={keys.elevenLabsApiKey || ''}
-                                  onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
-                                  className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-2.5 focus:outline-none focus:border-her-accent/30 transition-all text-xs text-her-ink/80 placeholder:text-her-muted/20"
-                                  placeholder="Suas chaves da Elevenlabs..."
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 mb-1.5 font-bold">ID da Voz Primária (Voice ID)</label>
-                                <input 
-                                  type="text"
-                                  value={keys.elevenLabsVoiceId || ''}
-                                  onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
-                                  className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-2.5 focus:outline-none focus:border-her-accent/30 transition-all text-xs font-mono text-zinc-300 placeholder:text-her-muted/20"
-                                  placeholder="Ex: 21m00Tcm4TlvDq8ikWAM"
-                                />
-                              </div>
-
-                              <button
-                                onClick={() => {
-                                  // Lock & save model
-                                  setVoiceEngine('elevenlabs');
-                                  
-                                  // Trigger the storage/API sync
-                                  setKeys({ ...keys });
-                                  
-                                  if (onAddNotification) {
-                                    onAddNotification("Voz e modelo ElevenLabs ativados e fixados!", "success");
-                                  }
-                                }}
-                                className={cn(
-                                  "w-full py-3.5 px-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold transition-all flex items-center justify-center gap-2 select-none active:scale-[0.98]",
-                                  voiceEngine === 'elevenlabs' && keys.elevenLabsVoiceId
-                                    ? "bg-her-accent text-white shadow-lg shadow-her-accent/20 hover:bg-her-accent/90"
-                                    : "bg-her-accent/10 hover:bg-her-accent/20 text-her-accent border border-her-accent/20"
-                                )}
-                              >
-                                <Pin size={11} className={cn("rotate-45 transition-transform", voiceEngine === 'elevenlabs' && "animate-bounce")} />
-                                {voiceEngine === 'elevenlabs' ? "Fixado e Ativado" : "Fixar e Ativar Modelo ElevenLabs"}
-                              </button>
-                            </div>
-
-                            <p className="text-[9px] text-her-muted/40 leading-relaxed font-light italic">
-                              Fixar este modelo substitui o sintetizador neural Gemini para todas as transcrições e narrativas do painel.
+                          <div className="p-5 bg-white/[0.02] border border-white/[0.05] rounded-3xl space-y-2">
+                            <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold flex items-center gap-1.5">
+                              <Volume2 size={12} className="text-her-accent" />
+                              ElevenLabs Ativo
+                            </span>
+                            <p className="text-[10.5px] text-her-muted/80 leading-relaxed font-light">
+                              O motor de voz premium do ElevenLabs está selecionado como seu canal de fala principal. Para configurar e ajustar parâmetros do clone de voz, utilize a aba dedicada <span className="text-her-accent cursor-pointer hover:underline" onClick={() => setActiveTab('elevenlabs')}>ElevenLabs</span>.
                             </p>
                           </div>
                         )}

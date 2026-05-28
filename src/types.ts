@@ -15,6 +15,11 @@ export interface ApiKeys {
   googleHomeToken?: string;
   elevenLabsApiKey?: string;
   elevenLabsVoiceId?: string;
+  elevenLabsStability?: number;
+  elevenLabsSimilarityBoost?: number;
+  elevenLabsStyle?: number;
+  elevenLabsSpeakerBoost?: boolean;
+  elevenLabsModel?: string;
 }
 
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis';

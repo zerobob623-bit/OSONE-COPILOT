@@ -818,6 +818,8 @@ export default function App() {
 
   const activeDuoHostRef = useRef<'hostA' | 'hostB'>('hostA');
   const duoAutoPromptRef = useRef<string | null>(null);
+  const isChatAutoSpeakActiveRef = useRef<boolean>(isChatAutoSpeakActive);
+  const voiceEngineRef = useRef<'gemini' | 'elevenlabs'>(voiceEngine);
 
   useEffect(() => {
     activeDuoHostRef.current = activeDuoHost;
@@ -826,6 +828,14 @@ export default function App() {
   useEffect(() => {
     duoAutoPromptRef.current = duoAutoPrompt;
   }, [duoAutoPrompt]);
+
+  useEffect(() => {
+    isChatAutoSpeakActiveRef.current = isChatAutoSpeakActive;
+  }, [isChatAutoSpeakActive]);
+
+  useEffect(() => {
+    voiceEngineRef.current = voiceEngine;
+  }, [voiceEngine]);
 
   useEffect(() => {
     localStorage.setItem('osone_is_duo_mode', String(isDuoMode));
@@ -973,13 +983,19 @@ export default function App() {
           clientApiKey: apiKeys.gemini || '',
           voice: targetVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsStability: apiKeys.elevenLabsStability,
+          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
+          elevenLabsStyle: apiKeys.elevenLabsStyle,
+          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
+          elevenLabsModel: apiKeys.elevenLabsModel
         })
       });
 
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
         console.warn("Premium TTS failed, falling back to Web Speech:", errJson.error);
+        addNotification(`Erro de Voz Premium: ${errJson.error || "Erro ao conectar"}. Usando voz auxiliar padrão.`, "error");
         
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'pt-BR';
@@ -1091,12 +1107,18 @@ export default function App() {
           clientApiKey: apiKeys.gemini || '',
           voice: targetVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsStability: apiKeys.elevenLabsStability,
+          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
+          elevenLabsStyle: apiKeys.elevenLabsStyle,
+          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
+          elevenLabsModel: apiKeys.elevenLabsModel
         })
       });
 
       if (!response.ok) {
         const errJson = await response.json();
+        addNotification(`Erro de Voz Premium: ${errJson.error || "Falha de processamento"}`, "error");
         throw new Error(errJson.error || "Erro ao sintetizar áudio.");
       }
 
@@ -1171,12 +1193,18 @@ export default function App() {
           clientApiKey: apiKeys.gemini || '',
           voice: targetVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsStability: apiKeys.elevenLabsStability,
+          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
+          elevenLabsStyle: apiKeys.elevenLabsStyle,
+          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
+          elevenLabsModel: apiKeys.elevenLabsModel
         })
       });
 
       if (!response.ok) {
         const errJson = await response.json();
+        addNotification(`Erro ao gerar áudio Premium: ${errJson.error || "Falha de processamento"}`, "error");
         throw new Error(errJson.error || "Erro ao gerar áudio.");
       }
 
@@ -2075,18 +2103,6 @@ ${isBad
     setIsListening(false);
     setIsTranscribing(false);
     
-    // Desliga totalmente o microfone/escuta antes de tocar o áudio para evitar feedback, eco e auto-interrupções
-    if (elevenLabsRecognitionRef.current) {
-      try { 
-        elevenLabsRecognitionRef.current.onstart = null;
-        elevenLabsRecognitionRef.current.onresult = null;
-        elevenLabsRecognitionRef.current.onerror = null;
-        elevenLabsRecognitionRef.current.onend = null;
-        elevenLabsRecognitionRef.current.stop(); 
-      } catch(_) {}
-      elevenLabsRecognitionRef.current = null;
-    }
-    
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
@@ -2099,12 +2115,23 @@ ${isBad
           clientApiKey: apiKeys.gemini || '',
           voice: selectedVoice === 'Scarlet' ? 'Fenrir' : selectedVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsStability: apiKeys.elevenLabsStability,
+          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
+          elevenLabsStyle: apiKeys.elevenLabsStyle,
+          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
+          elevenLabsModel: apiKeys.elevenLabsModel
         })
       });
       
       if (!response.ok) {
-        throw new Error("Falha ao sintetizar voz no premium tts");
+        let errorDetail = "Falha ao sintetizar voz no premium tts";
+        try {
+          const errJson = await response.json();
+          errorDetail = errJson.error || errorDetail;
+        } catch (_) {}
+        addNotification(`Erro ElevenLabs: ${errorDetail}`, "error");
+        throw new Error(errorDetail);
       }
       
       const blob = await response.blob();
@@ -2116,7 +2143,7 @@ ${isBad
         setIsSpeaking(false);
         if (isElevenLabsLiveActiveRef.current) {
           elevenLabsStateRef.current = 'listening';
-          // Abre o canal de voz limpando o estado de hardware
+          // Se o microfone já está rodando, re-ativa os estados rapidamente sem recriar hardware
           startListeningElevenLabs();
         }
       };
@@ -2266,17 +2293,7 @@ ${isBad
     setIsListening(false);
     setIsTranscribing(true);
     
-    // Desliga e nula imediatamente a atividade física do hardware de áudio ao mandar o comando de vez para evitar loops
-    if (elevenLabsRecognitionRef.current) {
-      try { 
-        elevenLabsRecognitionRef.current.onstart = null;
-        elevenLabsRecognitionRef.current.onresult = null;
-        elevenLabsRecognitionRef.current.onerror = null;
-        elevenLabsRecognitionRef.current.onend = null;
-        elevenLabsRecognitionRef.current.stop(); 
-      } catch(_) {}
-      elevenLabsRecognitionRef.current = null;
-    }
+    // Mantém o microfone ativo em background. O estado 'thinking' garante que qualquer áudio capturado seja ignorado.
     
     await handleElevenLabsUserTurn(finalText);
   };
