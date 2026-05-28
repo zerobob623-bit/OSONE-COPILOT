@@ -1,7 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
-
 /**
- * Direct client-side connection to Gemini Live Multimodal API
+ * Conexão segura via proxy WebSocket local para a API Gemini Live Multimodal
  */
 export async function connectToLiveBridge(options: {
   model: string;
@@ -14,94 +12,99 @@ export async function connectToLiveBridge(options: {
   };
   apiKey: string;
 }) {
-  console.log("OSONE 4 Client: Estabelecendo conexão direta com os canais neurais do Gemini...");
-
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: options.apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build-client',
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/api/live-ws${options.apiKey ? `?apiKey=${encodeURIComponent(options.apiKey)}` : ''}`;
+  
+  console.log("OSONE 4 Client: Conectando à ponte neural via proxy WebSocket local:", wsUrl);
+  
+  const ws = new WebSocket(wsUrl);
+  
+  ws.onopen = () => {
+    console.log("OSONE 4 Client: Canal WebSocket estabelecido de forma segura!");
+    // Envia a mensagem de setup inicial que o proxy espera na linha 626 do server.ts
+    ws.send(JSON.stringify({
+      type: "setup",
+      model: options.model,
+      config: options.config
+    }));
+    
+    if (options.callbacks?.onopen) {
+      options.callbacks.onopen();
+    }
+  };
+  
+  ws.onmessage = (event) => {
+    try {
+      const liveResponse = JSON.parse(event.data);
+      
+      // Se for uma conexão de erro reportada pelo proxy
+      if (liveResponse.type === "error") {
+        console.error("OSONE 4 Client neural error:", liveResponse.error);
+        if (options.callbacks?.onerror) {
+          options.callbacks.onerror(new Error(liveResponse.error));
         }
+        return;
       }
-    });
-
-    // Start direct client-side bi-directional stream using the isomorphic SDK
-    const bidiSession = await ai.live.connect({
-      model: options.model || "gemini-3.1-flash-live-preview",
-      config: options.config,
-      callbacks: {
-        onopen: () => {
-          console.log("OSONE 4 Direct: Conectado com sucesso à API do Gemini!");
-          if (options.callbacks?.onopen) {
-            options.callbacks.onopen();
-          }
-        },
-        onmessage: (liveResponse: any) => {
-          // Check for any GoAway signal / message indicating the session limit has been reached
-          const isGoAway = liveResponse?.goAway || 
-                           liveResponse?.goaway || 
-                           liveResponse?.serverContent?.goAway || 
-                           liveResponse?.serverContent?.goaway ||
-                           (liveResponse?.serverContent?.modelTurn?.parts?.some((p: any) => p.text && p.text.toLowerCase().includes("goaway")));
-          
-          if (isGoAway) {
-            console.warn("OSONE 4 Direct: GoAway signal received. Closing session gracefully to respect session limits.");
-            try {
-              bidiSession.close();
-            } catch (err) {
-              console.error("OSONE 4 Direct: Error while closing session after GoAway:", err);
-            }
-            if (options.callbacks?.onclose) {
-              options.callbacks.onclose();
-            }
-            return;
-          }
-
-          if (options.callbacks?.onmessage) {
-            options.callbacks.onmessage(liveResponse);
-          }
-        },
-        onclose: () => {
-          console.log("OSONE 4 Direct: Conexão encerrada.");
-          if (options.callbacks?.onclose) {
-            options.callbacks.onclose();
-          }
-        },
-        onerror: (err: any) => {
-          const errString = String(err?.message || err || "");
-          if (errString.includes("GoAway") || errString.includes("session duration limit reached") || errString.includes("close the connection after receiving")) {
-            console.warn("OSONE 4 Direct: Intercepted and handled GoAway signal / session duration limit gracefully:", errString);
-            try {
-              bidiSession.close();
-            } catch (_) {}
-            if (options.callbacks?.onclose) {
-              options.callbacks.onclose();
-            }
-            return;
-          }
-
-          console.error("OSONE 4 Direct: Erro na conexão neural:", err);
-          if (options.callbacks?.onerror) {
-            options.callbacks.onerror(err);
-          }
+      
+      // Captura o sinal de GoAway / limites se houver e repassa
+      const isGoAway = liveResponse?.goAway || 
+                       liveResponse?.goaway || 
+                       liveResponse?.serverContent?.goAway || 
+                       liveResponse?.serverContent?.goaway ||
+                       (liveResponse?.serverContent?.modelTurn?.parts?.some((p: any) => p.text && p.text.toLowerCase().includes("goaway")));
+      
+      if (isGoAway) {
+        console.warn("OSONE 4 Client: Sinal GoAway recebido. Encerrando sessão de voz.");
+        ws.close();
+        if (options.callbacks?.onclose) {
+          options.callbacks.onclose();
         }
+        return;
       }
-    });
-
-    return {
-      sendRealtimeInput: (input: any) => {
-        bidiSession.sendRealtimeInput(input);
-      },
-      sendToolResponse: (payload: any) => {
-        bidiSession.sendToolResponse(payload);
-      },
-      close: () => {
-        bidiSession.close();
+      
+      if (options.callbacks?.onmessage) {
+        options.callbacks.onmessage(liveResponse);
       }
-    };
-  } catch (err) {
-    console.error("OSONE 4 Direct: Falha ao estabelecer conexão direta com a API do Gemini:", err);
-    throw err;
-  }
+    } catch (e) {
+      console.error("OSONE 4 Client: Error decoding proxy websocket message:", e);
+    }
+  };
+  
+  ws.onclose = () => {
+    console.log("OSONE 4 Client: Conexão neural via proxy encerrada.");
+    if (options.callbacks?.onclose) {
+      options.callbacks.onclose();
+    }
+  };
+  
+  ws.onerror = (err) => {
+    console.error("OSONE 4 Client: Erro na conexão com o proxy local:", err);
+    if (options.callbacks?.onerror) {
+      options.callbacks.onerror(err);
+    }
+  };
+  
+  return {
+    sendRealtimeInput: (input: any) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "realtime_input",
+          input: input
+        }));
+      }
+    },
+    sendToolResponse: (payload: any) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "tool_response",
+          payload: payload
+        }));
+      }
+    },
+    close: () => {
+      try {
+        ws.close();
+      } catch (e) {}
+    }
+  };
 }

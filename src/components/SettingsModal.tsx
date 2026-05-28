@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle } from 'lucide-react';
+import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle, Pin, Volume2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
@@ -17,6 +17,8 @@ export const SettingsModal = ({
   setSelectedVoice,
   voiceEngine,
   setVoiceEngine,
+  isChatAutoSpeakActive = false,
+  setIsChatAutoSpeakActive,
   voiceModulation,
   setVoiceModulation,
   orbStyle,
@@ -24,7 +26,8 @@ export const SettingsModal = ({
   appTheme,
   setAppTheme,
   aiProfile,
-  setAiProfile
+  setAiProfile,
+  onAddNotification
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -34,6 +37,8 @@ export const SettingsModal = ({
   setSelectedVoice: (voice: string) => void;
   voiceEngine: 'gemini' | 'elevenlabs';
   setVoiceEngine: (engine: 'gemini' | 'elevenlabs') => void;
+  isChatAutoSpeakActive?: boolean;
+  setIsChatAutoSpeakActive?: (active: boolean) => void;
   voiceModulation: VoiceModulation;
   setVoiceModulation: (mod: VoiceModulation) => void;
   orbStyle: OrbStyle;
@@ -42,6 +47,7 @@ export const SettingsModal = ({
   setAppTheme: (theme: AppTheme) => void;
   aiProfile: AIProfile;
   setAiProfile: (profile: AIProfile) => void;
+  onAddNotification?: (msg: string, type: 'success' | 'info' | 'error') => void;
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -261,29 +267,110 @@ export const SettingsModal = ({
                             </div>
                           </>
                         ) : (
-                          <div className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl space-y-2">
-                            <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold">Voz Customizada ElevenLabs</span>
-                            {keys.elevenLabsVoiceId ? (
-                              <div className="space-y-1">
-                                <p className="text-xs font-light text-her-ink/80">
-                                  ID da voz ativa: <code className="bg-white/5 px-2 py-0.5 rounded text-[10px] text-her-accent font-mono">{keys.elevenLabsVoiceId}</code>
-                                </p>
-                                <p className="text-[10px] text-her-muted/60 leading-relaxed font-light">
-                                  Cada narrativa de prosa ou texto será gerada usando esta voz premium ElevenLabs.
-                                </p>
+                          <div className="p-5 bg-white/[0.02] border border-white/[0.05] rounded-3xl space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold flex items-center gap-1.5">
+                                <Cpu size={12} className="text-her-accent" />
+                                Customização ElevenLabs
+                              </span>
+                              {keys.elevenLabsVoiceId && keys.elevenLabsApiKey ? (
+                                <span className="bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full text-[8.5px] text-emerald-400 uppercase tracking-widest font-bold flex items-center gap-1 flex-row">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  Ativa
+                                </span>
+                              ) : (
+                                <span className="bg-amber-500/10 border border-amber-500/25 px-2.5 py-1 rounded-full text-[8.5px] text-amber-400 uppercase tracking-widest font-bold flex items-center gap-1 flex-row">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  Pendente
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="space-y-3.5">
+                              <div>
+                                <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 mb-1.5 font-bold">Chave de API ElevenLabs</label>
+                                <input 
+                                  type="password"
+                                  value={keys.elevenLabsApiKey || ''}
+                                  onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
+                                  className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-2.5 focus:outline-none focus:border-her-accent/30 transition-all text-xs text-her-ink/80 placeholder:text-her-muted/20"
+                                  placeholder="Suas chaves da Elevenlabs..."
+                                />
                               </div>
-                            ) : (
-                              <div className="space-y-1">
-                                <p className="text-xs font-light text-red-500">
-                                  Nenhum ID de voz configurado para o ElevenLabs!
-                                </p>
-                                <p className="text-[10px] text-her-muted/60 leading-relaxed font-light">
-                                  Por favor, configure o ID da voz na aba <span className="text-her-accent font-bold">"Chaves"</span> para habilitar a síntese.
-                                </p>
+
+                              <div>
+                                <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 mb-1.5 font-bold">ID da Voz Primária (Voice ID)</label>
+                                <input 
+                                  type="text"
+                                  value={keys.elevenLabsVoiceId || ''}
+                                  onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
+                                  className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-2.5 focus:outline-none focus:border-her-accent/30 transition-all text-xs font-mono text-zinc-300 placeholder:text-her-muted/20"
+                                  placeholder="Ex: 21m00Tcm4TlvDq8ikWAM"
+                                />
                               </div>
-                            )}
+
+                              <button
+                                onClick={() => {
+                                  // Lock & save model
+                                  setVoiceEngine('elevenlabs');
+                                  
+                                  // Trigger the storage/API sync
+                                  setKeys({ ...keys });
+                                  
+                                  if (onAddNotification) {
+                                    onAddNotification("Voz e modelo ElevenLabs ativados e fixados!", "success");
+                                  }
+                                }}
+                                className={cn(
+                                  "w-full py-3.5 px-4 rounded-2xl text-[10px] uppercase tracking-widest font-bold transition-all flex items-center justify-center gap-2 select-none active:scale-[0.98]",
+                                  voiceEngine === 'elevenlabs' && keys.elevenLabsVoiceId
+                                    ? "bg-her-accent text-white shadow-lg shadow-her-accent/20 hover:bg-her-accent/90"
+                                    : "bg-her-accent/10 hover:bg-her-accent/20 text-her-accent border border-her-accent/20"
+                                )}
+                              >
+                                <Pin size={11} className={cn("rotate-45 transition-transform", voiceEngine === 'elevenlabs' && "animate-bounce")} />
+                                {voiceEngine === 'elevenlabs' ? "Fixado e Ativado" : "Fixar e Ativar Modelo ElevenLabs"}
+                              </button>
+                            </div>
+
+                            <p className="text-[9px] text-her-muted/40 leading-relaxed font-light italic">
+                              Fixar este modelo substitui o sintetizador neural Gemini para todas as transcrições e narrativas do painel.
+                            </p>
                           </div>
                         )}
+                      </div>
+
+                      {/* Chat Auto Speak Option */}
+                      <div className="flex items-center justify-between bg-white/[0.01]/10 p-4 rounded-3xl border border-white/5">
+                        <div className="flex flex-col text-left space-y-0.5">
+                          <span className="text-xs text-zinc-300 font-medium select-none flex items-center gap-1.5 align-middle">
+                            <Volume2 size={13} className="text-her-accent" />
+                            Auto-Leitura de Mensagens
+                          </span>
+                          <span className="text-[10px] text-her-muted select-none leading-normal">
+                            Fala respostas da IA automaticamente no chat principal usando o motor atual
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (setIsChatAutoSpeakActive) {
+                              const newState = !isChatAutoSpeakActive;
+                              setIsChatAutoSpeakActive(newState);
+                              if (onAddNotification) {
+                                onAddNotification(newState ? "Auto-leitura do chat ativada" : "Auto-leitura do chat desativada", "info");
+                              }
+                            }
+                          }}
+                          className={cn(
+                            "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                            isChatAutoSpeakActive ? "bg-her-accent" : "bg-white/10"
+                          )}
+                        >
+                          <span className={cn(
+                            "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                            isChatAutoSpeakActive ? "translate-x-5" : "translate-x-0"
+                          )} />
+                        </button>
                       </div>
 
                       <div>

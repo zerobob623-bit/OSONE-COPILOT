@@ -808,6 +808,9 @@ export default function App() {
     const saved = localStorage.getItem('osone_is_duo_voice_active');
     return saved !== 'false'; // default true
   });
+  const [isChatAutoSpeakActive, setIsChatAutoSpeakActive] = useState<boolean>(() => {
+    return localStorage.getItem('osone_chat_auto_speak') === 'true'; // default false
+  });
   const [duoSpeakingHost, setDuoSpeakingHost] = useState<'hostA' | 'hostB' | null>(null);
   const [isDuoPopoverOpen, setIsDuoPopoverOpen] = useState(false);
   const [activeDuoHost, setActiveDuoHost] = useState<'hostA' | 'hostB'>('hostA');
@@ -839,6 +842,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_is_duo_voice_active', String(isDuoVoiceActive));
   }, [isDuoVoiceActive]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_chat_auto_speak', String(isChatAutoSpeakActive));
+  }, [isChatAutoSpeakActive]);
 
   // Auto-analyze when entering writing mode if there's code but no suggestions
   useEffect(() => {
@@ -906,6 +913,133 @@ export default function App() {
   const [isReadingWorkspace, setIsReadingWorkspace] = useState(false);
   const [isGeneratingWorkspaceMp3, setIsGeneratingWorkspaceMp3] = useState(false);
   const workspaceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const [isPlayingChatSpeech, setIsPlayingChatSpeech] = useState<string | null>(null);
+  const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (chatAudioRef.current) {
+        chatAudioRef.current.pause();
+        chatAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSpeakChatMessage = async (text: string, msgId: string) => {
+    if (isPlayingChatSpeech === msgId) {
+      if (chatAudioRef.current) {
+        chatAudioRef.current.pause();
+        chatAudioRef.current = null;
+      }
+      window.speechSynthesis.cancel();
+      setIsPlayingChatSpeech(null);
+      return;
+    }
+
+    if (chatAudioRef.current) {
+      chatAudioRef.current.pause();
+      chatAudioRef.current = null;
+    }
+    window.speechSynthesis.cancel();
+    if (workspaceAudioRef.current) {
+      workspaceAudioRef.current.pause();
+      setIsReadingWorkspace(false);
+    }
+
+    if (voiceEngine === 'elevenlabs') {
+      addNotification("Sintetizando resposta ultrarrealista ElevenLabs...", "info");
+    } else {
+      addNotification("Sintetizando resposta inteligente com IA...", "info");
+    }
+
+    try {
+      const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
+      let targetVoice = "Kore";
+      if (selectedVoice === 'Scarlet') {
+        targetVoice = "Fenrir";
+      } else if (standardVoices.includes(selectedVoice)) {
+        targetVoice = selectedVoice;
+      }
+
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          text: text,
+          engine: voiceEngine,
+          clientApiKey: apiKeys.gemini || '',
+          voice: targetVoice,
+          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        console.warn("Premium TTS failed, falling back to Web Speech:", errJson.error);
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'pt-BR';
+        const voices = window.speechSynthesis.getVoices();
+        const matchedVoice = voices.find(v => v.name.toLowerCase().includes(selectedVoice.toLowerCase()));
+        if (matchedVoice) {
+          utterance.voice = matchedVoice;
+        } else {
+          const defaultPtVoice = voices.find(v => v.lang === 'pt-BR');
+          if (defaultPtVoice) {
+            utterance.voice = defaultPtVoice;
+          }
+        }
+        utterance.onend = () => setIsPlayingChatSpeech(null);
+        utterance.onerror = () => setIsPlayingChatSpeech(null);
+        setIsPlayingChatSpeech(msgId);
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      const isFallback = response.headers.get("X-TTS-Mode") === "fallback";
+      const isElevenLabs = response.headers.get("X-TTS-Mode") === "elevenlabs";
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+
+      const audio = new Audio(audioUrl);
+      chatAudioRef.current = audio;
+      setIsPlayingChatSpeech(msgId);
+
+      audio.onended = () => {
+        setIsPlayingChatSpeech(null);
+        addNotification("Leitura da mensagem concluída!", "success");
+      };
+
+      audio.onerror = () => {
+        setIsPlayingChatSpeech(null);
+        addNotification("Erro ao reproduzir o áudio de leitura.", "error");
+      };
+
+      await audio.play();
+      if (isElevenLabs) {
+        addNotification("Iniciando reprodução com voz premium ElevenLabs.", "success");
+      } else if (isFallback) {
+        addNotification("Iniciando leitura com voz assistida padrão (limite diário premium atingido).", "info");
+      } else {
+        addNotification("Iniciando reprodução com voz inteligente Gemini 3.1.", "success");
+      }
+    } catch (error: any) {
+      console.error("Premium voice failed, falling back:", error);
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      const voices = window.speechSynthesis.getVoices();
+      const matchedVoice = voices.find(v => v.name.toLowerCase().includes(selectedVoice.toLowerCase()));
+      if (matchedVoice) utterance.voice = matchedVoice;
+      utterance.onend = () => setIsPlayingChatSpeech(null);
+      utterance.onerror = () => setIsPlayingChatSpeech(null);
+      setIsPlayingChatSpeech(msgId);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -1142,8 +1276,10 @@ export default function App() {
 
   // --- Local Semantic State Manager ---
   const addMessage = (msg: Omit<Message, 'id'>) => {
-    const newMessage = { ...msg, id: Math.random().toString(36).substr(2, 9) };
+    const id = Math.random().toString(36).substr(2, 9);
+    const newMessage = { ...msg, id };
     setChatHistory(prev => [...prev, newMessage]);
+    return id;
   };
 
   const handleLogin = async () => {
@@ -1184,8 +1320,10 @@ export default function App() {
     return [];
   });
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatHistoryRef = useRef<Message[]>([]);
 
   useEffect(() => {
+    chatHistoryRef.current = chatHistory;
     try {
       localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
     } catch (e) {
@@ -1856,6 +1994,348 @@ ${isBad
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const voiceTranscriptRef = useRef<string>('');
 
+  // ElevenLabs Realtime State & Refs
+  const [isElevenLabsLiveActive, setIsElevenLabsLiveActive] = useState(false);
+  const isElevenLabsLiveActiveRef = useRef(false);
+  const elevenLabsStateRef = useRef<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const elevenLabsLiveAudioRef = useRef<HTMLAudioElement | null>(null);
+  const elevenLabsRecognitionRef = useRef<any>(null);
+  const elevenLabsSilenceTimeoutRef = useRef<any>(null);
+  const accumulatedTranscriptRef = useRef<string>("");
+  const lastProcessedResultIndexRef = useRef<number>(0);
+
+  const stopElevenLabsLiveSession = () => {
+    setIsElevenLabsLiveActive(false);
+    isElevenLabsLiveActiveRef.current = false;
+    elevenLabsStateRef.current = 'idle';
+    
+    if (elevenLabsSilenceTimeoutRef.current) {
+      clearTimeout(elevenLabsSilenceTimeoutRef.current);
+      elevenLabsSilenceTimeoutRef.current = null;
+    }
+    accumulatedTranscriptRef.current = "";
+    lastProcessedResultIndexRef.current = 0;
+    
+    if (elevenLabsRecognitionRef.current) {
+      try { elevenLabsRecognitionRef.current.onstart = null; } catch(_) {}
+      try { elevenLabsRecognitionRef.current.onresult = null; } catch(_) {}
+      try { elevenLabsRecognitionRef.current.onerror = null; } catch(_) {}
+      try { elevenLabsRecognitionRef.current.onend = null; } catch(_) {}
+      try { elevenLabsRecognitionRef.current.stop(); } catch(_) {}
+      elevenLabsRecognitionRef.current = null;
+    }
+    
+    if (elevenLabsLiveAudioRef.current) {
+      try { 
+        elevenLabsLiveAudioRef.current.onended = null;
+        elevenLabsLiveAudioRef.current.onerror = null;
+        elevenLabsLiveAudioRef.current.pause(); 
+      } catch(_) {}
+      elevenLabsLiveAudioRef.current = null;
+    }
+    
+    setIsListening(false);
+    setIsSpeaking(false);
+    setIsTranscribing(false);
+    setIsGenerating(false);
+  };
+
+  const startElevenLabsLiveSession = async () => {
+    // Para canais convencionais para evitar dupla atividade
+    stopLiveSessionInternal();
+    
+    const geminiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
+    const elApiKey = apiKeys.elevenLabsApiKey || '';
+    if (!geminiKey && !geminiKey.trim()) {
+      addNotification("Por favor, configure sua chave Gemini de texto primeiro.", "error");
+      setIsSettingsOpen(true);
+      return;
+    }
+    if (!elApiKey && !elApiKey.trim()) {
+      addNotification("Chave API da ElevenLabs ausente nas Configurações.", "error");
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    setLiveState({ status: 'connected' });
+    setIsElevenLabsLiveActive(true);
+    isElevenLabsLiveActiveRef.current = true;
+    
+    addNotification("Sessão Voz Premium ElevenLabs Iniciada!", "success");
+    
+    const initialGreeting = "Conexão premium ativa. Canal de voz ultrarrealista ElevenLabs pronto!";
+    await playElevenLabsSpeech(initialGreeting);
+  };
+
+  const playElevenLabsSpeech = async (text: string) => {
+    if (!isElevenLabsLiveActiveRef.current) return;
+    
+    elevenLabsStateRef.current = 'speaking';
+    setIsSpeaking(true);
+    setIsListening(false);
+    setIsTranscribing(false);
+    
+    // Desliga totalmente o microfone/escuta antes de tocar o áudio para evitar feedback, eco e auto-interrupções
+    if (elevenLabsRecognitionRef.current) {
+      try { 
+        elevenLabsRecognitionRef.current.onstart = null;
+        elevenLabsRecognitionRef.current.onresult = null;
+        elevenLabsRecognitionRef.current.onerror = null;
+        elevenLabsRecognitionRef.current.onend = null;
+        elevenLabsRecognitionRef.current.stop(); 
+      } catch(_) {}
+      elevenLabsRecognitionRef.current = null;
+    }
+    
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          text: text,
+          engine: 'elevenlabs',
+          clientApiKey: apiKeys.gemini || '',
+          voice: selectedVoice === 'Scarlet' ? 'Fenrir' : selectedVoice,
+          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error("Falha ao sintetizar voz no premium tts");
+      }
+      
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      elevenLabsLiveAudioRef.current = audio;
+      
+      audio.onended = () => {
+        setIsSpeaking(false);
+        if (isElevenLabsLiveActiveRef.current) {
+          elevenLabsStateRef.current = 'listening';
+          // Abre o canal de voz limpando o estado de hardware
+          startListeningElevenLabs();
+        }
+      };
+      
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        if (isElevenLabsLiveActiveRef.current) {
+          elevenLabsStateRef.current = 'listening';
+          startListeningElevenLabs();
+        }
+      };
+      
+      await audio.play();
+    } catch (e) {
+      console.error("Erro na síntese ElevenLabs Live:", e);
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (isElevenLabsLiveActiveRef.current) {
+          elevenLabsStateRef.current = 'listening';
+          startListeningElevenLabs();
+        }
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        if (isElevenLabsLiveActiveRef.current) {
+          elevenLabsStateRef.current = 'listening';
+          startListeningElevenLabs();
+        }
+      };
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const startListeningElevenLabs = () => {
+    if (!isElevenLabsLiveActiveRef.current) return;
+    
+    // Sempre desliga e nula qualquer escuta anterior para criar uma instância 100% nova sem travar ou suspender
+    if (elevenLabsRecognitionRef.current) {
+      try { 
+        elevenLabsRecognitionRef.current.onstart = null;
+        elevenLabsRecognitionRef.current.onresult = null;
+        elevenLabsRecognitionRef.current.onerror = null;
+        elevenLabsRecognitionRef.current.onend = null;
+        elevenLabsRecognitionRef.current.stop(); 
+      } catch(_) {}
+      elevenLabsRecognitionRef.current = null;
+    }
+    
+    elevenLabsStateRef.current = 'listening';
+    accumulatedTranscriptRef.current = "";
+    lastProcessedResultIndexRef.current = 0;
+    
+    if (elevenLabsSilenceTimeoutRef.current) {
+      clearTimeout(elevenLabsSilenceTimeoutRef.current);
+      elevenLabsSilenceTimeoutRef.current = null;
+    }
+    
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addNotification("Seu navegador não suporta a Web Speech API.", "error");
+      return;
+    }
+    
+    const rec = new SpeechRecognition();
+    rec.lang = 'pt-BR';
+    rec.continuous = true;
+    rec.interimResults = true;
+    
+    rec.onstart = () => {
+      if (elevenLabsStateRef.current === 'listening') {
+        setIsListening(true);
+        setIsTranscribing(false);
+      }
+    };
+    
+    rec.onresult = (event: any) => {
+      if (elevenLabsStateRef.current !== 'listening') {
+        lastProcessedResultIndexRef.current = event.results.length;
+        accumulatedTranscriptRef.current = "";
+        return;
+      }
+      
+      let interimTranscript = "";
+      let finalTranscript = "";
+      
+      for (let i = Math.max(lastProcessedResultIndexRef.current, event.resultIndex); i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      
+      const currentText = (finalTranscript || interimTranscript).trim();
+      if (currentText) {
+        accumulatedTranscriptRef.current = currentText;
+        
+        // VAD Inteligente: reseta temporizador e processa com silêncio de 1100ms
+        if (elevenLabsSilenceTimeoutRef.current) {
+          clearTimeout(elevenLabsSilenceTimeoutRef.current);
+        }
+        
+        elevenLabsSilenceTimeoutRef.current = setTimeout(() => {
+          lastProcessedResultIndexRef.current = event.results.length;
+          triggerElevenLabsTurn();
+        }, 1100);
+      }
+    };
+    
+    rec.onerror = (event: any) => {
+      if (event.error !== 'aborted') {
+        console.warn("ElevenLabs Web Speech API Error:", event.error);
+      }
+    };
+    
+    rec.onend = () => {
+      setIsListening(false);
+      setTimeout(() => {
+        // Se a sessão de voz continuar ativa e o estado for listening, mas o navegador derrubou por silêncio prolongado, reiniciamos
+        if (isElevenLabsLiveActiveRef.current && elevenLabsStateRef.current === 'listening') {
+          elevenLabsRecognitionRef.current = null;
+          startListeningElevenLabs();
+        }
+      }, 300);
+    };
+    
+    elevenLabsRecognitionRef.current = rec;
+    try {
+      rec.start();
+    } catch(_) {}
+  };
+
+  const triggerElevenLabsTurn = async () => {
+    if (elevenLabsSilenceTimeoutRef.current) {
+      clearTimeout(elevenLabsSilenceTimeoutRef.current);
+      elevenLabsSilenceTimeoutRef.current = null;
+    }
+    
+    const finalText = accumulatedTranscriptRef.current.trim();
+    accumulatedTranscriptRef.current = "";
+    
+    if (!finalText) return;
+    
+    elevenLabsStateRef.current = 'thinking';
+    setIsListening(false);
+    setIsTranscribing(true);
+    
+    // Desliga e nula imediatamente a atividade física do hardware de áudio ao mandar o comando de vez para evitar loops
+    if (elevenLabsRecognitionRef.current) {
+      try { 
+        elevenLabsRecognitionRef.current.onstart = null;
+        elevenLabsRecognitionRef.current.onresult = null;
+        elevenLabsRecognitionRef.current.onerror = null;
+        elevenLabsRecognitionRef.current.onend = null;
+        elevenLabsRecognitionRef.current.stop(); 
+      } catch(_) {}
+      elevenLabsRecognitionRef.current = null;
+    }
+    
+    await handleElevenLabsUserTurn(finalText);
+  };
+
+  const handleElevenLabsUserTurn = async (userText: string) => {
+    elevenLabsStateRef.current = 'thinking';
+    addMessage({ role: 'user', content: userText });
+    setIsGenerating(true);
+    
+    try {
+      // Use chatHistoryRef.current to get the latest updated chat history (solving stale closure)
+      const historyContents = chatHistoryRef.current.slice(-15).map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+      historyContents.push({
+        role: 'user',
+        parts: [{ text: userText }]
+      });
+      
+      const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
+      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
+      
+      const response = await genAI.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: historyContents,
+        config: {
+          maxOutputTokens: 120,
+          temperature: 0.7,
+          systemInstruction: `${profileInstruction}
+          PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+          
+          DIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
+          - Responda de forma direta, simpática e muito fluida (tente usar entre 1 e 3 frases curtas e calorosas).
+          - Evite respostas secas de 1 ou 2 palavras simplesmente. Seja acolhedor e elabore de maneira enxuta.
+          - Nunca faça listas, tópicos estruturados ou explicações textuais densas por voz.
+          - Conduza a conversa de forma estimulante e leve, mantendo o diálogo dinâmico.`
+        }
+      });
+      
+      const replyText = response.text || "Desculpe, não consegui te ouvir bem.";
+      
+      addMessage({ role: 'assistant', content: replyText });
+      setIsGenerating(false);
+      setIsTranscribing(false);
+      
+      if (isElevenLabsLiveActiveRef.current && elevenLabsStateRef.current === 'thinking') {
+        await playElevenLabsSpeech(replyText);
+      }
+    } catch (err) {
+      console.error("Erro no processamento Gemini ElevenLabs Live:", err);
+      setIsGenerating(false);
+      setIsTranscribing(false);
+      if (isElevenLabsLiveActiveRef.current && elevenLabsStateRef.current === 'thinking') {
+        await playElevenLabsSpeech("Desculpe, tive um atraso na conexão cerebral agora.");
+      }
+    }
+  };
+
   useEffect(() => {
     // Mudança de voz em tempo real: Reinicia a sessão se estiver conectado para aplicar a nova voz
     if (liveSessionRef.current && liveState.status === 'connected') {
@@ -1877,7 +2357,7 @@ ${isBad
     };
   }, []);
 
-  const stopLiveSession = () => {
+  const stopLiveSessionInternal = () => {
     if (liveAnimationFrameRef.current) {
       cancelAnimationFrame(liveAnimationFrameRef.current);
       liveAnimationFrameRef.current = null;
@@ -1891,6 +2371,11 @@ ${isBad
     setIsSpeaking(false);
     setLiveState({ status: 'idle' });
     setIsWaitingForWakeWord(isHandsFreeActive); // Restart wake word listener only if hands-free is active
+  };
+
+  const stopLiveSession = () => {
+    stopLiveSessionInternal();
+    stopElevenLabsLiveSession();
   };
 
   const startScreenSharing = async () => {
@@ -3030,10 +3515,14 @@ ${isBad
             }
             processGroundingToPopups(grounding, userMessage);
           }
-          addMessage({ role: 'assistant' as const, content: contentWithSources });
+          const newMsgId = addMessage({ role: 'assistant' as const, content: contentWithSources });
           if (isDuoMode && isDuoVoiceActive) {
             setTimeout(() => {
               playDuoSpeech(contentWithSources);
+            }, 600);
+          } else if (isChatAutoSpeakActive) {
+            setTimeout(() => {
+              handleSpeakChatMessage(contentWithSources, newMsgId);
             }, 600);
           }
           const hasImagesOnCall = currentFiles.length > 0;
@@ -3147,6 +3636,11 @@ ${isBad
         liveSystemInstruction = `${profileInstruction}
         
         PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+
+        DIRETRIZ DE CONVERSA POR VOZ SUPER RÁPIDA (Voz para Voz):
+        - Responda de forma extremamente curta, ultra-direta e concisa (máximo de 15 palavras!).
+        - Evite explicações densas, listas ou justificativas. Adote um estilo de diálogo real face-a-face super dinâmico.
+        - Não explique conceitos complexos por voz, a menos que o usuário peça especificamente. Seja breve e estimule a interatividade.
 
         PROTOCOLO DE SENSATEZ E FILTRAGEM COGNITIVA (INTELIGÊNCIA SOCIAL E AMBIENTAL):
         - Se você já estiver conversando diretamente com o usuário em um diálogo normal de um-para-um, tudo ok, responda normalmente de forma ágil e útil.
@@ -4766,13 +5260,22 @@ ${isBad
   };
 
   const handleVoiceToggle = () => {
-    if (liveState.status === 'connected' || liveState.status === 'connecting') {
-      stopLiveSession();
-      setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
+    if (voiceEngine === 'elevenlabs') {
+      if (isElevenLabsLiveActive || liveState.status === 'connected') {
+        stopElevenLabsLiveSession();
+        setLiveState({ status: 'idle' });
+      } else {
+        startElevenLabsLiveSession();
+      }
     } else {
-      setLiveState({ status: 'connecting' }); // Clear any previous error
-      setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
-      startLiveSession();
+      if (liveState.status === 'connected' || liveState.status === 'connecting') {
+        stopLiveSession();
+        setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
+      } else {
+        setLiveState({ status: 'connecting' }); // Clear any previous error
+        setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
+        startLiveSession();
+      }
     }
   };
 
@@ -5824,6 +6327,46 @@ ${isBad
                       "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
                       !showUi && "opacity-0 pointer-events-none scale-95"
                     )}>
+                      {/* Seletor de Motor de Voz em Tempo Real */}
+                      <div className="flex items-center gap-1.5 p-1 bg-white/[0.02] border border-white/[0.05] rounded-full mt-2 mb-2 pointer-events-auto z-50">
+                        <button 
+                          onClick={() => {
+                            if (voiceEngine !== 'gemini') {
+                              setVoiceEngine('gemini');
+                              stopElevenLabsLiveSession();
+                              stopLiveSession();
+                              addNotification("Canais Neurais do Gemini Live selecionados", "success");
+                            }
+                          }}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[9px] uppercase tracking-wider transition-all duration-300 font-medium cursor-pointer transition-all",
+                            voiceEngine === 'gemini' 
+                              ? "bg-her-accent/20 text-her-accent border border-her-accent/20 font-bold" 
+                              : "text-her-muted opacity-50 hover:opacity-100 border border-transparent font-light"
+                          )}
+                        >
+                          Gemini Live 📻
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (voiceEngine !== 'elevenlabs') {
+                              setVoiceEngine('elevenlabs');
+                              stopLiveSession();
+                              stopElevenLabsLiveSession();
+                              addNotification("Sessão Premium ElevenLabs selecionada", "success");
+                            }
+                          }}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-[9px] uppercase tracking-wider transition-all duration-300 font-medium cursor-pointer transition-all",
+                            voiceEngine === 'elevenlabs' 
+                              ? "bg-her-accent/20 text-her-accent border border-her-accent/20 font-bold" 
+                              : "text-her-muted opacity-50 hover:opacity-100 border border-transparent font-light"
+                          )}
+                        >
+                          ElevenLabs Realtime ✨
+                        </button>
+                      </div>
+
                       <div className="flex items-center gap-2">
                         <div className={cn(
                           "w-1.5 h-1.5 rounded-full transition-all duration-500",
@@ -6062,27 +6605,21 @@ ${isBad
                                       playDuoSpeech(msg.content);
                                       return;
                                     }
-                                    window.speechSynthesis.cancel();
-                                    const utterance = new SpeechSynthesisUtterance(msg.content);
-                                    utterance.lang = 'pt-BR';
-                                    
-                                    const voices = window.speechSynthesis.getVoices();
-                                    const matchedVoice = voices.find(v => v.name.toLowerCase().includes(selectedVoice.toLowerCase()));
-                                    if (matchedVoice) {
-                                      utterance.voice = matchedVoice;
-                                    } else {
-                                      const defaultPtVoice = voices.find(v => v.lang === 'pt-BR');
-                                      if (defaultPtVoice) {
-                                        utterance.voice = defaultPtVoice;
-                                      }
-                                    }
-
-                                    window.speechSynthesis.speak(utterance);
+                                    handleSpeakChatMessage(msg.content, msg.id);
                                   }}
-                                  className="p-1 hover:text-her-accent transition-colors"
-                                  title="Ouvir"
+                                  className={cn(
+                                    "p-1 transition-colors relative",
+                                    isPlayingChatSpeech === msg.id 
+                                      ? "text-her-accent animate-pulse scale-110" 
+                                      : "hover:text-her-accent text-her-muted opacity-60 hover:opacity-100"
+                                  )}
+                                  title={isPlayingChatSpeech === msg.id ? "Parar Leitura" : "Ouvir"}
                                 >
-                                  <Volume2 size={12} />
+                                  {isPlayingChatSpeech === msg.id ? (
+                                    <VolumeX size={13} className="text-her-accent" />
+                                  ) : (
+                                    <Volume2 size={13} />
+                                  )}
                                 </button>
                                 <button 
                                   onClick={() => {
@@ -6762,6 +7299,8 @@ ${isBad
         setSelectedVoice={setSelectedVoice}
         voiceEngine={voiceEngine}
         setVoiceEngine={setVoiceEngine}
+        isChatAutoSpeakActive={isChatAutoSpeakActive}
+        setIsChatAutoSpeakActive={setIsChatAutoSpeakActive}
         voiceModulation={voiceModulation}
         setVoiceModulation={setVoiceModulation}
         orbStyle={orbStyle}
@@ -6770,6 +7309,7 @@ ${isBad
         setAppTheme={setAppTheme}
         aiProfile={aiProfile}
         setAiProfile={handleUpdateProfile}
+        onAddNotification={addNotification}
       />
 
       <SkeletonBrainPopup 
