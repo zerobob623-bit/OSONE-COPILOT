@@ -526,7 +526,11 @@ Nome do interlocutor: ${senderName}`;
       let usedFallback = false;
 
       // Selected voice defaults to 'Kore' (highly natural female narrator in Portuguese)
-      const selectedVoice = voice || "Kore"; 
+      const supportedGeminiVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr"];
+      let selectedVoice = voice || "Kore";
+      if (!supportedGeminiVoices.includes(selectedVoice)) {
+        selectedVoice = "Kore"; // Map unsupported voices like 'Scarlet' to 'Kore'
+      }
 
       for (const chunk of chunks) {
         let chunkAudioBuffer: Buffer | null = null;
@@ -534,7 +538,7 @@ Nome do interlocutor: ${senderName}`;
         // Tiered model candidates list of premium intelligent voice models
         const candidateModels = [
           "gemini-3.1-flash-tts-preview",
-          "gemini-3.1-flash-live-preview"
+          "gemini-3.5-flash"
         ];
 
         for (const modelName of candidateModels) {

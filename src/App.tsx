@@ -5,6 +5,7 @@ import {
   Mic, 
   MicOff, 
   Play, 
+  Pause,
   Copy, 
   X, 
   ChevronRight,
@@ -46,6 +47,7 @@ import {
   BookOpen,
   Check,
   RotateCcw,
+  Square,
   Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -768,6 +770,11 @@ export default function App() {
       googleHomeToken: '',
       elevenLabsApiKey: '',
       elevenLabsVoiceId: '',
+      elevenLabsStability: 0.5,
+      elevenLabsSimilarityBoost: 0.75,
+      elevenLabsStyle: 0.0,
+      elevenLabsSpeakerBoost: true,
+      elevenLabsModel: 'eleven_multilingual_v2',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -922,7 +929,61 @@ export default function App() {
 
   const [isReadingWorkspace, setIsReadingWorkspace] = useState(false);
   const [isGeneratingWorkspaceMp3, setIsGeneratingWorkspaceMp3] = useState(false);
+  const [workspaceAudioPlaying, setWorkspaceAudioPlaying] = useState<boolean>(false);
+  const [workspaceAudioCurrentTime, setWorkspaceAudioCurrentTime] = useState<number>(0);
+  const [workspaceAudioDuration, setWorkspaceAudioDuration] = useState<number>(0);
+  const [workspaceAudioUrl, setWorkspaceAudioUrl] = useState<string | null>(null);
   const workspaceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Invalida a URL do áudio anterior e para a reprodução se o texto for alterado
+    if (workspaceAudioUrl) {
+      window.URL.revokeObjectURL(workspaceAudioUrl);
+      setWorkspaceAudioUrl(null);
+    }
+    if (workspaceAudioRef.current) {
+      workspaceAudioRef.current.pause();
+      setIsReadingWorkspace(false);
+      setWorkspaceAudioPlaying(false);
+      setWorkspaceAudioCurrentTime(0);
+    }
+  }, [workspaceText]);
+
+  const handleTogglePlayWorkspaceAudio = () => {
+    if (workspaceAudioRef.current) {
+      if (workspaceAudioPlaying) {
+        workspaceAudioRef.current.pause();
+      } else {
+        workspaceAudioRef.current.play().catch(e => {
+          console.error("Erro ao dar play no áudio:", e);
+        });
+      }
+    }
+  };
+
+  const handleSeekWorkspaceAudio = (time: number) => {
+    if (workspaceAudioRef.current) {
+      workspaceAudioRef.current.currentTime = time;
+      setWorkspaceAudioCurrentTime(time);
+    }
+  };
+
+  const handleStopWorkspaceAudio = () => {
+    if (workspaceAudioRef.current) {
+      workspaceAudioRef.current.pause();
+      workspaceAudioRef.current.currentTime = 0;
+      setWorkspaceAudioCurrentTime(0);
+      setWorkspaceAudioPlaying(false);
+      setIsReadingWorkspace(false);
+    }
+  };
+
+  const formatAudioTime = (seconds: number) => {
+    if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   const [isPlayingChatSpeech, setIsPlayingChatSpeech] = useState<string | null>(null);
   const chatAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1072,6 +1133,7 @@ export default function App() {
         workspaceAudioRef.current.pause();
       }
       setIsReadingWorkspace(false);
+      setWorkspaceAudioPlaying(false);
       addNotification("Leitura interrompida.", "info");
       return;
     }
@@ -1096,36 +1158,43 @@ export default function App() {
         targetVoice = selectedVoice;
       }
 
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          text: workspaceText,
-          engine: voiceEngine,
-          clientApiKey: apiKeys.gemini || '',
-          voice: targetVoice,
-          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
-          elevenLabsStability: apiKeys.elevenLabsStability,
-          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
-          elevenLabsStyle: apiKeys.elevenLabsStyle,
-          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-          elevenLabsModel: apiKeys.elevenLabsModel
-        })
-      });
+      // Se o áudioUrl já existe, reutiliza ele para poupar requisições e carregar instantaneamente
+      let audioUrl = workspaceAudioUrl;
+      const isElevenLabs = voiceEngine === 'elevenlabs';
+      let isFallback = false;
 
-      if (!response.ok) {
-        const errJson = await response.json();
-        addNotification(`Erro de Voz Premium: ${errJson.error || "Falha de processamento"}`, "error");
-        throw new Error(errJson.error || "Erro ao sintetizar áudio.");
+      if (!audioUrl) {
+        const response = await fetch("/api/tts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            text: workspaceText,
+            engine: voiceEngine,
+            clientApiKey: apiKeys.gemini || '',
+            voice: targetVoice,
+            elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
+            elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+            elevenLabsStability: apiKeys.elevenLabsStability,
+            elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
+            elevenLabsStyle: apiKeys.elevenLabsStyle,
+            elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
+            elevenLabsModel: apiKeys.elevenLabsModel
+          })
+        });
+
+        if (!response.ok) {
+          const errJson = await response.json();
+          addNotification(`Erro de Voz Premium: ${errJson.error || "Falha de processamento"}`, "error");
+          throw new Error(errJson.error || "Erro ao sintetizar áudio.");
+        }
+
+        isFallback = response.headers.get("X-TTS-Mode") === "fallback";
+        const blob = await response.blob();
+        audioUrl = URL.createObjectURL(blob);
+        setWorkspaceAudioUrl(audioUrl);
       }
-
-      const isFallback = response.headers.get("X-TTS-Mode") === "fallback";
-      const isElevenLabs = response.headers.get("X-TTS-Mode") === "elevenlabs";
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
 
       if (workspaceAudioRef.current) {
         workspaceAudioRef.current.pause();
@@ -1134,14 +1203,25 @@ export default function App() {
       const audio = new Audio(audioUrl);
       workspaceAudioRef.current = audio;
       setIsReadingWorkspace(true);
+      setWorkspaceAudioPlaying(true);
+      setWorkspaceAudioCurrentTime(0);
+
+      // Sincronização dos estados do leitor de voz
+      audio.onplay = () => setWorkspaceAudioPlaying(true);
+      audio.onpause = () => setWorkspaceAudioPlaying(false);
+      audio.ontimeupdate = () => setWorkspaceAudioCurrentTime(audio.currentTime);
+      audio.onloadedmetadata = () => setWorkspaceAudioDuration(audio.duration || 0);
 
       audio.onended = () => {
         setIsReadingWorkspace(false);
+        setWorkspaceAudioPlaying(false);
+        setWorkspaceAudioCurrentTime(0);
         addNotification("Leitura concluída!", "success");
       };
 
       audio.onerror = () => {
         setIsReadingWorkspace(false);
+        setWorkspaceAudioPlaying(false);
         addNotification("Erro ao reproduzir o áudio de leitura.", "error");
       };
 
@@ -1151,11 +1231,12 @@ export default function App() {
       } else if (isFallback) {
         addNotification("Iniciando leitura com voz assistida padrão (limite diário premium atingido).", "info");
       } else {
-        addNotification("Iniciando reprodução com voz inteligente Gemini 3.1.", "success");
+        addNotification("Iniciando reprodução com voz inteligente da IA.", "success");
       }
     } catch (error: any) {
       console.error("Erro na leitura inteligente:", error);
       setIsReadingWorkspace(false);
+      setWorkspaceAudioPlaying(false);
       addNotification(`Falha na leitura: ${error.message || error}`, "error");
     }
   };
@@ -1163,6 +1244,18 @@ export default function App() {
   const handleDownloadWorkspaceTts = async () => {
     if (!workspaceText.trim()) {
       addNotification("O estúdio de prosa está vazio para download de áudio.", "info");
+      return;
+    }
+
+    // Se já gerou ou ouviu e o áudio correspondente está disponível, baixa instantaneamente!
+    if (workspaceAudioUrl) {
+      addNotification("Baixando áudio gerado anteriormente...", "success");
+      const a = document.createElement('a');
+      a.href = workspaceAudioUrl;
+      a.download = voiceEngine === 'elevenlabs' ? "prosa_osone_elevenlabs.mp3" : "prosa_osone.wav";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       return;
     }
 
@@ -1213,13 +1306,14 @@ export default function App() {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
 
+      setWorkspaceAudioUrl(url);
+
       const a = document.createElement('a');
       a.href = url;
       a.download = isElevenLabs ? "prosa_osone_elevenlabs.mp3" : (isFallback ? "prosa_osone.mp3" : "prosa_osone.wav");
       document.body.appendChild(a);
       a.click();
       a.remove();
-      window.URL.revokeObjectURL(url);
 
       if (isElevenLabs) {
         addNotification("Áudio premium Elevenlabs MP3 baixado com sucesso!", "success");
@@ -2036,6 +2130,7 @@ ${isBad
     setIsElevenLabsLiveActive(false);
     isElevenLabsLiveActiveRef.current = false;
     elevenLabsStateRef.current = 'idle';
+    setLiveState({ status: 'idle' });
     
     if (elevenLabsSilenceTimeoutRef.current) {
       clearTimeout(elevenLabsSilenceTimeoutRef.current);
@@ -2069,23 +2164,28 @@ ${isBad
   };
 
   const startElevenLabsLiveSession = async () => {
-    // Para canais convencionais para evitar dupla atividade
-    stopLiveSessionInternal();
+    // Para APENAS o Gemini Live, não reseta liveState ainda
+    if (liveSessionRef.current) {
+      try { liveSessionRef.current?.close?.(); } catch(_) {}
+      liveSessionRef.current = null;
+    }
+    audioProcessorRef.current?.stopRecording?.();
+    audioPlayerRef.current?.stop?.();
     
     const geminiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
     const elApiKey = apiKeys.elevenLabsApiKey || '';
-    if (!geminiKey && !geminiKey.trim()) {
-      addNotification("Por favor, configure sua chave Gemini de texto primeiro.", "error");
+    if (!geminiKey.trim()) {
+      addNotification("Configure sua chave Gemini nas Configurações.", "error");
       setIsSettingsOpen(true);
       return;
     }
-    if (!elApiKey && !elApiKey.trim()) {
+    if (!elApiKey.trim()) {
       addNotification("Chave API da ElevenLabs ausente nas Configurações.", "error");
       setIsSettingsOpen(true);
       return;
     }
 
-    setLiveState({ status: 'connected' });
+    setLiveState({ status: 'connected' }); // ← seta DEPOIS de limpar
     setIsElevenLabsLiveActive(true);
     isElevenLabsLiveActiveRef.current = true;
     
@@ -2300,25 +2400,26 @@ ${isBad
 
   const handleElevenLabsUserTurn = async (userText: string) => {
     elevenLabsStateRef.current = 'thinking';
-    addMessage({ role: 'user', content: userText });
     setIsGenerating(true);
     
+    // Captura histórico ANTES de adicionar nova mensagem (evita duplicação)
+    const historyContents = chatHistoryRef.current.slice(-15).map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    }));
+    historyContents.push({
+      role: 'user',
+      parts: [{ text: userText }]
+    });
+
+    addMessage({ role: 'user', content: userText }); // Só agora adiciona ao chat
+    
     try {
-      // Use chatHistoryRef.current to get the latest updated chat history (solving stale closure)
-      const historyContents = chatHistoryRef.current.slice(-15).map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      }));
-      historyContents.push({
-        role: 'user',
-        parts: [{ text: userText }]
-      });
-      
       const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
       const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
       
       const response = await genAI.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: historyContents,
         config: {
           maxOutputTokens: 120,
@@ -5280,7 +5381,6 @@ ${isBad
     if (voiceEngine === 'elevenlabs') {
       if (isElevenLabsLiveActive || liveState.status === 'connected') {
         stopElevenLabsLiveSession();
-        setLiveState({ status: 'idle' });
       } else {
         startElevenLabsLiveSession();
       }
@@ -5896,6 +5996,106 @@ ${isBad
                             width: `${Math.min(Math.round(((workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length) / writingWordGoal) * 100), 100)}%`
                           }}
                         />
+                      </div>
+                    )}
+
+                    {/* Leitor de Voz Prosa na Mesma Página */}
+                    {workspaceAudioUrl && (
+                      <div className="mx-4 mt-3 mb-1 p-3 bg-white/[0.02] border border-white/[0.05] rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 backdrop-blur-md">
+                        {/* Indicador de Status com Spectrum Animado */}
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-7 h-7 rounded-xl flex items-center justify-center transition-colors shadow-inner",
+                            workspaceAudioPlaying ? "bg-emerald-500/10 text-emerald-400" : "bg-white/[0.03] text-white/40"
+                          )}>
+                            {workspaceAudioPlaying ? (
+                              <div className="flex items-end gap-[2px] h-3">
+                                <span className="w-[2px] bg-emerald-400 animate-pulse h-2"></span>
+                                <span className="w-[2px] bg-emerald-400 animate-pulse h-3"></span>
+                                <span className="w-[2px] bg-emerald-400 animate-pulse h-1.5"></span>
+                                <span className="w-[2px] bg-emerald-400 animate-pulse h-2.5"></span>
+                              </div>
+                            ) : (
+                              <VolumeX size={14} className="opacity-60 text-white/40" />
+                            )}
+                          </div>
+
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-[#ff4e00] font-bold">
+                              {voiceEngine === 'elevenlabs' ? 'Narradora ElevenLabs' : 'Voz Inteligente Gemini'}
+                            </span>
+                            <span className="text-[10px] text-white/60 font-light truncate max-w-[150px] sm:max-w-[300px]">
+                              Voz atual: <span className="font-medium text-white/80">{selectedVoice === 'Scarlet' ? 'Fenrir (Fallback)' : selectedVoice}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Controles de Reprodução e Timeline */}
+                        <div className="flex-1 w-full max-w-xl flex items-center gap-3">
+                          <button
+                            onClick={handleTogglePlayWorkspaceAudio}
+                            className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white transition-all hover:scale-105 active:scale-95 shrink-0"
+                            title={workspaceAudioPlaying ? "Pausar Leitura" : "Retomar Leitura"}
+                          >
+                            {workspaceAudioPlaying ? <Pause size={14} /> : <Play size={14} className="translate-x-[0.5px]" />}
+                          </button>
+
+                          <button
+                            onClick={handleStopWorkspaceAudio}
+                            className="p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] text-red-400/70 hover:text-red-400 transition-all shrink-0"
+                            title="Parar e Reiniciar"
+                          >
+                            <Square size={13} className="opacity-70 text-red-400" />
+                          </button>
+
+                          <div className="text-[10px] font-mono text-white/40 select-none shrink-0">
+                            {formatAudioTime(workspaceAudioCurrentTime)}
+                          </div>
+
+                          {/* Barra de Progresso Arrastável */}
+                          <div className="flex-1 relative group py-1 flex items-center">
+                            <input
+                              type="range"
+                              min={0}
+                              max={workspaceAudioDuration || 100}
+                              step={0.1}
+                              value={workspaceAudioCurrentTime}
+                              onChange={(e) => handleSeekWorkspaceAudio(parseFloat(e.target.value))}
+                              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#ff4e00] hover:accent-[#ff4e00] focus:outline-none transition-all"
+                            />
+                          </div>
+
+                          <div className="text-[10px] font-mono text-white/40 select-none shrink-0">
+                            {formatAudioTime(workspaceAudioDuration)}
+                          </div>
+                        </div>
+
+                        {/* Baixar Áudio e Fechar */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleDownloadWorkspaceTts}
+                            disabled={isGeneratingWorkspaceMp3}
+                            className="px-3 py-1.5 rounded-xl bg-[#ff4e00]/15 hover:bg-[#ff4e00]/25 text-[#ff4e00] text-[10px] font-mono font-bold tracking-wider flex items-center gap-1.5 transition-all"
+                            title="Baixar Narrativa de Áudio"
+                          >
+                            <Download size={11} />
+                            <span>BAIXAR ÁUDIO</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              handleStopWorkspaceAudio();
+                              if (workspaceAudioUrl) {
+                                window.URL.revokeObjectURL(workspaceAudioUrl);
+                                setWorkspaceAudioUrl(null);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white transition-colors"
+                            title="Fechar Player"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
                       </div>
                     )}
 

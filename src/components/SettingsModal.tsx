@@ -349,18 +349,18 @@ export const SettingsModal = ({
                             elevenLabsSimilarityBoost: 0.75, 
                             elevenLabsStyle: 0.0,
                             elevenLabsSpeakerBoost: true,
-                            elevenLabsModel: 'eleven_turbo_v2_5'
+                            elevenLabsModel: 'eleven_multilingual_v2'
                           })}
                           className="text-[9px] uppercase tracking-widest text-her-accent hover:underline font-bold"
                         >
                           Resetar Ajustes
                         </button>
                       </div>
-
+ 
                       <div className="space-y-1.5">
                         <label className="block text-[8px] uppercase tracking-wider text-her-muted/60 font-bold">Modelo Língua & Latência</label>
                         <select 
-                          value={keys.elevenLabsModel || 'eleven_turbo_v2_5'}
+                          value={keys.elevenLabsModel || 'eleven_multilingual_v2'}
                           onChange={(e) => setKeys({ ...keys, elevenLabsModel: e.target.value })}
                           className="w-full bg-[#111111] border border-white/[0.05] rounded-xl px-4 py-3 focus:outline-none focus:border-her-accent/30 text-xs text-zinc-300 custom-select"
                         >
@@ -446,42 +446,28 @@ export const SettingsModal = ({
                   >
                     <div className="space-y-6">
                       <div>
-                        {voiceEngine === 'gemini' ? (
-                          <>
-                            <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 font-bold">Voz do Sistema (Frequência)</label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
-                                <button
-                                  key={voice}
-                                  onClick={() => setSelectedVoice(voice)}
-                                  className={cn(
-                                    "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
-                                    selectedVoice === voice 
-                                      ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                      : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
-                                    voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
-                                  )}
-                                >
-                                  <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
-                                  {selectedVoice === voice && <div className={cn(
-                                    "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
-                                    voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
-                                  )} />}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="p-5 bg-white/[0.02] border border-white/[0.05] rounded-3xl space-y-2">
-                            <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold flex items-center gap-1.5">
-                              <Volume2 size={12} className="text-her-accent" />
-                              ElevenLabs Ativo
-                            </span>
-                            <p className="text-[10.5px] text-her-muted/80 leading-relaxed font-light">
-                              O motor de voz premium do ElevenLabs está selecionado como seu canal de fala principal. Para configurar e ajustar parâmetros do clone de voz, utilize a aba dedicada <span className="text-her-accent cursor-pointer hover:underline" onClick={() => setActiveTab('elevenlabs')}>ElevenLabs</span>.
-                            </p>
-                          </div>
-                        )}
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 font-bold">Voz do Sistema (Frequência)</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                            <button
+                              key={voice}
+                              onClick={() => setSelectedVoice(voice)}
+                              className={cn(
+                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
+                                selectedVoice === voice 
+                                  ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
+                                voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
+                              )}
+                            >
+                              <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
+                              {selectedVoice === voice && <div className={cn(
+                                "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
+                                voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                              )} />}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       {/* Chat Auto Speak Option */}
