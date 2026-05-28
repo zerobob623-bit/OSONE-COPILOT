@@ -15,6 +15,8 @@ export const SettingsModal = ({
   setKeys, 
   selectedVoice, 
   setSelectedVoice,
+  voiceEngine,
+  setVoiceEngine,
   voiceModulation,
   setVoiceModulation,
   orbStyle,
@@ -30,6 +32,8 @@ export const SettingsModal = ({
   setKeys: (keys: ApiKeys) => void;
   selectedVoice: string;
   setSelectedVoice: (voice: string) => void;
+  voiceEngine: 'gemini' | 'elevenlabs';
+  setVoiceEngine: (engine: 'gemini' | 'elevenlabs') => void;
   voiceModulation: VoiceModulation;
   setVoiceModulation: (mod: VoiceModulation) => void;
   orbStyle: OrbStyle;
@@ -157,6 +161,42 @@ export const SettingsModal = ({
                         Chave necessária para o processamento de linguagem natural e visão computacional.
                       </p>
                     </div>
+
+                    <div className="pt-4 border-t border-white/5 space-y-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Cpu size={12} className="text-her-accent" />
+                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Elevenlabs API Key</label>
+                        </div>
+                        <input 
+                          type="password"
+                          value={keys.elevenLabsApiKey || ''}
+                          onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
+                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/20"
+                          placeholder="Insira sua chave ElevenLabs..."
+                        />
+                        <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
+                          Chave opcional para sintetizar narrativas ultrarrealistas utilizando ElevenLabs.
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <UserCircle size={12} className="text-her-accent" />
+                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">ID da Voz ElevenLabs</label>
+                        </div>
+                        <input 
+                          type="text"
+                          value={keys.elevenLabsVoiceId || ''}
+                          onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
+                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/20 text-xs font-mono"
+                          placeholder="Ex: 21m00Tcm4TlvDq8ikWAM..."
+                        />
+                        <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
+                          Insira o ID de voz ElevenLabs customizado que deseja usar para as leituras e narrativas.
+                        </p>
+                      </div>
+                    </div>
                   </motion.div>
                 )}
 
@@ -170,28 +210,80 @@ export const SettingsModal = ({
                   >
                     <div className="space-y-6">
                       <div>
-                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Voz do Sistema (Frequência)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold">Motor de Voz (Tecnologia)</label>
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          {[
+                            { id: 'gemini', label: 'Gemini 3.1 TTS', desc: 'Voz Inteligente por IA' },
+                            { id: 'elevenlabs', label: 'ElevenLabs', desc: 'Voz Customizada Ultrarrealista' }
+                          ].map((eng) => (
                             <button
-                              key={voice}
-                              onClick={() => setSelectedVoice(voice)}
+                              key={eng.id}
+                              onClick={() => setVoiceEngine(eng.id as 'gemini' | 'elevenlabs')}
                               className={cn(
-                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
-                                selectedVoice === voice 
+                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex flex-col gap-1",
+                                voiceEngine === eng.id 
                                   ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
-                                voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
+                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]"
                               )}
                             >
-                              <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
-                              {selectedVoice === voice && <div className={cn(
-                                "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
-                                voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
-                              )} />}
+                              <div className="flex items-center justify-between w-full">
+                                <span className="font-medium">{eng.label}</span>
+                                {voiceEngine === eng.id && <div className="w-1.5 h-1.5 rounded-full bg-her-accent shadow-[0_0_8px_rgba(var(--her-accent),0.5)]" />}
+                              </div>
+                              <span className="text-[8px] opacity-60 font-light">{eng.desc}</span>
                             </button>
                           ))}
                         </div>
+
+                        {voiceEngine === 'gemini' ? (
+                          <>
+                            <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 font-bold">Voz do Sistema (Frequência)</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                                <button
+                                  key={voice}
+                                  onClick={() => setSelectedVoice(voice)}
+                                  className={cn(
+                                    "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
+                                    selectedVoice === voice 
+                                      ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                                      : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
+                                    voice === 'Scarlet' && "border-red-900/20 hover:border-red-500/30"
+                                  )}
+                                >
+                                  <span className={cn(voice === 'Scarlet' && "text-red-500/80 font-medium")}>{voice}</span>
+                                  {selectedVoice === voice && <div className={cn(
+                                    "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
+                                    voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                                  )} />}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="p-4 bg-white/[0.02] border border-white/[0.05] rounded-2xl space-y-2">
+                            <span className="text-[10px] text-her-accent uppercase tracking-widest font-bold">Voz Customizada ElevenLabs</span>
+                            {keys.elevenLabsVoiceId ? (
+                              <div className="space-y-1">
+                                <p className="text-xs font-light text-her-ink/80">
+                                  ID da voz ativa: <code className="bg-white/5 px-2 py-0.5 rounded text-[10px] text-her-accent font-mono">{keys.elevenLabsVoiceId}</code>
+                                </p>
+                                <p className="text-[10px] text-her-muted/60 leading-relaxed font-light">
+                                  Cada narrativa de prosa ou texto será gerada usando esta voz premium ElevenLabs.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                <p className="text-xs font-light text-red-500">
+                                  Nenhum ID de voz configurado para o ElevenLabs!
+                                </p>
+                                <p className="text-[10px] text-her-muted/60 leading-relaxed font-light">
+                                  Por favor, configure o ID da voz na aba <span className="text-her-accent font-bold">"Chaves"</span> para habilitar a síntese.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div>

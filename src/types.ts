@@ -13,6 +13,8 @@ export interface ApiKeys {
   gemini: string;
   googleHomeId?: string;
   googleHomeToken?: string;
+  elevenLabsApiKey?: string;
+  elevenLabsVoiceId?: string;
 }
 
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis';

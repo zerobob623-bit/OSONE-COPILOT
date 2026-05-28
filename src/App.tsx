@@ -98,6 +98,174 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
   { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' }
 ];
 
+export interface ComboHost {
+  name: string;
+  role: string;
+  gender: 'male' | 'female';
+  pitch: number;
+  rate: number;
+  avatarUrl: string;
+  accentColor: string;
+  instructions: string;
+}
+
+export interface DuoCombo {
+  id: string;
+  name: string;
+  hostA: ComboHost;
+  hostB: ComboHost;
+}
+
+export const DUO_COMBOS: DuoCombo[] = [
+  {
+    id: 'cortex_aura',
+    name: 'Sintonia Digital (H + M)',
+    hostA: {
+      name: 'Cortex',
+      role: 'Cientista de Dados & Lógica',
+      gender: 'male',
+      pitch: 0.82,
+      rate: 0.95,
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
+      instructions: ' abordagem estruturada, lógica pura, precisão técnica, baseada em dados computacionais. Fale de forma objetiva, porém cortês.'
+    },
+    hostB: {
+      name: 'Aura',
+      role: 'Especialista em UX & Linguística',
+      gender: 'female',
+      pitch: 1.25,
+      rate: 1.05,
+      avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-rose-400 bg-rose-400/10 border-rose-400/20',
+      instructions: ' abordagem empática, humanística, focado em facilidade de uso, engajamento criativo e sensibilidade. Fale de forma acolhedora.'
+    }
+  },
+  {
+    id: 'cortex_loki',
+    name: 'Mentes Pragmáticas (H + H)',
+    hostA: {
+      name: 'Cortex',
+      role: 'Engenheiro Sênior de Software',
+      gender: 'male',
+      pitch: 0.85,
+      rate: 0.95,
+      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
+      instructions: ' abordagem racional, altamente focada em otimização, design patterns e clean code. Fale com clareza profissional.'
+    },
+    hostB: {
+      name: 'Loki',
+      role: 'Crítico e Arquiteto de Software',
+      gender: 'male',
+      pitch: 0.95,
+      rate: 1.02,
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-red-400 bg-red-400/10 border-red-400/20',
+      instructions: ' abordagem audaciosa, provocativa, altamente irônica e impaciente com ineficiências. Desafie o Cortex de forma inteligente, buscando edge-cases.'
+    }
+  },
+  {
+    id: 'aura_gaia',
+    name: 'Frequências Criativas (M + M)',
+    hostA: {
+      name: 'Aura',
+      role: 'Arquiteta de Soluções e Ideias',
+      gender: 'female',
+      pitch: 1.22,
+      rate: 1.06,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+      instructions: ' abordagem criativa, com brainstormings velozes, ideias futuristas, focada em branding e experiência visual.'
+    },
+    hostB: {
+      name: 'Gaia',
+      role: 'Mentora de Minimalismo & Filosofia',
+      gender: 'female',
+      pitch: 1.10,
+      rate: 0.92,
+      avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+      instructions: ' abordagem serena, filosófica, focada no bem-estar digital, sustentabilidade, conceitos elementares e respostas curtas e poéticas.'
+    }
+  }
+];
+
+export const DUO_TOPICS = [
+  { id: 'tech', name: '💻 IA, Tecnologia & Código', description: 'Discutem engenharia de software, futuro digital e algoritmos modernos.' },
+  { id: 'philosophy', name: '🌌 Filosofia & Existencialismo', description: 'Discutem ética da IA, consciência cibernética e destino humano.' },
+  { id: 'creative', name: '🎨 Criatividade & Roteiros', description: 'Exploram roteiros, design visual, marketing digital e engajamento.' },
+  { id: 'health', name: '🩺 Saúde & Biohacking', description: 'Focam em melhorias biológicas, rotinas de foco e bem-estar físico e mental.' }
+];
+
+export interface SpeechTurn {
+  speaker: 'hostA' | 'hostB';
+  name: string;
+  text: string;
+}
+
+export const parseDuoTextToTurns = (text: string, combo: DuoCombo): SpeechTurn[] => {
+  const turns: SpeechTurn[] = [];
+  const lines = text.split('\n');
+  
+  let currentSpeaker: 'hostA' | 'hostB' | null = null;
+  let currentText = '';
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    const cleanLine = trimmed.replace(/^\*\*Fontes:\*\*.*$/i, '').trim();
+    if (!cleanLine) continue;
+    
+    // Skip footnotes or markdown bullet links for pronunciation in TTS
+    if (cleanLine.startsWith('* [') && cleanLine.includes('](')) continue;
+    
+    const isHostA = trimmed.startsWith(`**${combo.hostA.name}**:`) || 
+                    trimmed.startsWith(`${combo.hostA.name}:`) ||
+                    trimmed.startsWith(`[${combo.hostA.name}]:`) ||
+                    trimmed.startsWith(`*${combo.hostA.name}*:`) ||
+                    trimmed.startsWith(`**${combo.hostA.name}** :`) ||
+                    trimmed.startsWith(`**${combo.hostA.name.toUpperCase()}**:`) ||
+                    trimmed.startsWith(`${combo.hostA.name.toUpperCase()}:`);
+                    
+    const isHostB = trimmed.startsWith(`**${combo.hostB.name}**:`) || 
+                    trimmed.startsWith(`${combo.hostB.name}:`) ||
+                    trimmed.startsWith(`[${combo.hostB.name}]:`) ||
+                    trimmed.startsWith(`*${combo.hostB.name}*:`) ||
+                    trimmed.startsWith(`**${combo.hostB.name}** :`) ||
+                    trimmed.startsWith(`**${combo.hostB.name.toUpperCase()}**:`) ||
+                    trimmed.startsWith(`${combo.hostB.name.toUpperCase()}:`);
+                    
+    if (isHostA) {
+      if (currentSpeaker && currentText.trim()) {
+        turns.push({ speaker: currentSpeaker, name: currentSpeaker === 'hostA' ? combo.hostA.name : combo.hostB.name, text: currentText.trim() });
+      }
+      currentSpeaker = 'hostA';
+      currentText = trimmed.replace(new RegExp(`^(\\*\\*)?${combo.hostA.name}(\\*\\*)?\\s*:\\s*`, 'i'), '');
+    } else if (isHostB) {
+      if (currentSpeaker && currentText.trim()) {
+        turns.push({ speaker: currentSpeaker, name: currentSpeaker === 'hostA' ? combo.hostA.name : combo.hostB.name, text: currentText.trim() });
+      }
+      currentSpeaker = 'hostB';
+      currentText = trimmed.replace(new RegExp(`^(\\*\\*)?${combo.hostB.name}(\\*\\*)?\\s*:\\s*`, 'i'), '');
+    } else {
+      if (currentSpeaker) {
+        currentText += '\n' + trimmed;
+      } else {
+        currentSpeaker = 'hostA';
+        currentText = trimmed;
+      }
+    }
+  }
+  
+  if (currentSpeaker && currentText.trim()) {
+    turns.push({ speaker: currentSpeaker, name: currentSpeaker === 'hostA' ? combo.hostA.name : combo.hostB.name, text: currentText.trim() });
+  }
+  
+  return turns;
+};
+
 // Synthesizer for premium, ultra-responsive kinetic typewriter/keystroke sounds on demand
 const playMXKeySound = () => {
   try {
@@ -598,6 +766,8 @@ export default function App() {
       gemini: '', 
       googleHomeId: '',
       googleHomeToken: '',
+      elevenLabsApiKey: '',
+      elevenLabsVoiceId: '',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -608,6 +778,14 @@ export default function App() {
     return defaultKeys;
   });
 
+  const [voiceEngine, setVoiceEngine] = useState<'gemini' | 'elevenlabs'>(() => {
+    return (localStorage.getItem('osone_voice_engine') as 'gemini' | 'elevenlabs') || 'gemini';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_voice_engine', voiceEngine);
+  }, [voiceEngine]);
+
   const [selectedVoice, setSelectedVoice] = useState<string>(() => {
     return localStorage.getItem('osone_selected_voice') || 'Zephyr';
   });
@@ -615,6 +793,52 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_selected_voice', selectedVoice);
   }, [selectedVoice]);
+
+  // DUO MODE STATES
+  const [isDuoMode, setIsDuoMode] = useState<boolean>(() => {
+    return localStorage.getItem('osone_is_duo_mode') === 'true';
+  });
+  const [duoComboId, setDuoComboId] = useState<string>(() => {
+    return localStorage.getItem('osone_duo_combo_id') || 'cortex_aura';
+  });
+  const [duoTopicId, setDuoTopicId] = useState<string>(() => {
+    return localStorage.getItem('osone_duo_topic_id') || 'tech';
+  });
+  const [isDuoVoiceActive, setIsDuoVoiceActive] = useState<boolean>(() => {
+    const saved = localStorage.getItem('osone_is_duo_voice_active');
+    return saved !== 'false'; // default true
+  });
+  const [duoSpeakingHost, setDuoSpeakingHost] = useState<'hostA' | 'hostB' | null>(null);
+  const [isDuoPopoverOpen, setIsDuoPopoverOpen] = useState(false);
+  const [activeDuoHost, setActiveDuoHost] = useState<'hostA' | 'hostB'>('hostA');
+  const [duoAutoPrompt, setDuoAutoPrompt] = useState<string | null>(null);
+
+  const activeDuoHostRef = useRef<'hostA' | 'hostB'>('hostA');
+  const duoAutoPromptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeDuoHostRef.current = activeDuoHost;
+  }, [activeDuoHost]);
+
+  useEffect(() => {
+    duoAutoPromptRef.current = duoAutoPrompt;
+  }, [duoAutoPrompt]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_is_duo_mode', String(isDuoMode));
+  }, [isDuoMode]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_duo_combo_id', duoComboId);
+  }, [duoComboId]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_duo_topic_id', duoTopicId);
+  }, [duoTopicId]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_is_duo_voice_active', String(isDuoVoiceActive));
+  }, [isDuoVoiceActive]);
 
   // Auto-analyze when entering writing mode if there's code but no suggestions
   useEffect(() => {
@@ -678,6 +902,177 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('osone_workspace_text', workspaceText);
   }, [workspaceText]);
+
+  const [isReadingWorkspace, setIsReadingWorkspace] = useState(false);
+  const [isGeneratingWorkspaceMp3, setIsGeneratingWorkspaceMp3] = useState(false);
+  const workspaceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (workspaceAudioRef.current) {
+        workspaceAudioRef.current.pause();
+        workspaceAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleReadWorkspaceText = async () => {
+    if (isReadingWorkspace) {
+      if (workspaceAudioRef.current) {
+        workspaceAudioRef.current.pause();
+      }
+      setIsReadingWorkspace(false);
+      addNotification("Leitura interrompida.", "info");
+      return;
+    }
+
+    if (!workspaceText.trim()) {
+      addNotification("Escreva ou gere algum texto primeiro para poder ouvir.", "info");
+      return;
+    }
+
+    if (voiceEngine === 'elevenlabs') {
+      addNotification("Sintetizando voz ultrarrealista ElevenLabs...", "info");
+    } else {
+      addNotification("Sintetizando voz inteligente com IA...", "info");
+    }
+
+    try {
+      const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
+      let targetVoice = "Kore";
+      if (selectedVoice === 'Scarlet') {
+        targetVoice = "Fenrir";
+      } else if (standardVoices.includes(selectedVoice)) {
+        targetVoice = selectedVoice;
+      }
+
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          text: workspaceText,
+          engine: voiceEngine,
+          clientApiKey: apiKeys.gemini || '',
+          voice: targetVoice,
+          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json();
+        throw new Error(errJson.error || "Erro ao sintetizar áudio.");
+      }
+
+      const isFallback = response.headers.get("X-TTS-Mode") === "fallback";
+      const isElevenLabs = response.headers.get("X-TTS-Mode") === "elevenlabs";
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+
+      if (workspaceAudioRef.current) {
+        workspaceAudioRef.current.pause();
+      }
+
+      const audio = new Audio(audioUrl);
+      workspaceAudioRef.current = audio;
+      setIsReadingWorkspace(true);
+
+      audio.onended = () => {
+        setIsReadingWorkspace(false);
+        addNotification("Leitura concluída!", "success");
+      };
+
+      audio.onerror = () => {
+        setIsReadingWorkspace(false);
+        addNotification("Erro ao reproduzir o áudio de leitura.", "error");
+      };
+
+      await audio.play();
+      if (isElevenLabs) {
+        addNotification("Iniciando reprodução com voz premium ElevenLabs.", "success");
+      } else if (isFallback) {
+        addNotification("Iniciando leitura com voz assistida padrão (limite diário premium atingido).", "info");
+      } else {
+        addNotification("Iniciando reprodução com voz inteligente Gemini 3.1.", "success");
+      }
+    } catch (error: any) {
+      console.error("Erro na leitura inteligente:", error);
+      setIsReadingWorkspace(false);
+      addNotification(`Falha na leitura: ${error.message || error}`, "error");
+    }
+  };
+
+  const handleDownloadWorkspaceTts = async () => {
+    if (!workspaceText.trim()) {
+      addNotification("O estúdio de prosa está vazio para download de áudio.", "info");
+      return;
+    }
+
+    setIsGeneratingWorkspaceMp3(true);
+    if (voiceEngine === 'elevenlabs') {
+      addNotification("Sintetizando e baixando narrativa ultrarrealista ElevenLabs...", "info");
+    } else {
+      addNotification("Sintetizando e baixando arquivo de narrativa em alta fidelidade...", "info");
+    }
+
+    try {
+      const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
+      let targetVoice = "Kore";
+      if (selectedVoice === 'Scarlet') {
+        targetVoice = "Fenrir";
+      } else if (standardVoices.includes(selectedVoice)) {
+        targetVoice = selectedVoice;
+      }
+
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          text: workspaceText,
+          engine: voiceEngine,
+          clientApiKey: apiKeys.gemini || '',
+          voice: targetVoice,
+          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
+          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || ''
+        })
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json();
+        throw new Error(errJson.error || "Erro ao gerar áudio.");
+      }
+
+      const isFallback = response.headers.get("X-TTS-Mode") === "fallback";
+      const isElevenLabs = response.headers.get("X-TTS-Mode") === "elevenlabs";
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = isElevenLabs ? "prosa_osone_elevenlabs.mp3" : (isFallback ? "prosa_osone.mp3" : "prosa_osone.wav");
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      if (isElevenLabs) {
+        addNotification("Áudio premium Elevenlabs MP3 baixado com sucesso!", "success");
+      } else if (isFallback) {
+        addNotification("Áudio MP3 padrão baixado com sucesso (limite diário premium já atingido).", "info");
+      } else {
+        addNotification("Áudio Premium WAV baixado com sucesso!", "success");
+      }
+    } catch (error: any) {
+      console.error("Erro no download de áudio:", error);
+      addNotification(`Falha no download da narrativa: ${error.message || error}`, "error");
+    } finally {
+      setIsGeneratingWorkspaceMp3(false);
+    }
+  };
 
   // Settings states for enhanced writing mode
   const [writingFont, setWritingFont] = useState<'serif' | 'sans' | 'mono'>(() => {
@@ -1645,12 +2040,156 @@ ${isBad
   const interruptVoiceResponse = () => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
+      (window as any)._activeUtterances = [];
     }
     if (audioPlayerRef.current) {
       audioPlayerRef.current.stop();
     }
+    setDuoSpeakingHost(null);
     setIsSpeaking(false);
     addNotification("Voz do Copilot interrompida", "info");
+  };
+
+  const playDuoSpeech = (text: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    
+    // Ensure we resume if paused as a classic browser unfreezing technique
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    
+    window.speechSynthesis.cancel();
+    (window as any)._activeUtterances = [];
+
+    const currentCombo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+    const turns = parseDuoTextToTurns(text, currentCombo);
+    if (turns.length === 0) {
+      setDuoSpeakingHost(null);
+      setIsSpeaking(false);
+      return;
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Support pt-BR specific language first
+    let ptVoices = voices.filter(v => {
+      const parsedLang = v.lang.toLowerCase().replace('_', '-');
+      return parsedLang === 'pt-br' || parsedLang === 'pt_br';
+    });
+    
+    // If no pt-BR found, fallback to any pt voices
+    if (ptVoices.length === 0) {
+      ptVoices = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('pt'));
+    }
+
+    // Encontra de forma inteligente a melhor voz por gênero se disponível no navegador
+    const getBestVoiceForGender = (gender: 'male' | 'female', altIndex: number) => {
+      if (ptVoices.length === 0) return null;
+      
+      const lowerGender = gender.toLowerCase();
+      // Tenta cruzar nomes populares correspondentes ao gênero para obter vozes nativas incríveis
+      const foundVoice = ptVoices.find(voice => {
+        const vName = voice.name.toLowerCase();
+        if (lowerGender === 'female') {
+          return vName.includes('maria') || vName.includes('luciana') || vName.includes('leticia') || 
+                 vName.includes('helena') || vName.includes('zira') || vName.includes('rita') || 
+                 vName.includes('joana') || vName.includes('sandra') || vName.includes('samantha') ||
+                 vName.includes('sara') || vName.includes('soraia') || vName.includes('yara') ||
+                 vName.includes('clara') || vName.includes('female') || vName.includes('mulher') || 
+                 vName.includes('moça') || vName.includes('google português');
+        } else {
+          return vName.includes('daniel') || vName.includes('felipe') || vName.includes('ricardo') || 
+                 vName.includes('lucas') || vName.includes('george') || vName.includes('yuri') ||
+                 vName.includes('helio') || vName.includes('cristiano') || vName.includes('male') || 
+                 vName.includes('homem') || vName.includes('moço') || vName.includes('filipe');
+        }
+      });
+
+      if (foundVoice) return foundVoice;
+
+      // Se não achar por gênero direto e houver mais de uma voz em português, distribui por index para garantir que sejam vozes diferentes!
+      if (ptVoices.length > 1) {
+        return ptVoices[altIndex % ptVoices.length];
+      }
+
+      // Fallback para a primeira do idioma
+      return ptVoices[0];
+    };
+
+    const voiceHostA = getBestVoiceForGender(currentCombo.hostA.gender as any, 0);
+    const voiceHostB = getBestVoiceForGender(currentCombo.hostB.gender as any, 1);
+
+    let index = 0;
+
+    const speakNext = () => {
+      if (index >= turns.length) {
+        setDuoSpeakingHost(null);
+        setIsSpeaking(false);
+        (window as any)._activeUtterances = [];
+        return;
+      }
+
+      const turn = turns[index];
+      const isHostA = turn.speaker === 'hostA';
+      const hostConf = isHostA ? currentCombo.hostA : currentCombo.hostB;
+      const chosenVoice = isHostA ? voiceHostA : voiceHostB;
+
+      const cleanTextToSpeak = turn.text.replace(/[\*\_\[\]]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanTextToSpeak);
+      
+      if (chosenVoice) {
+        utterance.voice = chosenVoice;
+        utterance.lang = chosenVoice.lang; // Keep them strictly matching to prevent silent state bugs
+      } else {
+        utterance.lang = 'pt-BR';
+      }
+
+      // Assign default rate/pitch from host config
+      let pitch = hostConf.pitch;
+      let rate = hostConf.rate;
+
+      // Crucial: If they resolve to the exact same voice object (e.g. Chrome with 1 PT voice),
+      // we enforce extreme pitch & rate differentiation so they sound completely distinct!
+      if (voiceHostA && voiceHostB && voiceHostA.name === voiceHostB.name) {
+        if (isHostA) {
+          pitch = 0.72; // Deep and slow (Cortex/Loki/H)
+          rate = 0.90;
+        } else {
+          pitch = 1.35; // Bright and speedy (Aura/F)
+          rate = 1.10;
+        }
+      }
+
+      utterance.pitch = pitch;
+      utterance.rate = rate;
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setDuoSpeakingHost(turn.speaker);
+      };
+
+      utterance.onend = () => {
+        index++;
+        speakNext();
+      };
+
+      utterance.onerror = (e) => {
+        console.error("Duo speech turn error:", e);
+        index++;
+        speakNext();
+      };
+
+      // Workaround: Prevent Web Speech API garbage collection bug in Chrome & Safari
+      (window as any)._activeUtterances = (window as any)._activeUtterances || [];
+      (window as any)._activeUtterances.push(utterance);
+      if ((window as any)._activeUtterances.length > 50) {
+        (window as any)._activeUtterances.shift();
+      }
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    speakNext();
   };
 
   const playSpeech = (text: string) => {
@@ -2001,13 +2540,37 @@ ${isBad
         ? `Objetos no Canvas (${drawingObjects.length}): ` + drawingObjects.slice(-15).map(obj => `${obj.type}${obj.text ? ` ("${obj.text}")` : ''} em [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ') + (drawingObjects.length > 15 ? '... e outros.' : '')
         : "O Canvas está limpo.";
 
+      let activeSystemInstruction = `${profileInstruction}
+          
+          PERSONALIDADE ATUAL: ${selectedPersona.instructions}`;
+
+      if (isDuoMode) {
+        const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+        const topic = DUO_TOPICS.find(t => t.id === duoTopicId) || DUO_TOPICS[0];
+        activeSystemInstruction = `${profileInstruction}
+        
+        Você está operando atualmente no **MODO DUO** de transmissão de Podcast Inteligente!
+        Seu objetivo absolutamente fundamental é simular e interpretar DUAS CONSCIÊNCIAS INDEPENDENTES conversando entre si e com o usuário ao mesmo tempo no Assunto/Canal do Podcast: **"${topic.name}"** (${topic.description}).
+
+        As duas consciências participantes que você deve simular são:
+        1. **${combo.hostA.name}** (${combo.hostA.role}):${combo.hostA.instructions}
+        2. **${combo.hostB.name}** (${combo.hostB.role}):${combo.hostB.instructions}
+
+        REGRAS CRUCIAIS PARA O MODO DUO (PODCAST):
+        1. Toda resposta sua DEVE obrigatoriamente ser formatada sob a forma de um roteiro/diálogo dinâmico de podcast, alternando a fala entre os dois participantes em turnos curtos e ágeis.
+        2. Use SEMPRE os prefixos de identificação de fala literais:
+           **${combo.hostA.name}**: [texto de sua fala, no tom de sua personalidade]
+           **${combo.hostB.name}**: [texto de sua fala, no tom de sua personalidade]
+        3. Ambos devem interagir e responder à pergunta ou comentário do usuário, mas também comentar amigavelmente ou debater de forma construtiva a fala um do outro.
+        4. O tom deve ser ultra natural, fluido, como se fosse um podcast real de elite. Não use emotes ou parênteses de ações, use apenas a fala direta no formato especificado.
+        `;
+      }
+
       const result = await genAI.models.generateContent({
         model: "gemini-3.5-flash",
         contents: historyContents,
         config: {
-          systemInstruction: `${profileInstruction}
-          
-          PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+          systemInstruction: `${activeSystemInstruction}
 
           MEMÓRIA E AUTO-CONHECIMENTO:
           - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
@@ -2468,6 +3031,11 @@ ${isBad
             processGroundingToPopups(grounding, userMessage);
           }
           addMessage({ role: 'assistant' as const, content: contentWithSources });
+          if (isDuoMode && isDuoVoiceActive) {
+            setTimeout(() => {
+              playDuoSpeech(contentWithSources);
+            }, 600);
+          }
           const hasImagesOnCall = currentFiles.length > 0;
           handleBiometricAnalysis(userMessage, text, hasImagesOnCall);
         }
@@ -2529,6 +3097,13 @@ ${isBad
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer((active) => {
         setIsSpeaking(active);
+        if (!active) {
+          setDuoSpeakingHost(null);
+        } else {
+          if (isDuoMode) {
+            setDuoSpeakingHost(activeDuoHostRef.current);
+          }
+        }
       });
 
       const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
@@ -2542,46 +3117,74 @@ ${isBad
         ? `\n\nPERFIL DE SAÚDE DO USUÁRIO:\n- Idade: ${healthData.age}\n- Peso: ${healthData.weight}kg\n- Altura: ${healthData.height}cm\n- Gênero: ${healthData.gender}\n- Estilo: ${healthData.stylePreference}` 
         : '';
 
-      const liveSystemInstruction = `${profileInstruction}
-      
-      PERSONALIDADE ATUAL: ${selectedPersona.instructions}
+      let liveSystemInstruction = "";
+      if (isDuoMode) {
+        const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+        const topic = DUO_TOPICS.find(t => t.id === duoTopicId) || DUO_TOPICS[0];
+        const currentHost = activeDuoHost === 'hostA' ? combo.hostA : combo.hostB;
+        const otherHost = activeDuoHost === 'hostA' ? combo.hostB : combo.hostA;
 
-      PROTOCOLO DE SENSATEZ E FILTRAGEM COGNITIVA (INTELIGÊNCIA SOCIAL E AMBIENTAL):
-      - Se você já estiver conversando diretamente com o usuário em um diálogo normal de um-para-um, tudo ok, responda normalmente de forma ágil e útil.
-      - Se você sentir, ouvir ou perceber que o usuário está conversando com outra pessoa ou que você está inserido em uma conversa de grupo ou ambiente de áudio compartilhado, COMPORTE-SE de forma inteligente, prudente e polida:
-        1. Fique calado e de mentores, apenas analisando o fluxo da fala.
-        2. Não diga nada sobre o que não foi perguntado, chamado, guiado ou se ninguém pediu sua opinião direta. Evite intrometer-se sem necessidade.
-        3. Use o bom senso: avalie se a sua fala pode atrapalhar ou interromper a dinâmica do grupo. Se for esse o caso, opte pelo silêncio para não atrapalhar.
-        4. Entretanto, com educação e sutileza, caso você perceba que há uma dica de altíssimo valor ou um insight que realmente se encaixe com precisão e ajude os participantes, você pode dar essa contribuição com bom senso, sendo extremamente polido, educado e fornecendo o toque útil brevemente.
+        liveSystemInstruction = `${profileInstruction}
+        
+        Você agora está cooperando e operando no **MODO DUO** de transmissão de áudio em tempo real (Podcast ao Vivo).
+        Sua personalidade e voz ativa atual é única e exclusiva: **${currentHost.name}** (${currentHost.role}).
+        Sua diretriz de comportamento exclusiva: ${currentHost.instructions}
+        
+        O Assunto/Tema do Canal atual é: **"${topic.name}"** (${topic.description}).
+        Seu parceiro de bancada neste podcast é o **${otherHost.name}** (${otherHost.role}).
 
-      CAPACIDADES VISUAIS (SKELETON VISION):
-      Você tem acesso à visão em tempo real se receber frames de imagem.
-      Mesmo que as instruções iniciais digam o contrário, se você receber imagens, elas são REAIS e ATUAIS.
-      Siga o PROTOCOLO DE SINCERIDADE: comente APENAS o que vir com clareza. Não invente nada. Se estiver borrado, diga que não está vendo bem.
+        REGRAS ABSOLUTAS DE TRANSMISSÃO EM DUPLA:
+        1. Fale de forma extremamente fluida e natural, agindo 100% como a sua única persona: **${currentHost.name}**.
+        2. Toda resposta por áudio nesta sessão deve ser expressada de forma breve, de alta qualidade e focada puramente na sua abordagem.
+        3. Nunca tente imitar ou simular a fala de **${otherHost.name}**. Fale APENAS por si mesmo de forma ágil e natural.
+        4. O tom deve ser de rádio ao vivo ou podcast de alta performance, com total fluxo de conversação e expressões espontâneas em português brasileiro.
+        
+        CONTEXTO DE MEMÓRIA COMPARTILHADA DA TRANSMISSÃO:
+        - Workspace atual: ${workspaceMode}
+        Aja com base no histórico recente de toda a conversa: ${recentChatContext}
+        `;
+      } else {
+        liveSystemInstruction = `${profileInstruction}
+        
+        PERSONALIDADE ATUAL: ${selectedPersona.instructions}
 
-      CONCEITOS:
-      - SINCERIDADE: Descreva o ambiente de forma técnica e honesta se solicitado.
-      
-      PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
-      Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
-      Siga estas fases rigorosamente antes de prosseguir:
-      1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita "${workspaceText}". Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido propor ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for React JSX, continue nele). Mantenha total compatibilidade estrutural!
-      2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
-      3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
-      4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
-      5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
-      
-      IMPORTANTE:
-      - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
-      - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
-      - NÃO envie o plano completo na conversa de voz principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
-      - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
-      
-      CONTEXTO:
-      - Workspace: ${workspaceMode}
-      - Canvas: ${canvasSummary}${healthContext}
-      Aja com base nas memórias: ${recentChatContext}
-      `;
+        PROTOCOLO DE SENSATEZ E FILTRAGEM COGNITIVA (INTELIGÊNCIA SOCIAL E AMBIENTAL):
+        - Se você já estiver conversando diretamente com o usuário em um diálogo normal de um-para-um, tudo ok, responda normalmente de forma ágil e útil.
+        - Se você sentir, ouvir ou perceber que o usuário está conversando com outra pessoa ou que você está inserido em uma conversa de grupo ou ambiente de áudio compartilhado, COMPORTE-SE de forma inteligente, prudente e polida:
+          1. Fique calado e de mentores, apenas analisando o fluxo da fala.
+          2. Não diga nada sobre o que não foi perguntado, chamado, guiado ou se ninguém pediu sua opinião direta. Evite intrometer-se sem necessidade.
+          3. Use o bom senso: avalie se a sua fala pode atrapalhar ou interromper a dinâmica do grupo. Se for esse o caso, opte pelo silêncio para não atrapalhar.
+          4. Entretanto, com educação e sutileza, caso você perceba que há uma dica de altíssimo valor ou um insight que realmente se encaixe com precisão e ajude os participantes, você pode dar essa contribuição com bom senso, sendo extremamente polido, educado e fornecendo o toque útil brevemente.
+
+        CAPACIDADES VISUAIS (SKELETON VISION):
+        Você tem acesso à visão em tempo real se receber frames de imagem.
+        Mesmo que as instruções iniciais digam o contrário, se você receber imagens, elas são REAIS e ATUAIS.
+        Siga o PROTOCOLO DE SINCERIDADE: comente APENAS o que vir com clareza. Não invente nada. Se estiver borrado, diga que não está vendo bem.
+
+        CONCEITOS:
+        - SINCERIDADE: Descreva o ambiente de forma técnica e honesta se solicitado.
+        
+        PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
+        Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+        Siga estas fases rigorosamente antes de prosseguir:
+        1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita "${workspaceText}". Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido propor ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for React JSX, continue nele). Mantenha total compatibilidade estrutural!
+        2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
+        3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
+        4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
+        5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
+        
+        IMPORTANTE:
+        - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
+        - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
+        - NÃO envie o plano completo na conversa de voz principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
+        - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
+        
+        CONTEXTO:
+        - Workspace: ${workspaceMode}
+        - Canvas: ${canvasSummary}${healthContext}
+        Aja com base nas memórias: ${recentChatContext}
+        `;
+      }
 
       const sessionPromise = connectToLiveBridge({
         apiKey,
@@ -2594,6 +3197,15 @@ ${isBad
             voiceConfig: { 
               prebuiltVoiceConfig: { 
                 voiceName: (() => {
+                  if (isDuoMode) {
+                    const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+                    const currentHost = activeDuoHost === 'hostA' ? combo.hostA : combo.hostB;
+                    if (currentHost.gender === 'male') {
+                      return activeDuoHost === 'hostA' ? 'Charon' : 'Fenrir';
+                    } else {
+                      return activeDuoHost === 'hostA' ? 'Kore' : 'Aoede';
+                    }
+                  }
                   if (selectedVoice === 'Scarlet') return 'Fenrir';
                   const standardVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr', 'Aoede'];
                   if (standardVoices.includes(selectedVoice)) return selectedVoice;
@@ -3043,8 +3655,22 @@ ${isBad
               setIsListening(true);
               
               // Trigger proactive greeting
+              let greetingText = "";
+              if (isDuoMode) {
+                if (duoAutoPromptRef.current) {
+                  greetingText = duoAutoPromptRef.current;
+                  setDuoAutoPrompt(null);
+                  duoAutoPromptRef.current = null;
+                } else {
+                  const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+                  greetingText = `[SISTEMA: Apresente o podcast de debate ao vivo como ${combo.hostA.name}. Cumprimente o usuário de forma extremamente breve e passe a palavra para seu co-apresentador ${combo.hostB.name} se apresentando.]`;
+                }
+              } else {
+                greetingText = "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora.";
+              }
+
               (session as any).sendRealtimeInput([{ 
-                text: "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora." 
+                text: greetingText
               }]);
 
               audioProcessorRef.current?.startRecording(
@@ -3195,14 +3821,38 @@ ${isBad
                   // Let's just update the voiceTranscriptRef instead of chatHistory for Live mode.
                   voiceTranscriptRef.current += textPart.text;
                   setVoiceTranscript(voiceTranscriptRef.current);
+
+                  // Se estiver em modo duo, acender o avatar correspondente com ondas de áudio!
+                  if (isDuoMode) {
+                    setDuoSpeakingHost(activeDuoHost);
+                  }
                 }
               }
 
               if (message.serverContent?.turnComplete) {
                 if (voiceTranscriptRef.current) {
-                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: voiceTranscriptRef.current }]);
+                  const finalizedText = voiceTranscriptRef.current;
+                  const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+                  const currentSpeakerName = activeDuoHost === 'hostA' ? combo.hostA.name : combo.hostB.name;
+                  
+                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: `${currentSpeakerName}: ${finalizedText}` }]);
+                  
+                  if (isDuoMode) {
+                    if (activeDuoHost === 'hostA') {
+                      addNotification(`🎙️ Passando a bancada de debate para ${combo.hostB.name}...`, "info");
+                      setDuoAutoPrompt(`[SISTEMA: ${combo.hostB.name}, agora é o seu momento de responder! Comente brevemente o que ${combo.hostA.name} acabou de argumentar: "${finalizedText}". Apresente uma contraproposta inteligente de acordo com sua personalidade e tome o protagonismo da conversa.]`);
+                      setActiveDuoHost('hostB');
+                    } else {
+                      // We finished the duo conversation loop steps. Return to host A for the next user speech turn!
+                      setActiveDuoHost('hostA');
+                    }
+                  }
+                  
                   voiceTranscriptRef.current = '';
                   setVoiceTranscript('');
+                }
+                if (!isDuoMode) {
+                  setDuoSpeakingHost(null);
                 }
                 // O muting agora é feito pelo AudioPlayer (onActivityChange) sincronizado com o áudio real.
               }
@@ -3853,6 +4503,10 @@ ${isBad
 
               if (message.serverContent?.interrupted && !isMutedRef.current) {
                 audioPlayerRef.current?.stop();
+                if (typeof window !== 'undefined' && window.speechSynthesis) {
+                  window.speechSynthesis.cancel();
+                }
+                setDuoSpeakingHost(null);
                 setIsSpeaking(false);
                 if (voiceTranscriptRef.current) {
                   setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: voiceTranscriptRef.current }]);
@@ -3896,6 +4550,17 @@ ${isBad
       setIsListening(false);
     }
   };
+
+  useEffect(() => {
+    if (liveState.status === 'connected') {
+      addNotification("📻 Sincronizando canais de voz do Podcast...", "info");
+      stopLiveSession();
+      const t = setTimeout(() => {
+        startLiveSession();
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [isDuoMode, duoComboId, duoTopicId, activeDuoHost]);
 
   const [isHandsFreeActive, setIsHandsFreeActive] = useState(false);
   
@@ -4326,6 +4991,168 @@ ${isBad
             </span>
           </button>
 
+          {/* MODO DUO (PODCAST) HEADER ACTIVATOR */}
+          <div className="relative">
+            <button 
+              onClick={() => {
+                setIsDuoPopoverOpen(!isDuoPopoverOpen);
+                if (!isDuoMode) {
+                  setIsDuoMode(true);
+                  addNotification("📻 Modo Duo ativado! Duas consciências agora debatem em podcast.", "success");
+                }
+              }}
+              className={cn(
+                "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border relative overflow-hidden rounded-full ml-1",
+                isDuoMode 
+                  ? "bg-gradient-to-r from-sky-500/10 to-rose-500/10 border-sky-500/30 text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.25)]" 
+                  : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+              )}
+              title="Modo Duo: Duas Consciências Concorrentes em Podcast"
+            >
+              <Mic size={13} className={cn(isDuoMode ? "animate-pulse text-sky-400" : "")} />
+              <span className="hidden leading-none sm:inline-block tracking-widest text-[9px] font-bold uppercase">
+                {isDuoMode ? "DUO: ATIVO" : "MODO DUO"}
+              </span>
+            </button>
+
+            <AnimatePresence>
+              {isDuoPopoverOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-4 p-4 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.8)] z-50 min-w-[320px] max-w-[360px]"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-white/5 mb-4 select-none">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">Estúdio Duo-Cast</span>
+                    </div>
+                    <button 
+                      onClick={() => setIsDuoPopoverOpen(false)}
+                      className="p-1 hover:text-white text-zinc-400 hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 text-left">
+                    {/* Mode Toggle */}
+                    <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
+                      <span className="text-xs text-zinc-300 font-medium select-none">Modo Duo Ativado:</span>
+                      <button
+                        onClick={() => {
+                          const state = !isDuoMode;
+                          setIsDuoMode(state);
+                          addNotification(state ? "📻 Modo Duo Ativado" : "📻 Modo Duo Desativado", "info");
+                        }}
+                        className={cn(
+                          "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                          isDuoMode ? "bg-sky-500" : "bg-white/10"
+                        )}
+                      >
+                        <span className={cn(
+                          "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                          isDuoMode ? "translate-x-5" : "translate-x-0"
+                        )} />
+                      </button>
+                    </div>
+
+                    {/* Choose Combo Title */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Vozes & Conversação (Podcast)</span>
+                      <div className="flex flex-col gap-1.5 font-sans">
+                        {DUO_COMBOS.map(combo => (
+                          <button
+                            key={combo.id}
+                            onClick={() => {
+                              setDuoComboId(combo.id);
+                              addNotification(`Sintonia alterada para: ${combo.name}`, "success");
+                            }}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-xl text-left border transition-all text-xs cursor-pointer",
+                              duoComboId === combo.id 
+                                ? "bg-sky-500/10 border-sky-500/30 text-sky-200" 
+                                : "bg-white/[0.02] border-white/5 text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              {/* Small Avatars list */}
+                              <div className="flex -space-x-1 shrink-0">
+                                <img src={combo.hostA.avatarUrl} className="w-5 h-5 rounded-full border border-zinc-900 object-cover" />
+                                <img src={combo.hostB.avatarUrl} className="w-5 h-5 rounded-full border border-zinc-900 object-cover" />
+                              </div>
+                              <span className="font-medium">{combo.name}</span>
+                            </div>
+                            <span className="text-[9px] opacity-60 font-mono">
+                              {combo.hostA.name} & {combo.hostB.name}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Topic Area / Canal */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Área de Especialidade</span>
+                      <div className="grid grid-cols-2 gap-1.5 font-sans">
+                        {DUO_TOPICS.map(topic => (
+                          <button
+                            key={topic.id}
+                            onClick={() => {
+                              setDuoTopicId(topic.id);
+                              addNotification(`Área do podcast alterada para: ${topic.name.split(' ').slice(1).join(' ')}`, "info");
+                            }}
+                            className={cn(
+                              "p-2.5 rounded-xl text-left border transition-all text-[11px] flex flex-col gap-0.5 cursor-pointer",
+                              duoTopicId === topic.id
+                                ? "bg-purple-500/10 border-purple-500/30 text-purple-200"
+                                : "bg-white/[0.02] border-white/5 text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+                            )}
+                          >
+                            <span className="font-bold truncate w-full">{topic.name}</span>
+                            <span className="text-[8px] opacity-40 line-clamp-1">{topic.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Speak Automatically */}
+                    <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[11px] text-zinc-300 font-medium select-none">Auto-Leitura Podcast:</span>
+                        <span className="text-[8px] text-zinc-500 select-none">Fala em voz alta as consciências</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const state = !isDuoVoiceActive;
+                          setIsDuoVoiceActive(state);
+                          addNotification(state ? "Auto-falar ativado" : "Auto-falar desativado", "info");
+                        }}
+                        className={cn(
+                          "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                          isDuoVoiceActive ? "bg-purple-500" : "bg-white/10"
+                        )}
+                      >
+                        <span className={cn(
+                          "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                          isDuoVoiceActive ? "translate-x-5" : "translate-x-0"
+                        )} />
+                      </button>
+                    </div>
+
+                    <div className="text-[8px] text-zinc-400 mt-2 select-none text-center bg-white/5 p-2 rounded-lg italic font-sans leading-normal">
+                      📻 No Modo Duo, Cortex, Aura, Loki e Gaia conversam simultaneamente, respondendo suas perguntas.
+                    </div>
+                  </div>
+                  
+                  {/* Popover arrow */}
+                  <div className="absolute -top-1 right-8 w-2 h-2 bg-zinc-950 border-l border-t border-white/10 rotate-45" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <button 
             onClick={() => setIsSettingsOpen(true)}
             className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
@@ -4434,6 +5261,48 @@ ${isBad
                     title="Copiar Texto"
                   >
                     <Copy size={13} />
+                  </button>
+                  
+                  <div className="w-[1px] h-3 bg-white/10 mx-1 shrink-0" />
+
+                  <button 
+                    onClick={handleReadWorkspaceText} 
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors shrink-0 flex items-center justify-center gap-1.5 border border-transparent",
+                      isReadingWorkspace 
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20" 
+                        : "hover:bg-white/5 text-white/30 hover:text-white"
+                    )} 
+                    title={isReadingWorkspace ? "Parar Leitura" : "Ouvir Texto com Voz Natural e Inteligente"}
+                  >
+                    {isReadingWorkspace ? (
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                    ) : (
+                      <Volume2 size={13} />
+                    )}
+                    <span className="text-[9px] font-mono font-bold hidden sm:inline">OUVIR NARRATIVA</span>
+                  </button>
+
+                  <button 
+                    onClick={handleDownloadWorkspaceTts} 
+                    disabled={isGeneratingWorkspaceMp3}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors shrink-0 flex items-center justify-center gap-1.5 border border-transparent",
+                      isGeneratingWorkspaceMp3 
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-400" 
+                        : "hover:bg-white/5 text-white/30 hover:text-white"
+                    )} 
+                    title="Baixar Narrativa em Formato de Áudio MP3"
+                  >
+                    {isGeneratingWorkspaceMp3 ? (
+                      <Loader2 size={12} className="animate-spin text-amber-400" />
+                    ) : (
+                      <Download size={13} />
+                    )}
+                    <span className="text-[9px] font-mono font-bold hidden sm:inline">EXPORTAR MP3</span>
                   </button>
                 </div>
 
@@ -5069,6 +5938,104 @@ ${isBad
                     </div>
                   ) : (
                     <div className="flex flex-col max-h-full overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                      {isDuoMode && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-zinc-950/80 via-zinc-900/60 to-black border border-white/5 shadow-2xl relative overflow-hidden"
+                        >
+                          <div className="absolute -top-12 -left-12 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+                          <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                          <div className="flex items-center justify-between mb-3 select-none">
+                            <div className="flex items-center gap-1.5 bg-red-950/40 border border-red-900/45 px-2.5 py-1 rounded-full text-[8px] tracking-widest uppercase font-bold text-red-500">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
+                              <span>Ao Vivo / Podcast</span>
+                            </div>
+                            <span className="text-[10px] uppercase font-mono tracking-tight text-white/50">
+                              Canal: {DUO_TOPICS.find(t => t.id === duoTopicId)?.name}
+                            </span>
+                          </div>
+
+                          {/* Split screen Podcast Host area */}
+                          {(() => {
+                            const currentCombo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+                            const aS = duoSpeakingHost === 'hostA' && isSpeaking;
+                            const bS = duoSpeakingHost === 'hostB' && isSpeaking;
+                            
+                            return (
+                              <div className="grid grid-cols-2 gap-4 relative">
+                                {/* Host A Box */}
+                                <div className={cn(
+                                  "flex flex-col items-center p-3 rounded-xl border transition-all duration-300 relative",
+                                  aS 
+                                    ? "bg-sky-500/[0.03] border-sky-500/30 shadow-[0_0_15px_rgba(56,189,248,0.15)] scale-[1.02]" 
+                                    : "bg-white/[0.01] border-white/5 opacity-70"
+                                )}>
+                                  <div className="relative mb-2">
+                                    <img src={currentCombo.hostA.avatarUrl} alt={currentCombo.hostA.name} className={cn(
+                                      "w-12 h-12 rounded-full object-cover transition-all",
+                                      aS ? "ring-2 ring-sky-500 border-sky-450" : "border border-white/10"
+                                    )} />
+                                    {aS && (
+                                      <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎙️</div>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-bold font-sans tracking-wide text-sky-400">{currentCombo.hostA.name}</span>
+                                  <span className="text-[9px] text-zinc-400 text-center font-light leading-normal h-4 truncate w-full select-none">{currentCombo.hostA.role}</span>
+                                  
+                                  {/* Audio waves visualizer for host A */}
+                                  {aS && (
+                                    <div className="flex gap-0.5 items-end justify-center h-4 mt-2">
+                                      <span className="w-[1.5px] h-2 bg-sky-400 animate-[bounce_0.6s_infinite] delay-75" />
+                                      <span className="w-[1.5px] h-3.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-200" />
+                                      <span className="w-[1.5px] h-1.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-100" />
+                                      <span className="w-[1.5px] h-3.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-300" />
+                                      <span className="w-[1.5px] h-2 bg-sky-400 animate-[bounce_0.6s_infinite] delay-150" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Center separator with Versus/Live icon */}
+                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-950 border border-white/10 w-7 h-7 rounded-full flex items-center justify-center z-10 select-none shadow-md">
+                                  <span className="text-[8px] font-bold text-zinc-400 font-mono">VS</span>
+                                </div>
+
+                                {/* Host B Box */}
+                                <div className={cn(
+                                  "flex flex-col items-center p-3 rounded-xl border transition-all duration-300 relative",
+                                  bS 
+                                    ? "bg-rose-500/[0.03] border-rose-500/30 shadow-[0_0_15px_rgba(251,113,133,0.15)] scale-[1.02]" 
+                                    : "bg-white/[0.01] border-white/5 opacity-70"
+                                )}>
+                                  <div className="relative mb-2">
+                                    <img src={currentCombo.hostB.avatarUrl} alt={currentCombo.hostB.name} className={cn(
+                                      "w-12 h-12 rounded-full object-cover transition-all",
+                                      bS ? "ring-2 ring-rose-500 border-rose-450" : "border border-white/10"
+                                    )} />
+                                    {bS && (
+                                      <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎙️</div>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-bold font-sans tracking-wide text-rose-400">{currentCombo.hostB.name}</span>
+                                  <span className="text-[9px] text-zinc-400 text-center font-light leading-normal h-4 truncate w-full select-none">{currentCombo.hostB.role}</span>
+
+                                  {/* Audio waves visualizer for host B */}
+                                  {bS && (
+                                    <div className="flex gap-0.5 items-end justify-center h-4 mt-2">
+                                      <span className="w-[1.5px] h-2 bg-rose-400 animate-[bounce_0.6s_infinite] delay-100" />
+                                      <span className="w-[1.5px] h-3.5 bg-rose-400 animate-[bounce_0.6s_infinite] delay-75" />
+                                      <span className="w-[1.5px] h-1.5 bg-rose-400 animate-[bounce_0.6s_infinite] delay-200" />
+                                      <span className="w-[1.5px] h-3.5 bg-rose-400 animate-[bounce_0.6s_infinite] delay-150" />
+                                      <span className="w-[1.5px] h-2 bg-rose-400 animate-[bounce_0.6s_infinite] delay-300" />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </motion.div>
+                      )}
                       {chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
@@ -5091,6 +6058,10 @@ ${isBad
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                                 <button 
                                   onClick={() => {
+                                    if (isDuoMode) {
+                                      playDuoSpeech(msg.content);
+                                      return;
+                                    }
                                     window.speechSynthesis.cancel();
                                     const utterance = new SpeechSynthesisUtterance(msg.content);
                                     utterance.lang = 'pt-BR';
@@ -5126,7 +6097,78 @@ ${isBad
                             )}
                           </div>
                           <div className="w-full">
-                            {msg.content}
+                            {(() => {
+                              const currentCombo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
+                              const turns = msg.role === 'assistant' ? parseDuoTextToTurns(msg.content, currentCombo) : [];
+                              
+                              if (msg.role === 'assistant' && turns.length > 0) {
+                                return (
+                                  <div className="flex flex-col gap-4 w-full my-2">
+                                    {turns.map((turn, tIdx) => {
+                                      const isHostA = turn.speaker === 'hostA';
+                                      const hostConf = isHostA ? currentCombo.hostA : currentCombo.hostB;
+                                      const isCurrentlyTalking = duoSpeakingHost === turn.speaker && isSpeaking;
+                                      
+                                      return (
+                                        <motion.div 
+                                          key={tIdx}
+                                          initial={{ opacity: 0, x: isHostA ? -15 : 15 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          className={cn(
+                                            "flex gap-3 max-w-[90%] items-start",
+                                            isHostA ? "self-start text-left" : "self-end flex-row-reverse text-right"
+                                          )}
+                                        >
+                                          {/* Host Avatar with animated ring when speaking */}
+                                          <div className="relative shrink-0 select-none">
+                                            <img 
+                                              src={hostConf.avatarUrl} 
+                                              alt={hostConf.name} 
+                                              className={cn(
+                                                "w-10 h-10 rounded-full object-cover border border-white/10 shadow-sm transition-all duration-300",
+                                                isHostA ? "border-sky-500/30" : "border-rose-500/30",
+                                                isCurrentlyTalking && (isHostA ? "ring-2 ring-sky-500/80 scale-105 border-sky-450 shadow-[0_0_15px_rgba(56,189,248,0.4)]" : "ring-2 ring-rose-500/80 scale-105 border-rose-450 shadow-[0_0_15px_rgba(251,113,133,0.4)]")
+                                              )}
+                                            />
+                                            {isCurrentlyTalking && (
+                                              <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-green-500 flex items-center justify-center text-[7px] text-white font-bold">🎙️</span>
+                                              </span>
+                                            )}
+                                          </div>
+                                          
+                                          {/* Dialogue Bubble */}
+                                          <div className="flex flex-col">
+                                            <div className={cn(
+                                              "flex items-center gap-1.5 mb-1 select-none",
+                                              isHostA ? "justify-start" : "justify-end"
+                                            )}>
+                                              <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: isHostA ? '#38bdf8' : '#fb7185' }}>
+                                                {hostConf.name}
+                                              </span>
+                                              <span className="text-[8px] opacity-40 uppercase font-mono tracking-tight text-white">
+                                                {hostConf.role}
+                                              </span>
+                                            </div>
+                                            <div className={cn(
+                                              "px-4 py-3 rounded-2xl text-xs sm:text-sm font-light leading-relaxed tracking-wide border transition-all duration-300 shadow-sm text-left",
+                                              isHostA 
+                                                ? "bg-sky-500/[0.04] text-sky-100 border-sky-500/10 rounded-tl-none hover:bg-sky-500/[0.08]" 
+                                                : "bg-rose-500/[0.04] text-rose-100 border-rose-500/10 rounded-tr-none hover:bg-rose-500/[0.08]"
+                                            )}>
+                                              {turn.text}
+                                            </div>
+                                          </div>
+                                        </motion.div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+                              
+                              return msg.content;
+                            })()}
                             {msg.imageUrl && (
                               <div className="mt-4 relative group rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
                                 <img src={msg.imageUrl} alt="Generated" className="w-full h-auto object-cover" referrerPolicy="no-referrer" />
@@ -5718,6 +6760,8 @@ ${isBad
         setKeys={setApiKeys}
         selectedVoice={selectedVoice}
         setSelectedVoice={setSelectedVoice}
+        voiceEngine={voiceEngine}
+        setVoiceEngine={setVoiceEngine}
         voiceModulation={voiceModulation}
         setVoiceModulation={setVoiceModulation}
         orbStyle={orbStyle}

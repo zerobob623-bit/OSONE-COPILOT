@@ -224,6 +224,299 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // Helper to construct a standard WAV container header for raw 16-bit Mono PCM streams
+  function pcmToWav(pcmBuffer: Buffer, sampleRate: number = 24000, numChannels: number = 1, bitsPerSample: number = 16): Buffer {
+    const header = Buffer.alloc(44);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = pcmBuffer.length;
+    const chunkSize = 36 + dataSize;
+
+    // RIFF identifier
+    header.write("RIFF", 0);
+    // File length minus RIFF header (8 bytes)
+    header.writeUInt32LE(chunkSize, 4);
+    // RIFF type
+    header.write("WAVE", 8);
+    // Format chunk identifier (fmt with trailing space)
+    header.write("fmt ", 12);
+    // Format chunk size (16 for PCM)
+    header.writeUInt32LE(16, 16);
+    // Sample format (1 for PCM)
+    header.writeUInt16LE(1, 20);
+    // Channel count
+    header.writeUInt16LE(numChannels, 22);
+    // Sample rate
+    header.writeUInt32LE(sampleRate, 24);
+    // Byte rate
+    header.writeUInt32LE(byteRate, 28);
+    // Block align
+    header.writeUInt16LE(blockAlign, 32);
+    // Bits per sample
+    header.writeUInt16LE(bitsPerSample, 34);
+    // Data chunk identifier
+    header.write("data", 36);
+    // Data chunk size
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmBuffer]);
+  }
+
+  // helper to split text into chunks safely for Google Translate TTS API (200 char limit) - Kept as fallback or general reference
+  function splitIntoChunks(text: string, maxLength: number = 200): string[] {
+    const chunks: string[] = [];
+    let currentChunk = "";
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^.!?\n]+/g) || [text];
+    
+    for (const sentence of sentences) {
+      if ((currentChunk + sentence).length <= maxLength) {
+        currentChunk += sentence;
+      } else {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+        }
+        if (sentence.length > maxLength) {
+          const words = sentence.split(/\s+/);
+          let wordChunk = "";
+          for (const word of words) {
+            if ((wordChunk + " " + word).length <= maxLength) {
+              wordChunk += (wordChunk ? " " : "") + word;
+            } else {
+              if (wordChunk.trim()) {
+                chunks.push(wordChunk.trim());
+              }
+              wordChunk = word;
+            }
+          }
+          currentChunk = wordChunk;
+        } else {
+          currentChunk = sentence;
+        }
+      }
+    }
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    return chunks;
+  }
+
+  // helper to split text into optimal paragraph/sentence chunks for premium Gemini 3.1 TTS
+  function splitIntoTtsChunks(text: string, maxLength: number = 800): string[] {
+    const chunks: string[] = [];
+    let currentChunk = "";
+    const sentences = text.match(/[^.!?\n\r]+[.!?\n\r]+|[^.!?\n\r]+/g) || [text];
+    
+    for (const sentence of sentences) {
+      if ((currentChunk + " " + sentence).length <= maxLength) {
+        currentChunk += (currentChunk ? " " : "") + sentence;
+      } else {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+        }
+        if (sentence.length > maxLength) {
+          const words = sentence.split(/\s+/);
+          let wordChunk = "";
+          for (const word of words) {
+            if ((wordChunk + " " + word).length <= maxLength) {
+              wordChunk += (wordChunk ? " " : "") + word;
+            } else {
+              if (wordChunk.trim()) {
+                chunks.push(wordChunk.trim());
+              }
+              wordChunk = word;
+            }
+          }
+          currentChunk = wordChunk;
+        } else {
+          currentChunk = sentence;
+        }
+      }
+    }
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    return chunks;
+  }
+
+  // POST endpoint for high-quality, consolidated Premium Gemini 3.1 TTS or ElevenLabs voice synthesis
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, engine, clientApiKey, voice, elevenLabsApiKey, elevenLabsVoiceId } = req.body;
+      if (!text || typeof text !== "string") {
+        return res.status(400).json({ error: "O texto é obrigatório para conversão de áudio." });
+      }
+
+      const cleanText = text.trim();
+      if (!cleanText) {
+        return res.status(400).json({ error: "O texto está vazio." });
+      }
+
+      // ELEVENLABS ENGINE ROUTE
+      if (engine === 'elevenlabs') {
+        const elApiKey = elevenLabsApiKey || process.env.ELEVENLABS_API_KEY;
+        if (!elApiKey) {
+          return res.status(400).json({ 
+            error: "A chave API da ElevenLabs não foi configurada. Por favor, especifique uma na aba 'Chaves' das Configurações." 
+          });
+        }
+
+        const voiceId = elevenLabsVoiceId || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default Rachel
+        const elChunks = splitIntoTtsChunks(cleanText, 4000);
+        const elBuffers: Buffer[] = [];
+
+        for (const chunk of elChunks) {
+          const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: {
+              "xi-api-key": elApiKey,
+              "Content-Type": "application/json",
+              "accept": "audio/mpeg"
+            },
+            body: JSON.stringify({
+              text: chunk,
+              model_id: "eleven_multilingual_v2",
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75
+              }
+            })
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Erro do ElevenLabs: ${errText || response.statusText}`);
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          elBuffers.push(Buffer.from(arrayBuffer));
+        }
+
+        if (elBuffers.length === 0) {
+          return res.status(500).json({ error: "Nenhum áudio pôde ser gerado pelo ElevenLabs." });
+        }
+
+        const finalElevenLabsBuffer = Buffer.concat(elBuffers);
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Disposition", "attachment; filename=prosa_osone_elevenlabs.mp3");
+        res.setHeader("X-TTS-Mode", "elevenlabs");
+        return res.send(finalElevenLabsBuffer);
+      }
+
+      // GEMINI 3.1 ENGINE ROUTE (DEFAULT)
+      // Check for available API Keys
+      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ 
+          error: "A chave API do Gemini não foi encontrada. Por favor, especifique uma nos Ajustes para utilizar a Voz Premium." 
+        });
+      }
+
+      // Initialize the Gemini SDK
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+
+      // Split the prose into larger smart chunks (up to 2500 characters) to avoid 3 RPM rate limit on Free Tier
+      const chunks = splitIntoTtsChunks(cleanText, 2500);
+      const buffers: Buffer[] = [];
+      let usedFallback = false;
+
+      // Selected voice defaults to 'Kore' (highly natural female narrator in Portuguese)
+      const selectedVoice = voice || "Kore"; 
+
+      for (const chunk of chunks) {
+        let chunkAudioBuffer: Buffer | null = null;
+        
+        // Tiered model candidates list of premium intelligent voice models
+        const candidateModels = [
+          "gemini-3.1-flash-tts-preview",
+          "gemini-3.1-flash-live-preview"
+        ];
+
+        for (const modelName of candidateModels) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents: [{ parts: [{ text: `Leia o seguinte trecho com clareza absoluta, expressividade natural, pausas realistas e ritmo agradável de palestrante:\n\n${chunk}` }] }],
+              config: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: selectedVoice },
+                  },
+                },
+              },
+            });
+
+            const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (base64Audio) {
+              chunkAudioBuffer = Buffer.from(base64Audio, 'base64');
+              console.log(`Successfully generated intelligent voice chunk utilizing candidate model: ${modelName}`);
+              break; // Success, exit model candidates loop for this chunk
+            }
+          } catch (chunkError: any) {
+            console.warn(`Candidate model ${modelName} encountered error for premium voice generation:`, chunkError?.message || chunkError);
+          }
+        }
+
+        if (chunkAudioBuffer) {
+          buffers.push(chunkAudioBuffer);
+        } else {
+          console.warn("All premium Gemini models failed. Resorting to standard fallback for chunk.");
+          usedFallback = true;
+          
+          // Google Translate fallback for this specific chunk
+          const subChunks = splitIntoChunks(chunk, 180);
+          for (const subChunk of subChunks) {
+            try {
+              const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(subChunk)}`;
+              const fbResponse = await fetch(url, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+              });
+              if (fbResponse.ok) {
+                const arrayBuffer = await fbResponse.arrayBuffer();
+                buffers.push(Buffer.from(arrayBuffer));
+              }
+            } catch (fbErr) {
+              console.error("Failed standard fallback synthesis for chunk:", fbErr);
+            }
+          }
+        }
+      }
+
+      if (buffers.length === 0) {
+        return res.status(500).json({ error: "Nenhum áudio pôde ser gerado por nenhum dos serviços de voz." });
+      }
+
+      const finalPcmBuffer = Buffer.concat(buffers);
+
+      if (usedFallback) {
+        // If Google Translate fallback was used, the audio container is MP3
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Disposition", "attachment; filename=prosa_osone.mp3");
+        res.setHeader("X-TTS-Mode", "fallback");
+        res.send(finalPcmBuffer);
+      } else {
+        // High fidelity WAV container for raw Mono 24kHz PCM from Gemini 3.1
+        const wavBuffer = pcmToWav(finalPcmBuffer, 24000);
+        res.setHeader("Content-Type", "audio/wav");
+        res.setHeader("Content-Disposition", "attachment; filename=prosa_osone.wav");
+        res.setHeader("X-TTS-Mode", "premium");
+        res.send(wavBuffer);
+      }
+    } catch (err: any) {
+      console.error("Critical error inside premium /api/tts endpoint:", err);
+      res.status(500).json({ error: err?.message || "Erro no servidor ao sintetizar áudio com Gemini 3.1." });
+    }
+  });
+
   // POST endpoint for generating step-by-step simple integration plans
   app.post("/api/integrations/plan", async (req, res) => {
     try {
