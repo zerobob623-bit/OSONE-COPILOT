@@ -2,7 +2,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
@@ -374,21 +374,42 @@ Nome do interlocutor: ${senderName}`;
         }
 
         const voiceId = elevenLabsVoiceId || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default Rachel
-        const elChunks = splitIntoTtsChunks(cleanText, 4000);
-        const elBuffers: Buffer[] = [];
-
-        // Build voice settings with custom weights if provided, or default values
         const stability = typeof elevenLabsStability === "number" ? elevenLabsStability : 0.5;
         const similarity_boost = typeof elevenLabsSimilarityBoost === "number" ? elevenLabsSimilarityBoost : 0.75;
         const style = typeof elevenLabsStyle === "number" ? elevenLabsStyle : 0.0;
         const use_speaker_boost = typeof elevenLabsSpeakerBoost === "boolean" ? elevenLabsSpeakerBoost : true;
         const modelId = elevenLabsModel || "eleven_turbo_v2_5";
 
-        for (const chunk of elChunks) {
-          let response: Response | null = null;
-          let lastError = "";
+        let response: Response | null = null;
+        let lastError = "";
 
-          // Attempt 1: Using selected model & custom voice settings
+        // Attempt 1: Using selected model & custom voice settings
+        try {
+          response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: "POST",
+            headers: {
+              "xi-api-key": elApiKey,
+              "Content-Type": "application/json",
+              "accept": "audio/mpeg"
+            },
+            body: JSON.stringify({
+              text: cleanText,
+              model_id: modelId,
+              voice_settings: {
+                stability,
+                similarity_boost,
+                style,
+                use_speaker_boost
+              }
+            })
+          });
+        } catch (err: any) {
+          lastError = err.message || "Erro de conexão inicial ElevenLabs API";
+        }
+
+        // Attempt 2: Fallback with "eleven_multilingual_v2" if standard failed
+        if (!response || !response.ok) {
+          console.warn(`ElevenLabs API failed (Model: ${modelId}). Retrying with eleven_multilingual_v2 fallback...`);
           try {
             response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
               method: "POST",
@@ -398,107 +419,49 @@ Nome do interlocutor: ${senderName}`;
                 "accept": "audio/mpeg"
               },
               body: JSON.stringify({
-                text: chunk,
-                model_id: modelId,
+                text: cleanText,
+                model_id: "eleven_multilingual_v2",
                 voice_settings: {
-                  stability,
-                  similarity_boost,
-                  style,
-                  use_speaker_boost
+                  stability: 0.5,
+                  similarity_boost: 0.75
                 }
               })
             });
-          } catch (err: any) {
-            lastError = err.message || "Erro de conexão inicial";
+          } catch (retryErr: any) {
+            lastError = retryErr.message || "Falha de conexão no segundo teste de ElevenLabs";
           }
+        }
 
-          // Attempt 2: If previous failed, retry with "eleven_multilingual_v2" (highly compatible multilingual model)
-          if (!response || !response.ok) {
-            console.warn(`ElevenLabs standard delivery failed (Model: ${modelId}). Retrying with eleven_multilingual_v2 fallback...`);
+        // Final verification
+        if (!response || !response.ok) {
+          const status = response ? response.status : 500;
+          let errText = lastError;
+          if (response) {
             try {
-              response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-                method: "POST",
-                headers: {
-                  "xi-api-key": elApiKey,
-                  "Content-Type": "application/json",
-                  "accept": "audio/mpeg"
-                },
-                body: JSON.stringify({
-                  text: chunk,
-                  model_id: "eleven_multilingual_v2",
-                  voice_settings: {
-                    stability: 0.5,
-                    similarity_boost: 0.75
-                  }
-                })
-              });
-            } catch (retryErr: any) {
-              lastError = retryErr.message || "Falha de conexão no segundo teste";
-            }
-          }
-
-          // Attempt 3: If still failed, try with "eleven_monolingual_v1" (highly compatible legacy monolingual model)
-          if (!response || !response.ok) {
-            console.warn("ElevenLabs retry 1 failed. Retrying with eleven_monolingual_v1...");
-            try {
-              response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-                method: "POST",
-                headers: {
-                  "xi-api-key": elApiKey,
-                  "Content-Type": "application/json",
-                  "accept": "audio/mpeg"
-                },
-                body: JSON.stringify({
-                  text: chunk,
-                  model_id: "eleven_monolingual_v1",
-                  voice_settings: {
-                    stability: 0.5,
-                    similarity_boost: 0.75
-                  }
-                })
-              });
-            } catch (retryErr2: any) {
-              lastError = retryErr2.message || "Falha de conexão no terceiro teste";
-            }
-          }
-
-          // Final verification of this chunk's synthesis
-          if (!response || !response.ok) {
-            const status = response ? response.status : 500;
-            let errText = lastError;
-            if (response) {
-              try {
-                errText = await response.text();
-              } catch (_) {}
-            }
-            
-            // Try to extract clean detail from ElevenLabs JSON
-            let errorMessage = errText;
-            try {
-              const parsed = JSON.parse(errText);
-              if (parsed.detail && typeof parsed.detail === 'object') {
-                errorMessage = parsed.detail.message || JSON.stringify(parsed.detail);
-              } else if (parsed.detail) {
-                errorMessage = parsed.detail;
-              }
+              errText = await response.text();
             } catch (_) {}
-
-            throw new Error(`[Status ${status}] ElevenLabs descartado: ${errorMessage || "Sem resposta ou chave inválida"}`);
           }
+          
+          let errorMessage = errText;
+          try {
+            const parsed = JSON.parse(errText);
+            if (parsed.detail && typeof parsed.detail === 'object') {
+              errorMessage = parsed.detail.message || JSON.stringify(parsed.detail);
+            } else if (parsed.detail) {
+              errorMessage = parsed.detail;
+            }
+          } catch (_) {}
 
-          const arrayBuffer = await response.arrayBuffer();
-          elBuffers.push(Buffer.from(arrayBuffer));
+          return res.status(status).json({ 
+            error: `ElevenLabs recusou o streaming sintetizado: ${errorMessage || "Sem resposta/chave inválida"}` 
+          });
         }
 
-        if (elBuffers.length === 0) {
-          return res.status(500).json({ error: "Nenhum áudio pôde ser gerado pelo ElevenLabs." });
-        }
-
-        const finalElevenLabsBuffer = Buffer.concat(elBuffers);
+        // Retrieve and send the ElevenLabs synthesized audio as a single buffer
+        const arrayBuffer = await response.arrayBuffer();
         res.setHeader("Content-Type", "audio/mpeg");
-        res.setHeader("Content-Disposition", "attachment; filename=prosa_osone_elevenlabs.mp3");
         res.setHeader("X-TTS-Mode", "elevenlabs");
-        return res.send(finalElevenLabsBuffer);
+        return res.send(Buffer.from(arrayBuffer));
       }
 
       // GEMINI 3.1 ENGINE ROUTE (DEFAULT)
@@ -520,8 +483,8 @@ Nome do interlocutor: ${senderName}`;
         }
       });
 
-      // Split the prose into larger smart chunks (up to 2500 characters) to avoid 3 RPM rate limit on Free Tier
-      const chunks = splitIntoTtsChunks(cleanText, 2500);
+      // Split the prose into safer, reliable chunks (up to 700 characters) to avoid 500 timeouts/failures
+      const chunks = splitIntoTtsChunks(cleanText, 700);
       const buffers: Buffer[] = [];
       let usedFallback = false;
 
@@ -538,7 +501,9 @@ Nome do interlocutor: ${senderName}`;
         // Tiered model candidates list of premium intelligent voice models
         const candidateModels = [
           "gemini-3.1-flash-tts-preview",
-          "gemini-3.5-flash"
+          "gemini-3.5-flash",
+          "gemini-2.5-flash",
+          "gemini-2.0-flash"
         ];
 
         for (const modelName of candidateModels) {
@@ -547,7 +512,7 @@ Nome do interlocutor: ${senderName}`;
               model: modelName,
               contents: [{ parts: [{ text: `Leia o seguinte trecho com clareza absoluta, expressividade natural, pausas realistas e ritmo agradável de palestrante:\n\n${chunk}` }] }],
               config: {
-                responseModalities: ["AUDIO"],
+                responseModalities: [Modality.AUDIO],
                 speechConfig: {
                   voiceConfig: {
                     prebuiltVoiceConfig: { voiceName: selectedVoice },
@@ -617,6 +582,41 @@ Nome do interlocutor: ${senderName}`;
     } catch (err: any) {
       console.error("Critical error inside premium /api/tts endpoint:", err);
       res.status(500).json({ error: err?.message || "Erro no servidor ao sintetizar áudio com Gemini 3.1." });
+    }
+  });
+
+  // POST endpoint for high-quality, server-run intelligence completion using gemini-3.5-flash
+  app.post("/api/chat-intel", async (req, res) => {
+    try {
+      const { historyContents, systemInstruction, clientApiKey } = req.body;
+      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida no servidor." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: historyContents,
+        config: {
+          maxOutputTokens: 250,
+          temperature: 0.7,
+          systemInstruction: systemInstruction
+        }
+      });
+
+      return res.json({ text: response.text || "" });
+    } catch (err: any) {
+      console.error("Error inside /api/chat-intel endpoint:", err);
+      return res.status(500).json({ error: err.message || "Erro de servidor ao processar inteligência do Gemini." });
     }
   });
 

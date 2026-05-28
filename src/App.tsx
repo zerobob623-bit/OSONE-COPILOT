@@ -2415,27 +2415,33 @@ ${isBad
     addMessage({ role: 'user', content: userText }); // Só agora adiciona ao chat
     
     try {
-      const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
+      const systemInstruction = `${profileInstruction}
+      PERSONALIDADE ATUAL: ${selectedPersona.instructions}
       
-      const response = await genAI.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: historyContents,
-        config: {
-          maxOutputTokens: 120,
-          temperature: 0.7,
-          systemInstruction: `${profileInstruction}
-          PERSONALIDADE ATUAL: ${selectedPersona.instructions}
-          
-          DIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
-          - Responda de forma direta, simpática e muito fluida (tente usar entre 1 e 3 frases curtas e calorosas).
-          - Evite respostas secas de 1 ou 2 palavras simplesmente. Seja acolhedor e elabore de maneira enxuta.
-          - Nunca faça listas, tópicos estruturados ou explicações textuais densas por voz.
-          - Conduza a conversa de forma estimulante e leve, mantendo o diálogo dinâmico.`
-        }
+      DIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
+      - Responda de forma direta, simpática e muito fluida (tente usar entre 1 e 3 frases curtas e calorosas).
+      - Evite respostas secas de 1 ou 2 palavras simplesmente. Seja acolhedor e elabore de maneira enxuta.
+      - Nunca faça listas, tópicos estruturados ou explicações textuais densas por voz.
+      - Conduza a conversa de forma estimulante e leve, mantendo o diálogo dinâmico.`;
+
+      const response = await fetch("/api/chat-intel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          historyContents,
+          systemInstruction,
+          clientApiKey: apiKeys.gemini || ''
+        })
       });
-      
-      const replyText = response.text || "Desculpe, não consegui te ouvir bem.";
+
+      if (!response.ok) {
+        throw new Error("Erro de resposta do servidor de inteligência");
+      }
+
+      const data = await response.json();
+      const replyText = data.text || "Desculpe, não consegui te ouvir bem.";
       
       addMessage({ role: 'assistant', content: replyText });
       setIsGenerating(false);
