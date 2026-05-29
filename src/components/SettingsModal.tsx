@@ -85,6 +85,16 @@ export const SettingsModal = ({
         }
       }
 
+      // Hot-override with current live state props to guarantee zero latency on input values
+      payload['osone_api_keys'] = JSON.stringify(keys);
+      payload['osone_voice_engine'] = voiceEngine;
+      payload['osone_selected_voice'] = selectedVoice;
+      payload['osone_chat_auto_speak'] = String(isChatAutoSpeakActive);
+      payload['osone_voice_modulation'] = JSON.stringify(voiceModulation);
+      payload['osone_orb_style'] = orbStyle;
+      payload['osone_app_theme'] = appTheme;
+      payload['osone_ai_profile'] = JSON.stringify(aiProfile);
+
       const response = await fetch('/api/memory-sync/save', {
         method: 'POST',
         headers: {

@@ -2,6 +2,7 @@ import express from "express";
 import http from "http";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { WebSocketServer, WebSocket } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { createServer as createViteServer } from "vite";
@@ -92,27 +93,36 @@ async function startServer() {
   });
 
   // ====== NEURAL CONNECTION MEMORY SYNC ENDPOINTS ======
-  const SYNC_FILE_PATH = path.join(process.cwd(), "sync-profiles.json");
+  // Choose safe paths in OS temp folder (writable in severless containers like Cloud Run)
+  const SYNC_FILE_PATH = path.join(os.tmpdir(), "osone-sync-profiles.json");
+  
+  // Shared global memory fallback for 100% database/filesystem-free reliability 
+  let inMemorySyncProfiles: Record<string, any> = {};
 
   // Helper to read sync profiles
   const readSyncProfiles = (): Record<string, any> => {
     try {
-      if (fs.existsSync(SYNC_FILE_PATH)) {
-        const raw = fs.readFileSync(SYNC_FILE_PATH, "utf8");
-        return JSON.parse(raw);
+      if (Object.keys(inMemorySyncProfiles).length === 0) {
+        // Try filling from temporary file storage if in-memory is empty
+        if (fs.existsSync(SYNC_FILE_PATH)) {
+          const raw = fs.readFileSync(SYNC_FILE_PATH, "utf8");
+          inMemorySyncProfiles = JSON.parse(raw);
+        }
       }
     } catch (e) {
-      console.error("Error reading sync-profiles:", e);
+      console.error("Error reading sync-profiles from temporary storage:", e);
     }
-    return {};
+    return inMemorySyncProfiles;
   };
 
   // Helper to write sync profiles
   const writeSyncProfiles = (data: Record<string, any>) => {
     try {
+      inMemorySyncProfiles = data;
+      // Best-effort cache file writing
       fs.writeFileSync(SYNC_FILE_PATH, JSON.stringify(data, null, 2), "utf8");
     } catch (e) {
-      console.error("Error writing sync-profiles:", e);
+      console.warn("Writing to temp directory deferred. Proceeding with active RAM backup:", e.message);
     }
   };
 
