@@ -751,8 +751,8 @@ Nome do interlocutor: ${senderName}`;
   // Handle upgrade event manually to route to the /api/live-ws or /api/blender-ws websocket bridge
   server.on("upgrade", (request, socket, head) => {
     try {
-      const urlObj = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
-      const pathname = urlObj.pathname;
+      const reqUrl = request.url || "";
+      const pathname = reqUrl.split("?")[0];
       
       if (pathname === "/api/live-ws") {
         wss.handleUpgrade(request, socket, head, (ws) => {
@@ -771,8 +771,10 @@ Nome do interlocutor: ${senderName}`;
   wss.on("connection", async (clientWs, req) => {
     console.log("Client connected to the server-side OSONE 4 Live Bridge WS");
     
-    const urlObj = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
-    const clientApiKey = urlObj.searchParams.get("apiKey");
+    const reqUrl = req.url || "";
+    const queryString = reqUrl.includes("?") ? reqUrl.split("?")[1] : "";
+    const searchParams = new URLSearchParams(queryString);
+    const clientApiKey = searchParams.get("apiKey");
     
     // Fallback to server's loaded GEMINI_API_KEY if the client key is empty/not configured
     const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
