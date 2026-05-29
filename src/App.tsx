@@ -485,97 +485,7 @@ export default function App() {
     shouldAutoUnmuteRef.current = shouldAutoUnmute;
   }, [shouldAutoUnmute]);
 
-  // Wake Word listener implementation
-  const isWaitingRef = useRef(isWaitingForWakeWord);
-  useEffect(() => {
-    isWaitingRef.current = isWaitingForWakeWord;
-  }, [isWaitingForWakeWord]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    let stoppedManually = false;
-    const wakeWordRec = new SpeechRecognition();
-    wakeWordRec.lang = 'pt-BR';
-    wakeWordRec.continuous = true;
-    wakeWordRec.interimResults = true;
-
-    const startRecognition = () => {
-      // Use the ref to check status instead of state to avoid closure issues
-      if (isWaitingRef.current && !isListening && !isTranscribing && !stoppedManually) {
-        try {
-          wakeWordRec.start();
-        } catch (e) {
-          // Already started
-        }
-      }
-    };
-
-    wakeWordRec.onresult = (event: any) => {
-      const resultIndex = event.resultIndex;
-      const transcript = event.results[resultIndex][0].transcript.toLowerCase().trim();
-      
-      const wakeWordPatterns = [
-        'ei osone', 'ei ozone', 'ei osorni', 'ei osorne', 'ei o zone', 'eiosone', 'eiozone',
-        'ei uasone', 'ei uazone', 'hey osone', 'hey ozone', 'ei o sono', 'ei oson',
-        'ei o som', 'ei o sol', 'ei au som', 'oi osone', 'oi ozone', 'osone', 'ozone',
-        'ei ozone', 'ei ozoni', 'ei ozeni', 'ei osoni'
-      ];
-
-      // Verificar se a parte atual da fala contém o comando
-      const isMatch = wakeWordPatterns.some(pattern => transcript.includes(pattern));
-
-      if (isMatch) {
-        console.log('Comando detectado!', transcript);
-        
-        stoppedManually = true;
-        try { wakeWordRec.stop(); } catch(e) {}
-        
-        addNotification("Ativando via voz...", "success");
-
-        // Disparar o chat com a frase "Ei, Osone"
-        // Isso fará o chat abrir e a IA responder por texto
-        setIsChatExpanded(true);
-        handleHomeChat('Ei, Osone');
-
-        // Ativar o modo de voz (iniciar sessão) após um pequeno delay para a IA começar a responder
-        setTimeout(() => {
-          startLiveSession();
-        }, 1500);
-      }
-    };
-
-    wakeWordRec.onerror = (event: any) => {
-      if (event.error === 'not-allowed') {
-        setIsWaitingForWakeWord(false);
-        return;
-      }
-      if (event.error !== 'aborted') {
-        console.error('Wake word recognition error', event.error);
-      }
-      setTimeout(startRecognition, 1000);
-    };
-
-    wakeWordRec.onend = () => {
-      if (!stoppedManually) {
-        setTimeout(startRecognition, 500);
-      }
-    };
-
-    wakeWordRecognitionRef.current = wakeWordRec;
-    
-      if (isWaitingForWakeWord && !isListening && !isTranscribing) {
-        stoppedManually = false;
-        startRecognition();
-      }
-
-    return () => {
-      stoppedManually = true;
-      try { wakeWordRec.stop(); } catch(e) {}
-    };
-  }, [isWaitingForWakeWord, isListening, isTranscribing]); // Added isTranscribing to ensure coordination
+  // Wake Word listener implementation (moved below ElevenLabs state declarations)
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -608,6 +518,14 @@ export default function App() {
   const handleTranscriptionToggle = () => {
     if (isSpeaking) {
       interruptVoiceResponse();
+    }
+    if (voiceEngine === 'elevenlabs') {
+      if (isElevenLabsLiveActive) {
+        stopLiveSession();
+      } else {
+        startElevenLabsLiveSession();
+      }
+      return;
     }
     if (isTranscribing) {
       recognitionRef.current?.stop();
@@ -1508,6 +1426,10 @@ interface SearchPopupItem {
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
+  const liveStateRef = useRef<LiveState>({ status: 'idle' });
+  useEffect(() => {
+    liveStateRef.current = liveState;
+  }, [liveState]);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const isCameraActiveRef = useRef(false);
@@ -2126,6 +2048,102 @@ ${isBad
   const accumulatedTranscriptRef = useRef<string>("");
   const lastProcessedResultIndexRef = useRef<number>(0);
 
+  // Wake Word listener implementation
+  const isWaitingRef = useRef(isWaitingForWakeWord);
+  useEffect(() => {
+    isWaitingRef.current = isWaitingForWakeWord;
+  }, [isWaitingForWakeWord]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    let stoppedManually = false;
+    const wakeWordRec = new SpeechRecognition();
+    wakeWordRec.lang = 'pt-BR';
+    wakeWordRec.continuous = true;
+    wakeWordRec.interimResults = true;
+
+    const startRecognition = () => {
+      // Evita ativar se gravação ElevenLabs ou Live está ativa
+      if (isElevenLabsLiveActiveRef.current || liveStateRef.current.status === 'connected' || liveStateRef.current.status === 'connecting') {
+        return;
+      }
+      // Use the ref to check status instead of state to avoid closure issues
+      if (isWaitingRef.current && !isListening && !isTranscribing && !stoppedManually) {
+        try {
+          wakeWordRec.start();
+        } catch (e) {
+          // Already started
+        }
+      }
+    };
+
+    wakeWordRec.onresult = (event: any) => {
+      const resultIndex = event.resultIndex;
+      const transcript = event.results[resultIndex][0].transcript.toLowerCase().trim();
+      
+      const wakeWordPatterns = [
+        'ei osone', 'ei ozone', 'ei osorni', 'ei osorne', 'ei o zone', 'eiosone', 'eiozone',
+        'ei uasone', 'ei uazone', 'hey osone', 'hey ozone', 'ei o sono', 'ei oson',
+        'ei o som', 'ei o sol', 'ei au som', 'oi osone', 'oi ozone', 'osone', 'ozone',
+        'ei ozone', 'ei ozoni', 'ei ozeni', 'ei osoni'
+      ];
+
+      // Verificar se a parte atual da fala contém o comando
+      const isMatch = wakeWordPatterns.some(pattern => transcript.includes(pattern));
+
+      if (isMatch) {
+        console.log('Comando detectado!', transcript);
+        
+        stoppedManually = true;
+        try { wakeWordRec.stop(); } catch(e) {}
+        
+        addNotification("Ativando via voz...", "success");
+
+        // Disparar o chat com a frase "Ei, Osone"
+        // Isso fará o chat abrir e a IA responder por texto
+        setIsChatExpanded(true);
+        handleHomeChat('Ei, Osone');
+
+        // Ativar o modo de voz (iniciar sessão) após um pequeno delay para a IA começar a responder
+        setTimeout(() => {
+          startLiveSession();
+        }, 1500);
+      }
+    };
+
+    wakeWordRec.onerror = (event: any) => {
+      if (event.error === 'not-allowed') {
+        setIsWaitingForWakeWord(false);
+        return;
+      }
+      if (event.error !== 'aborted') {
+        console.error('Wake word recognition error', event.error);
+      }
+      setTimeout(startRecognition, 1000);
+    };
+
+    wakeWordRec.onend = () => {
+      if (!stoppedManually) {
+        setTimeout(startRecognition, 500);
+      }
+    };
+
+    wakeWordRecognitionRef.current = wakeWordRec;
+    
+      if (isWaitingForWakeWord && !isListening && !isTranscribing && !isElevenLabsLiveActiveRef.current && liveStateRef.current.status !== 'connected' && liveStateRef.current.status !== 'connecting') {
+        stoppedManually = false;
+        startRecognition();
+      }
+
+    return () => {
+      stoppedManually = true;
+      try { wakeWordRec.stop(); } catch(e) {}
+    };
+  }, [isWaitingForWakeWord, isListening, isTranscribing, isElevenLabsLiveActive, liveState.status]);
+
   const stopElevenLabsLiveSession = () => {
     setIsElevenLabsLiveActive(false);
     isElevenLabsLiveActiveRef.current = false;
@@ -2191,8 +2209,8 @@ ${isBad
     
     addNotification("Sessão Voz Premium ElevenLabs Iniciada!", "success");
     
-    const initialGreeting = "Conexão premium ativa. Canal de voz ultrarrealista ElevenLabs pronto!";
-    await playElevenLabsSpeech(initialGreeting);
+    elevenLabsStateRef.current = 'listening';
+    startListeningElevenLabs();
   };
 
   const playElevenLabsSpeech = async (text: string) => {
@@ -2201,7 +2219,7 @@ ${isBad
     elevenLabsStateRef.current = 'speaking';
     setIsSpeaking(true);
     setIsListening(false);
-    setIsTranscribing(false);
+    setIsTranscribing(true);
     
     try {
       const response = await fetch("/api/tts", {
@@ -2317,7 +2335,7 @@ ${isBad
     rec.onstart = () => {
       if (elevenLabsStateRef.current === 'listening') {
         setIsListening(true);
-        setIsTranscribing(false);
+        setIsTranscribing(true);
       }
     };
     
@@ -2342,6 +2360,7 @@ ${isBad
       const currentText = (finalTranscript || interimTranscript).trim();
       if (currentText) {
         accumulatedTranscriptRef.current = currentText;
+        setVoiceTranscript(currentText);
         
         // VAD Inteligente: reseta temporizador e processa com silêncio de 1100ms
         if (elevenLabsSilenceTimeoutRef.current) {
@@ -2377,7 +2396,7 @@ ${isBad
       rec.start();
     } catch(_) {}
   };
-
+ 
   const triggerElevenLabsTurn = async () => {
     if (elevenLabsSilenceTimeoutRef.current) {
       clearTimeout(elevenLabsSilenceTimeoutRef.current);
@@ -2386,6 +2405,7 @@ ${isBad
     
     const finalText = accumulatedTranscriptRef.current.trim();
     accumulatedTranscriptRef.current = "";
+    setVoiceTranscript("");
     
     if (!finalText) return;
     
@@ -2394,7 +2414,6 @@ ${isBad
     setIsTranscribing(true);
     
     // Mantém o microfone ativo em background. O estado 'thinking' garante que qualquer áudio capturado seja ignorado.
-    
     await handleElevenLabsUserTurn(finalText);
   };
 
@@ -2843,7 +2862,7 @@ ${isBad
     const fileNames = currentFiles.map(f => f.name).join(', ');
     const fullMessage = fileNames ? `${userMessage}\n\n[Arquivos anexados: ${fileNames}]` : userMessage;
     
-    if (liveState.status === 'connected' && liveSessionRef.current) {
+    if (voiceEngine === 'gemini' && liveState.status === 'connected' && liveSessionRef.current) {
       if (userMessage) {
         liveSessionRef.current.sendRealtimeInput({ text: userMessage });
       }
@@ -3135,7 +3154,7 @@ ${isBad
         });
       }));
 
-      const historyContents = chatHistory.map(msg => ({
+      const historyContents = chatHistoryRef.current.map(msg => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }]
       }));
@@ -3436,25 +3455,20 @@ ${isBad
             }]);
 
             try {
-              const imageResult = await genAI.models.generateContent({
-                model: 'gemini-2.5-flash-image',
-                contents: {
-                  parts: [{ text: prompt }]
-                },
+              const imageResult = await genAI.models.generateImages({
+                model: 'imagen-3.0-generate-002',
+                prompt: prompt,
                 config: {
-                  imageConfig: {
-                    aspectRatio: aspectRatio
-                  }
+                  numberOfImages: 1,
+                  outputMimeType: 'image/jpeg',
+                  aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
                 }
               });
 
               let imageUrl = '';
-              for (const part of imageResult.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData) {
-                  const base64EncodeString = part.inlineData.data;
-                  imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-                  break;
-                }
+              const generatedImage = imageResult.generatedImages?.[0];
+              if (generatedImage?.image?.imageBytes) {
+                imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
               }
 
               if (imageUrl) {
@@ -5063,20 +5077,19 @@ ${isBad
                     const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
                     if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
                     const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
-                    genAI.models.generateContent({
-                      model: 'gemini-2.5-flash-image',
-                      contents: { parts: [{ text: prompt }] },
+                    genAI.models.generateImages({
+                      model: 'imagen-3.0-generate-002',
+                      prompt: prompt,
                       config: {
-                        imageConfig: { aspectRatio }
+                        numberOfImages: 1,
+                        outputMimeType: 'image/jpeg',
+                        aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
                       }
                     }).then(imageResult => {
                       let imageUrl = '';
-                      for (const part of imageResult.candidates?.[0]?.content?.parts || []) {
-                        if (part.inlineData) {
-                          const base64EncodeString = part.inlineData.data;
-                          imageUrl = `data:${part.inlineData.mimeType};base64,${base64EncodeString}`;
-                          break;
-                        }
+                      const generatedImage = imageResult.generatedImages?.[0];
+                      if (generatedImage?.image?.imageBytes) {
+                        imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
                       }
                       
                       if (imageUrl) {
@@ -5170,7 +5183,7 @@ ${isBad
   };
 
   useEffect(() => {
-    if (liveState.status === 'connected') {
+    if (liveStateRef.current.status === 'connected') {
       addNotification("📻 Sincronizando canais de voz do Podcast...", "info");
       stopLiveSession();
       const t = setTimeout(() => {
@@ -6556,7 +6569,6 @@ ${isBad
                           onClick={() => {
                             if (voiceEngine !== 'gemini') {
                               setVoiceEngine('gemini');
-                              stopElevenLabsLiveSession();
                               stopLiveSession();
                               addNotification("Canais Neurais do Gemini Live selecionados", "success");
                             }
@@ -6575,7 +6587,6 @@ ${isBad
                             if (voiceEngine !== 'elevenlabs') {
                               setVoiceEngine('elevenlabs');
                               stopLiveSession();
-                              stopElevenLabsLiveSession();
                               addNotification("Sessão Premium ElevenLabs selecionada", "success");
                             }
                           }}
