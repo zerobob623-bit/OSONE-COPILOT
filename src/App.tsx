@@ -7544,6 +7544,89 @@ ${isBad
         aiProfile={aiProfile}
         setAiProfile={handleUpdateProfile}
         onAddNotification={addNotification}
+        onRestoreState={(payload) => {
+          try {
+            const apiKeysVal = payload['osone_api_keys'];
+            if (apiKeysVal) setApiKeys(JSON.parse(apiKeysVal));
+
+            const chatHistoryVal = payload['osone_chat_history'];
+            if (chatHistoryVal) setChatHistory(JSON.parse(chatHistoryVal));
+
+            const voiceEngineVal = payload['osone_voice_engine'];
+            if (voiceEngineVal === 'gemini' || voiceEngineVal === 'elevenlabs') setVoiceEngine(voiceEngineVal as any);
+
+            const selectedVoiceVal = payload['osone_selected_voice'];
+            if (selectedVoiceVal) setSelectedVoice(selectedVoiceVal);
+
+            const selectedPersonaVal = payload['osone_selected_persona'];
+            if (selectedPersonaVal) {
+              const found = PERSONAS.find(p => p.id === selectedPersonaVal);
+              if (found) setSelectedPersona(found);
+            }
+
+            const aiProfileVal = payload['osone_ai_profile'];
+            if (aiProfileVal) setAiProfile(JSON.parse(aiProfileVal));
+
+            const voiceModulationVal = payload['osone_voice_modulation'];
+            if (voiceModulationVal) setVoiceModulation(JSON.parse(voiceModulationVal));
+
+            const healthDataVal = payload['osone_health_data'];
+            if (healthDataVal) setHealthData(JSON.parse(healthDataVal));
+
+            const orbStyleVal = payload['osone_orb_style'] as OrbStyle;
+            if (orbStyleVal) setOrbStyle(orbStyleVal);
+
+            const isDuoModeVal = payload['osone_is_duo_mode'];
+            if (isDuoModeVal) setIsDuoMode(isDuoModeVal === 'true');
+
+            const duoComboIdVal = payload['osone_duo_combo_id'];
+            if (duoComboIdVal) setDuoComboId(duoComboIdVal);
+
+            const duoTopicIdVal = payload['osone_duo_topic_id'];
+            if (duoTopicIdVal) setDuoTopicId(duoTopicIdVal);
+
+            const isDuoVoiceActiveVal = payload['osone_is_duo_voice_active'];
+            if (isDuoVoiceActiveVal) setIsDuoVoiceActive(isDuoVoiceActiveVal !== 'false');
+
+            const isChatAutoSpeakActiveVal = payload['osone_chat_auto_speak'];
+            if (isChatAutoSpeakActiveVal) setIsChatAutoSpeakActive(isChatAutoSpeakActiveVal === 'true');
+
+            const workspaceTextVal = payload['osone_workspace_text'];
+            if (workspaceTextVal) setWorkspaceText(workspaceTextVal);
+
+            const fileSystemVal = payload['osone_file_system'];
+            if (fileSystemVal) setFileSystem(JSON.parse(fileSystemVal));
+
+            const drawingObjectsVal = payload['osone_drawing_objects'];
+            if (drawingObjectsVal) setDrawingObjects(JSON.parse(drawingObjectsVal));
+
+            const writingFontVal = payload['osone_writing_font'] as any;
+            if (writingFontVal) setWritingFont(writingFontVal);
+
+            const writingFontSizeVal = payload['osone_writing_font_size'];
+            if (writingFontSizeVal) setWritingFontSize(Number(writingFontSizeVal));
+
+            const writingThemeVal = payload['osone_writing_theme'] as any;
+            if (writingThemeVal) setWritingTheme(writingThemeVal);
+
+            const writingFocusModeVal = payload['osone_writing_focus'];
+            if (writingFocusModeVal) setWritingFocusMode(writingFocusModeVal === 'true');
+
+            const writingWordGoalVal = payload['osone_writing_word_goal'];
+            if (writingWordGoalVal) setWritingWordGoal(Number(writingWordGoalVal));
+
+            const writingWidthModeVal = payload['osone_writing_width'] as any;
+            if (writingWidthModeVal) setWritingWidthMode(writingWidthModeVal);
+
+            const writingSoundsVal = payload['osone_writing_sounds'];
+            if (writingSoundsVal) setWritingSounds(writingSoundsVal === 'true');
+
+            const isGoogleSearchActiveVal = payload['osone_google_search_active'];
+            if (isGoogleSearchActiveVal) setIsGoogleSearchActive(isGoogleSearchActiveVal !== 'false');
+          } catch (e) {
+            console.error("Erro ao restaurar sinapses em tempo real:", e);
+          }
+        }}
       />
 
       <SkeletonBrainPopup 

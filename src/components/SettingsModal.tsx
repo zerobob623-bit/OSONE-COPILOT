@@ -27,7 +27,8 @@ export const SettingsModal = ({
   setAppTheme,
   aiProfile,
   setAiProfile,
-  onAddNotification
+  onAddNotification,
+  onRestoreState
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
@@ -48,6 +49,7 @@ export const SettingsModal = ({
   aiProfile: AIProfile;
   setAiProfile: (profile: AIProfile) => void;
   onAddNotification?: (msg: string, type: 'success' | 'info' | 'error') => void;
+  onRestoreState?: (payload: Record<string, string>) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -140,18 +142,26 @@ export const SettingsModal = ({
           }
         });
         
+        // Propagate current fields/state values to parent app state immediately
+        if (onRestoreState) {
+          onRestoreState(payload);
+        }
+        
         setSyncLinkId(cleanedId);
         localStorage.setItem('osone_sync_link_id', cleanedId);
         setSyncStatus('success');
-        setSyncMessage('Sincronia concluída com sucesso! Redirecionando e recarregando o sistema...');
+        setSyncMessage('Sincronia concluída com sucesso! Todos os campos foram preenchidos e a sessão foi restabelecida.');
         
         if (onAddNotification) {
-          onAddNotification(`Perfil recarregado! Reconfigurando interfaces neurais...`, 'success');
+          onAddNotification(`Perfil restaurado! Todas as sinapses e chaves foram preenchidas com sucesso.`, 'success');
         }
         
+        // Instead of reloading immediately, let the user see the updated states. 
+        // We can reload after a longer delay or not reload at all (giving a seamless experience).
+        // Let's reload after 3 seconds so the user can verify the fully populated inputs first!
         setTimeout(() => {
           window.location.reload();
-        }, 1500);
+        }, 3000);
 
       } else {
         setSyncStatus('error');
