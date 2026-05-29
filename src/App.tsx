@@ -1963,39 +1963,42 @@ ${isBad
   };
 
   const handleGenerateStructure = async (promptText: string) => {
-    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-    if (!effectiveApiKey || effectiveApiKey.trim() === '') {
-      setIsSettingsOpen(true);
-      console.error('Por favor, configure sua API Key do Gemini nas configurações.');
-      return;
-    }
+    const effectiveApiKey = apiKeys.gemini || '';
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
-        Retorne APENAS um JSON no seguinte formato:
-        [
-          {
-            "type": "folder",
-            "name": "nome_da_pasta",
-            "children": [
-              { "type": "file", "name": "nome_do_arquivo.ext", "content": "conteúdo do arquivo" },
-              { "type": "folder", "name": "subpasta", "children": [] }
-            ]
-          },
-          { "type": "file", "name": "arquivo_raiz.ext", "content": "conteúdo" }
-        ]`,
-        config: {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: "gemini-3.5-flash",
+          prompt: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
+          Retorne APENAS um JSON no seguinte formato:
+          [
+            {
+              "type": "folder",
+              "name": "nome_da_pasta",
+              "children": [
+                { "type": "file", "name": "nome_do_arquivo.ext", "content": "conteúdo do arquivo" },
+                { "type": "folder", "name": "subpasta", "children": [] }
+              ]
+            },
+            { "type": "file", "name": "arquivo_raiz.ext", "content": "conteúdo" }
+          ]`,
           responseMimeType: "application/json"
-        }
+        })
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erro ao conectar com a IA");
+      }
+
+      const data = await response.json();
       let structure = [];
       try {
-        const text = response.text || '[]';
+        const text = data.text || '[]';
         structure = safeJsonParse(text, []);
       } catch (e) {
         console.error('Erro ao analisar JSON da estrutura:', e);
@@ -2587,16 +2590,11 @@ ${isBad
 
   const handleGenerate = async (explicitPrompt?: string) => {
     const finalPrompt = explicitPrompt || workspacePrompt;
-    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-    if (!finalPrompt.trim() || !effectiveApiKey || effectiveApiKey.trim() === '') {
-      if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
-      return;
-    }
+    const effectiveApiKey = apiKeys.gemini || '';
+    if (!finalPrompt.trim()) return;
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-      
       // Se já houver código, trata como edição
       const isEditing = workspaceText.trim().length > 10;
       
@@ -2608,16 +2606,24 @@ ${isBad
         ? `CÓDIGO ATUAL:\n\n${workspaceText}\n\nINSTRUÇÕES DE MODIFICAÇÃO:\n${finalPrompt}`
         : finalPrompt;
 
-      const result = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [{ parts: [{ text: contents }] }],
-        config: { 
-          systemInstruction,
-          tools: [{ googleSearch: {} }]
-        }
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: "gemini-3.5-flash",
+          prompt: contents,
+          systemInstruction
+        })
       });
-      
-      const text = result.text;
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erro ao conectar com a IA");
+      }
+
+      const data = await response.json();
+      const text = data.text;
       
       if (text) {
         setWorkspaceText(text);
@@ -2631,30 +2637,39 @@ ${isBad
       if (text && (text.includes('<') || text.includes('function') || text.includes('const'))) {
         setTimeout(() => handleAnalyzeCode(text), 1500);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao gerar conteúdo:", error);
-      addNotification("Erro ao conectar com a IA. Verifique sua chave API.", "error");
+      addNotification(`Erro ao conectar com a IA: ${error.message || "Verifique as configurações."}`, "error");
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleAnalyzeCode = async (codeToAnalyze = workspaceText) => {
-    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-    if (!codeToAnalyze.trim() || !effectiveApiKey || effectiveApiKey.trim() === '' || isAnalyzingCode) return;
+    const effectiveApiKey = apiKeys.gemini || '';
+    if (!codeToAnalyze.trim() || isAnalyzingCode) return;
 
     setIsAnalyzingCode(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
       const prompt = `Analise este código e forneça exatamente 3 sugestões CURTAS e acionáveis (uma frase cada) para melhorá-lo (performance, bugs, estilo ou features). Retorne APENAS um array JSON de strings como ["Sugestão 1", "Sugestão 2", "Sugestão 3"]. Code:\n\n${codeToAnalyze}`;
       
-      const result = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: { responseMimeType: "application/json" }
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: "gemini-3.5-flash",
+          prompt,
+          responseMimeType: "application/json"
+        })
       });
-      
-      const json = safeJsonParse(result.text || "", []);
+
+      if (!response.ok) {
+        throw new Error("Erro na requisição ao servidor");
+      }
+
+      const data = await response.json();
+      const json = safeJsonParse(data.text || "", []);
       if (Array.isArray(json)) {
         setCodeSuggestions(json.slice(0, 3));
       }
@@ -3709,7 +3724,7 @@ ${isBad
 
   const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
     const apiKey = apiKeys.gemini || '';
-    const hasSystemKey = !!process.env.GEMINI_API_KEY;
+    const hasSystemKey = true; // Trust backend fallback key check to handle serverless deployments seamlessly
     if (!apiKey && !hasSystemKey) {
       setIsSettingsOpen(true);
       return;

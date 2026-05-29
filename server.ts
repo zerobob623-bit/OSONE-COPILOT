@@ -19,6 +19,22 @@ async function startServer() {
 
   const PORT = 3000;
 
+  // Safe helper to read the Gemini API key from environment or fallback saved file (.gemini-fallback-key.txt)
+  const getSecretGeminiKey = (): string => {
+    if (process.env.GEMINI_API_KEY) {
+      return process.env.GEMINI_API_KEY;
+    }
+    try {
+      const keyPath = path.join(process.cwd(), ".gemini-fallback-key.txt");
+      if (fs.existsSync(keyPath)) {
+        return fs.readFileSync(keyPath, "utf8").trim();
+      }
+    } catch (e: any) {
+      console.warn("Fallback key file could not be read:", e.message);
+    }
+    return "";
+  };
+
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -256,7 +272,7 @@ async function startServer() {
         return res.json({ status: "ignored", reason: "Autoresponder is disabled" });
       }
 
-      const geminiApiKeyToUse = whatsappConfig.geminiApiKey || process.env.GEMINI_API_KEY;
+      const geminiApiKeyToUse = whatsappConfig.geminiApiKey || getSecretGeminiKey();
       if (!geminiApiKeyToUse) {
         whatsappLogs.unshift({
           id: Math.random().toString(36).substring(2, 11),
@@ -580,7 +596,7 @@ Nome do interlocutor: ${senderName}`;
 
       // GEMINI 3.1 ENGINE ROUTE (DEFAULT)
       // Check for available API Keys
-      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      const apiKey = clientApiKey || getSecretGeminiKey();
       if (!apiKey) {
         return res.status(400).json({ 
           error: "A chave API do Gemini não foi encontrada. Por favor, especifique uma nos Ajustes para utilizar a Voz Premium." 
@@ -703,7 +719,7 @@ Nome do interlocutor: ${senderName}`;
   app.post("/api/chat-intel", async (req, res) => {
     try {
       const { historyContents, systemInstruction, clientApiKey } = req.body;
-      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      const apiKey = clientApiKey || getSecretGeminiKey();
       if (!apiKey) {
         return res.status(400).json({ error: "Chave API do Gemini não definida no servidor." });
       }
@@ -730,6 +746,44 @@ Nome do interlocutor: ${senderName}`;
       return res.json({ text: response.text || "" });
     } catch (err: any) {
       console.error("Error inside /api/chat-intel endpoint:", err);
+      return res.status(500).json({ error: err.message || "Erro de servidor ao processar inteligência do Gemini." });
+    }
+  });
+
+  // Generic and robust POST endpoint for server-side Gemini 3.5-flash content generation 
+  app.post("/api/generate", async (req, res) => {
+    try {
+      const { prompt, systemInstruction, clientApiKey, model, responseMimeType } = req.body;
+      const apiKey = clientApiKey || getSecretGeminiKey();
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida no servidor." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const selectedModel = model || "gemini-3.5-flash";
+
+      const config: any = {};
+      if (systemInstruction) config.systemInstruction = systemInstruction;
+      if (responseMimeType) config.responseMimeType = responseMimeType;
+
+      const response = await ai.models.generateContent({
+        model: selectedModel,
+        contents: prompt,
+        config: config
+      });
+
+      return res.json({ text: response.text || "" });
+    } catch (err: any) {
+      console.error("Error inside /api/generate endpoint:", err);
       return res.status(500).json({ error: err.message || "Erro de servidor ao processar inteligência do Gemini." });
     }
   });
@@ -819,7 +873,7 @@ Nome do interlocutor: ${senderName}`;
         return res.status(400).json({ error: "O nome da integração é obrigatório." });
       }
 
-      const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+      const apiKey = clientApiKey || getSecretGeminiKey();
 
       if (!apiKey) {
         return res.status(400).json({ 
@@ -891,7 +945,7 @@ Nome do interlocutor: ${senderName}`;
     const clientApiKey = searchParams.get("apiKey");
     
     // Fallback to server's loaded GEMINI_API_KEY if the client key is empty/not configured
-    const apiKey = clientApiKey || process.env.GEMINI_API_KEY;
+    const apiKey = clientApiKey || getSecretGeminiKey();
 
     if (!apiKey) {
       console.error("Error: GEMINI_API_KEY is not defined");
