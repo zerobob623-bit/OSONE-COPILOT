@@ -693,6 +693,7 @@ export default function App() {
       elevenLabsStyle: 0.0,
       elevenLabsSpeakerBoost: true,
       elevenLabsModel: 'eleven_multilingual_v2',
+      geminiModel: 'gemini-3.5-flash',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -1972,7 +1973,7 @@ ${isBad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientApiKey: effectiveApiKey,
-          model: "gemini-3.5-flash",
+          model: apiKeys.geminiModel || "gemini-3.5-flash",
           prompt: `Crie uma estrutura de pastas e arquivos para o seguinte projeto: "${promptText}". 
           Retorne APENAS um JSON no seguinte formato:
           [
@@ -2611,7 +2612,7 @@ ${isBad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientApiKey: effectiveApiKey,
-          model: "gemini-3.5-flash",
+          model: apiKeys.geminiModel || "gemini-3.5-flash",
           prompt: contents,
           systemInstruction
         })
@@ -2658,7 +2659,7 @@ ${isBad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientApiKey: effectiveApiKey,
-          model: "gemini-3.5-flash",
+          model: apiKeys.geminiModel || "gemini-3.5-flash",
           prompt,
           responseMimeType: "application/json"
         })
@@ -3210,7 +3211,7 @@ ${isBad
       }
 
       const result = await genAI.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: apiKeys.geminiModel || "gemini-3.5-flash",
         contents: historyContents,
         config: {
           systemInstruction: `${activeSystemInstruction}
@@ -4777,7 +4778,7 @@ ${isBad
                     setIsModelSearching(true);
                     try {
                       const searchResult = await ai.models.generateContent({ 
-                        model: "gemini-3.5-flash",
+                        model: apiKeys.geminiModel || "gemini-3.5-flash",
                         contents: [{ role: 'user', parts: [{ text: query }] }],
                         config: {
                           tools: [{ googleSearch: {} }]
