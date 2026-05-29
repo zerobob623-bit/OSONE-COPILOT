@@ -1,6 +1,7 @@
 import express from "express";
 import http from "http";
 import path from "path";
+import fs from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { createServer as createViteServer } from "vite";
@@ -17,7 +18,8 @@ async function startServer() {
 
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // ====== WHATSAPP EVOLUTION INTEGRATION STATE ======
   let whatsappConfig = {
@@ -87,6 +89,108 @@ async function startServer() {
       }
     ];
     res.json({ status: "success" });
+  });
+
+  // ====== NEURAL CONNECTION MEMORY SYNC ENDPOINTS ======
+  const SYNC_FILE_PATH = path.join(process.cwd(), "sync-profiles.json");
+
+  // Helper to read sync profiles
+  const readSyncProfiles = (): Record<string, any> => {
+    try {
+      if (fs.existsSync(SYNC_FILE_PATH)) {
+        const raw = fs.readFileSync(SYNC_FILE_PATH, "utf8");
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.error("Error reading sync-profiles:", e);
+    }
+    return {};
+  };
+
+  // Helper to write sync profiles
+  const writeSyncProfiles = (data: Record<string, any>) => {
+    try {
+      fs.writeFileSync(SYNC_FILE_PATH, JSON.stringify(data, null, 2), "utf8");
+    } catch (e) {
+      console.error("Error writing sync-profiles:", e);
+    }
+  };
+
+  // POST to save memory sync profile
+  app.post("/api/memory-sync/save", (req, res) => {
+    try {
+      const { syncId, payload } = req.body;
+      if (!payload) {
+        return res.status(400).json({ status: "error", error: "Missing payload" });
+      }
+
+      let targetSyncId = syncId;
+      const profiles = readSyncProfiles();
+
+      if (!targetSyncId) {
+        // Generate random upper-case alphanum key OSONE-XXXX-XXXX
+        const pickRandom = (len: number) => {
+          const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+          let result = "";
+          for (let i = 0; i < len; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return result;
+        };
+        targetSyncId = `OSONE-${pickRandom(4)}-${pickRandom(4)}`;
+        while (profiles[targetSyncId]) {
+          targetSyncId = `OSONE-${pickRandom(4)}-${pickRandom(4)}`;
+        }
+      } else {
+        // Clean and sanitize syncId
+        targetSyncId = String(targetSyncId).trim().toUpperCase();
+        if (!/^[A-Z0-9_-]{3,32}$/.test(targetSyncId)) {
+          return res.status(400).json({ 
+            status: "error", 
+            error: "O ID deve conter de 3 a 32 caracteres alfanuméricos, hífen ou underline." 
+          });
+        }
+      }
+
+      profiles[targetSyncId] = {
+        createdAt: profiles[targetSyncId]?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+        payload
+      };
+
+      writeSyncProfiles(profiles);
+      res.json({ status: "success", syncId: targetSyncId, profilesCount: Object.keys(profiles).length });
+    } catch (error: any) {
+      console.error("Error saving memory sync:", error);
+      res.status(500).json({ status: "error", error: error.message });
+    }
+  });
+
+  // GET to load memory sync profile
+  app.get("/api/memory-sync/load/:syncId", (req, res) => {
+    try {
+      const syncId = String(req.params.syncId).trim().toUpperCase();
+      const profiles = readSyncProfiles();
+      const profile = profiles[syncId];
+
+      if (!profile) {
+        return res.status(404).json({ 
+          status: "error", 
+          error: "ID de Conexão Neural não encontrado. Verifique se o ID está correto." 
+        });
+      }
+
+      res.json({ 
+        status: "success", 
+        syncId, 
+        createdAt: profile.createdAt, 
+        updatedAt: profile.updatedAt, 
+        payload: profile.payload 
+      });
+    } catch (error: any) {
+      console.error("Error loading memory sync:", error);
+      res.status(500).json({ status: "error", error: error.message });
+    }
   });
 
   // Webhook Receiver from Evolution API (e.g. listening to messages.upsert)
