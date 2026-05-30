@@ -788,6 +788,42 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // POST endpoint for verifying Gemini API credentials in real-time
+  app.post("/api/gemini/verify", async (req, res) => {
+    try {
+      const { geminiApiKey } = req.body;
+      if (!geminiApiKey || typeof geminiApiKey !== "string" || !geminiApiKey.trim()) {
+        return res.status(400).json({ success: false, message: "A chave API do Gemini é obrigatória para verificação." });
+      }
+
+      const trimApiKey = geminiApiKey.trim();
+      const ai = new GoogleGenAI({ apiKey: trimApiKey });
+      
+      const testRes = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "responder 'ok'",
+      });
+      
+      if (testRes && testRes.text) {
+        return res.json({
+          success: true,
+          message: "Conexão bem-sucedida! Handshake concluído com a API do Gemini."
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "O Gemini respondeu sem texto válido. Verifique o acesso da chave."
+        });
+      }
+    } catch (err: any) {
+      console.error("Error inside /api/gemini/verify endpoint:", err);
+      return res.status(400).json({
+        success: false,
+        message: err.message || "A API do Gemini retornou um erro ao processar. Certifique-se de que a chave tem permissões e saldo de cobrança ativos."
+      });
+    }
+  });
+
   // POST endpoint for verifying Elevenlabs credentials and options in real-time
   app.post("/api/elevenlabs/verify", async (req, res) => {
     try {

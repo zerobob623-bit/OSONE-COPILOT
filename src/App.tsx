@@ -9,6 +9,7 @@ import {
   Copy, 
   X, 
   ChevronRight,
+  ChevronLeft,
   Code,
   FileText,
   Volume2,
@@ -668,12 +669,57 @@ export default function App() {
 
   const [orbStyle, setOrbStyle] = useState<OrbStyle>(() => {
     const saved = localStorage.getItem('osone_orb_style');
-    return (saved as OrbStyle) || 'neural';
+    return (saved as OrbStyle) || 'jarvis';
   });
 
   useEffect(() => {
     localStorage.setItem('osone_orb_style', orbStyle);
   }, [orbStyle]);
+
+  useEffect(() => {
+    // One-time factory restore flag v2 to clean up and fully reset Jarvis & Gemini Live to pristine defaults
+    const hasRestored = localStorage.getItem('osone_v4_factory_restored_v2_clean');
+    if (!hasRestored) {
+      localStorage.removeItem('osone_api_keys');
+      localStorage.removeItem('osone_voice_engine');
+      localStorage.removeItem('osone_voice_page_index');
+      localStorage.removeItem('osone_selected_voice');
+      localStorage.removeItem('osone_long_term_memory');
+      localStorage.removeItem('osone_chat_history');
+      localStorage.removeItem('osone_selected_persona');
+      localStorage.removeItem('osone_ai_profile');
+      localStorage.removeItem('osone_voice_modulation');
+      localStorage.removeItem('osone_google_search_active');
+      localStorage.removeItem('osone_is_duo_mode');
+      localStorage.removeItem('osone_duo_combo_id');
+      localStorage.removeItem('osone_duo_topic_id');
+      localStorage.removeItem('osone_is_duo_voice_active');
+      localStorage.removeItem('osone_chat_auto_speak');
+      
+      localStorage.setItem('osone_orb_style', 'jarvis');
+       
+      setOrbStyle('jarvis');
+      setVoiceEngine('gemini');
+      setVoicePageIndex(0);
+      setSelectedVoice('Zephyr');
+      setChatHistory([]);
+      setIsChatAutoSpeakActive(false);
+      setApiKeys({
+        gemini: '', 
+        googleHomeId: '',
+        googleHomeToken: '',
+        elevenLabsApiKey: '',
+        elevenLabsVoiceId: '',
+        elevenLabsStability: 0.5,
+        elevenLabsSimilarityBoost: 0.75,
+        elevenLabsStyle: 0.0,
+        elevenLabsSpeakerBoost: true,
+        elevenLabsModel: 'eleven_multilingual_v2',
+        geminiModel: 'gemini-3.5-flash',
+      });
+      localStorage.setItem('osone_v4_factory_restored_v2_clean', 'true');
+    }
+  }, []);
 
   const [appTheme, setAppTheme] = useState<AppTheme>('monochrome');
 
@@ -709,9 +755,26 @@ export default function App() {
     return (localStorage.getItem('osone_voice_engine') as 'gemini' | 'elevenlabs') || 'gemini';
   });
 
+  const [voicePageIndex, setVoicePageIndex] = useState<number>(() => {
+    const saved = localStorage.getItem('osone_voice_page_index');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
   useEffect(() => {
     localStorage.setItem('osone_voice_engine', voiceEngine);
+    const nextPageIndex = voiceEngine === 'elevenlabs' ? 1 : 0;
+    if (voicePageIndex !== nextPageIndex) {
+      setVoicePageIndex(nextPageIndex);
+    }
   }, [voiceEngine]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_voice_page_index', voicePageIndex.toString());
+    const nextEngine = voicePageIndex === 1 ? 'elevenlabs' : 'gemini';
+    if (voiceEngine !== nextEngine) {
+      setVoiceEngine(nextEngine);
+    }
+  }, [voicePageIndex]);
 
   const [selectedVoice, setSelectedVoice] = useState<string>(() => {
     return localStorage.getItem('osone_selected_voice') || 'Zephyr';
@@ -2195,16 +2258,16 @@ ${isBad
     audioProcessorRef.current?.stopRecording?.();
     audioPlayerRef.current?.stop?.();
     
-    const geminiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
+    const geminiKey = apiKeys.gemini || '';
     const elApiKey = apiKeys.elevenLabsApiKey || '';
     if (!geminiKey.trim()) {
-      addNotification("Configure sua chave Gemini nas Configurações.", "error");
-      setIsSettingsOpen(true);
+      addNotification("Por favor, insira sua chave API do Gemini em 'Ajustes & Perfil' para iniciar.", "error");
+      setWorkspaceMode('aural_control');
       return;
     }
     if (!elApiKey.trim()) {
-      addNotification("Chave API da ElevenLabs ausente nas Configurações.", "error");
-      setIsSettingsOpen(true);
+      addNotification("Por favor, insira sua chave API da ElevenLabs em 'Ajustes & Perfil' para iniciar.", "error");
+      setWorkspaceMode('aural_control');
       return;
     }
 
@@ -3728,9 +3791,9 @@ ${isBad
 
   const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
     const apiKey = apiKeys.gemini || '';
-    const hasSystemKey = true; // Trust backend fallback key check to handle serverless deployments seamlessly
-    if (!apiKey && !hasSystemKey) {
-      setIsSettingsOpen(true);
+    if (!apiKey) {
+      addNotification("Por favor, insira sua chave API do Gemini em 'Ajustes & Perfil' para conectar a voz.", "error");
+      setWorkspaceMode('aural_control');
       return;
     }
 
@@ -3738,7 +3801,7 @@ ${isBad
     setLiveState({ status: 'connecting' });
     
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey || (process.env.GEMINI_API_KEY as string) });
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer((active) => {
@@ -6545,6 +6608,46 @@ ${isBad
               )}
 
               <div className="flex-1 w-full flex flex-col min-h-0 gap-2 md:gap-6 relative">
+                {/* Arrow navigation to switch pages */}
+                {chatHistory.length === 0 && !isChatExpanded && showUi && (
+                  <>
+                    {voicePageIndex === 0 && (
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 z-[60] flex flex-col items-center gap-1.5">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (liveState.status === 'connected') stopLiveSession();
+                            setVoicePageIndex(1);
+                            addNotification("Canal Sintonizado: ElevenLabs Premium", "success");
+                          }}
+                          className="w-12 h-12 rounded-full bg-white/[0.02] hover:bg-[#ff4e00]/10 text-white/40 hover:text-[#ff4e00] hover:scale-110 active:scale-95 transition-all duration-300 border border-white/5 hover:border-[#ff4e00]/20 flex items-center justify-center shrink-0 shadow-xl cursor-pointer"
+                          title="Voz Premium ElevenLabs"
+                        >
+                          <ChevronRight size={22} className="translate-x-[1px]" />
+                        </button>
+                        <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/30 font-bold">ElevenLabs</span>
+                      </div>
+                    )}
+                    {voicePageIndex === 1 && (
+                      <div className="absolute left-6 top-1/2 -translate-y-1/2 z-[60] flex flex-col items-center gap-1.5">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isElevenLabsLiveActive) stopElevenLabsLiveSession();
+                            setVoicePageIndex(0);
+                            addNotification("Canal Sintonizado: Gemini Live", "success");
+                          }}
+                          className="w-12 h-12 rounded-full bg-white/[0.02] hover:bg-her-accent/10 text-white/40 hover:text-her-accent hover:scale-110 active:scale-95 transition-all duration-300 border border-white/5 hover:border-her-accent/20 flex items-center justify-center shrink-0 shadow-xl cursor-pointer"
+                          title="Inteligência Gemini"
+                        >
+                          <ChevronLeft size={22} className="-translate-x-[1px]" />
+                        </button>
+                        <span className="text-[8px] font-mono uppercase tracking-[0.25em] text-white/30 font-bold">Gemini Voice</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* Visualizer Area - Repositioned to 'ceiling' when chat active, or center when voice active */}
                 <motion.div 
                   layout
@@ -6555,94 +6658,174 @@ ${isBad
                     mass: 0.85
                   }}
                   className={cn(
-                    "flex flex-col items-center justify-center py-2 z-50",
-                    liveState.status === 'connected'
-                      ? "relative flex-1 scale-110 md:scale-125" // Center large when voice active
+                    "flex flex-col items-center justify-center py-2 z-50 w-full",
+                    (liveState.status === 'connected' || isElevenLabsLiveActive)
+                      ? "relative flex-1 scale-100 md:scale-105" // Center scale
                       : (chatHistory.length > 0 || isChatExpanded)
                         ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
                         : "absolute inset-0 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-none"
                   )}
                 >
-                  <div onClick={handleVoiceToggle} className={cn(
-                    "cursor-pointer transition-all duration-500 group relative",
-                    liveState.status === 'connected' ? "pointer-events-auto" : "pointer-events-auto"
-                  )}>
-                    <InfinityLogo 
-                      active={liveState.status === 'connected'} 
-                      speaking={isSpeaking} 
-                      style={orbStyle}
-                      thinking={isGenerating || isAnalyzingCode || isTranscribing}
-                      searching={isModelSearching}
-                    />
-                    
-                    {/* Floating invitation */}
-                    {liveState.status !== 'connected' && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: !showUi ? 0 : [0.4, 0.7, 0.4], y: 0 }}
-                        transition={{ duration: 4, repeat: Infinity }}
-                        className={cn(
-                          "absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap transition-all duration-500",
-                          !showUi && "opacity-0 pointer-events-none scale-95"
-                        )}
-                      >
-                        <span className="text-[10px] md:text-sm font-serif italic tracking-[0.3em] text-her-muted/80 uppercase">
-                          Me ative
-                        </span>
-                      </motion.div>
-                    )}
-                  </div>
-                  
-                  {(chatHistory.length === 0 || liveState.status === 'connected') && (
+                  {voicePageIndex === 1 ? (
+                    /* DEDICATED ELEVENLABS INTERFACE */
                     <div className={cn(
-                      "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
-                      !showUi && "opacity-0 pointer-events-none scale-95"
+                      "w-full flex flex-col items-center justify-center text-center max-w-xl mx-auto space-y-5 px-6 pointer-events-auto transition-all duration-500",
+                      (chatHistory.length > 0 || isChatExpanded) ? "scale-[0.8] opacity-80" : ""
                     )}>
-                      {/* Seletor de Motor de Voz em Tempo Real */}
-                      <div className="flex items-center gap-1.5 p-1 bg-white/[0.02] border border-white/[0.05] rounded-full mt-2 mb-2 pointer-events-auto z-50">
-                        <button 
-                          onClick={() => {
-                            if (voiceEngine !== 'gemini') {
-                              setVoiceEngine('gemini');
-                              stopLiveSession();
-                              addNotification("Canais Neurais do Gemini Live selecionados", "success");
-                            }
-                          }}
-                          className={cn(
-                            "px-3 py-1 rounded-full text-[9px] uppercase tracking-wider transition-all duration-300 font-medium cursor-pointer transition-all",
-                            voiceEngine === 'gemini' 
-                              ? "bg-her-accent/20 text-her-accent border border-her-accent/20 font-bold" 
-                              : "text-her-muted opacity-50 hover:opacity-100 border border-transparent font-light"
-                          )}
-                        >
-                          Gemini Live 📻
-                        </button>
-                        <button 
-                          onClick={() => {
-                            if (voiceEngine !== 'elevenlabs') {
-                              setVoiceEngine('elevenlabs');
-                              stopLiveSession();
-                              addNotification("Sessão Premium ElevenLabs selecionada", "success");
-                            }
-                          }}
-                          className={cn(
-                            "px-3 py-1 rounded-full text-[9px] uppercase tracking-wider transition-all duration-300 font-medium cursor-pointer transition-all",
-                            voiceEngine === 'elevenlabs' 
-                              ? "bg-her-accent/20 text-her-accent border border-her-accent/20 font-bold" 
-                              : "text-her-muted opacity-50 hover:opacity-100 border border-transparent font-light"
-                          )}
-                        >
-                          ElevenLabs Realtime ✨
-                        </button>
+                      {/* Page Title & Status */}
+                      {(chatHistory.length === 0 && !isChatExpanded) && (
+                        <div className="space-y-1 animate-in fade-in slide-in-from-top-4 duration-300">
+                          <span className="text-[10px] uppercase font-mono tracking-[0.25em] text-[#ff4e00] font-bold">Sintonia Vocal Premium</span>
+                          <h2 className="text-2xl font-serif italic text-white leading-relaxed">ElevenLabs Realtime</h2>
+                          <p className="text-[11px] text-her-muted/65 max-w-sm mx-auto leading-normal">Síntese de fala hiper-realista sintonizada com os canais mentais do Gemini 3.5.</p>
+                        </div>
+                      )}
+
+                      {/* Jarvis 3D Holographic Orb for ElevenLabs */}
+                      <div onClick={handleVoiceToggle} className={cn(
+                        "cursor-pointer transition-all duration-500 group relative",
+                        isElevenLabsLiveActive ? "pointer-events-auto" : "pointer-events-auto"
+                      )}>
+                        <InfinityLogo 
+                          active={isElevenLabsLiveActive} 
+                          speaking={isSpeaking} 
+                          style="jarvis"
+                          thinking={isGenerating || isAnalyzingCode || isTranscribing}
+                          searching={isModelSearching}
+                        />
+                        
+                        {/* Floating invitation */}
+                        {!isElevenLabsLiveActive && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: !showUi ? 0 : [0.4, 0.7, 0.4], y: 0 }}
+                            transition={{ duration: 4, repeat: Infinity }}
+                            className={cn(
+                              "absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap transition-all duration-500",
+                              !showUi && "opacity-0 pointer-events-none scale-95"
+                            )}
+                          >
+                            <span className="text-[10px] md:text-sm font-serif italic tracking-[0.3em] text-her-muted/80 uppercase">
+                              Me ative
+                            </span>
+                          </motion.div>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "w-1.5 h-1.5 rounded-full transition-all duration-500",
-                          isListening ? "bg-her-accent animate-pulse" : isWaitingForWakeWord ? "bg-her-accent/40 animate-pulse" : "bg-her-muted/30"
-                        )} />
-                        <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : isWaitingForWakeWord ? 'VOICE TRIGGER READY' : 'IDLE'}</span>
+                      {/* Info & Micro controls (only visible in full view) */}
+                      {chatHistory.length === 0 && !isChatExpanded && (
+                        <div className="w-full space-y-4 bg-white/[0.01] border border-white/[0.03] p-5 rounded-3xl text-left animate-in fade-in duration-500">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#ff4e00] animate-pulse" />
+                              <span className="text-[10px] font-mono text-white/80 uppercase font-semibold">ElevenLabs Ativo</span>
+                            </div>
+                            <span className="text-[10px] text-her-muted">
+                              Modelo: <strong className="text-white font-normal uppercase">{apiKeys.elevenLabsModel?.replace('eleven_','').replace('_v2','') || 'TURBO'}</strong>
+                            </span>
+                          </div>
+
+                          {/* Quick Voice Settings Sliders */}
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-[10px] text-[#ff4e00] font-medium uppercase tracking-wider">
+                                <span>Estabilidade da Voz</span>
+                                <span className="font-mono">{((apiKeys.elevenLabsStability ?? 0.5) * 100).toFixed(0)}%</span>
+                              </div>
+                              <input 
+                                type="range" min="0.0" max="1.0" step="0.05"
+                                value={apiKeys.elevenLabsStability ?? 0.5}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setApiKeys({ ...apiKeys, elevenLabsStability: parseFloat(e.target.value) })}
+                                className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#ff4e00]"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-[10px] text-[#ff4e00] font-medium uppercase tracking-wider">
+                                <span>Claridade / Similaridade</span>
+                                <span className="font-mono">{((apiKeys.elevenLabsSimilarityBoost ?? 0.75) * 100).toFixed(0)}%</span>
+                              </div>
+                              <input 
+                                type="range" min="0.0" max="1.0" step="0.05"
+                                value={apiKeys.elevenLabsSimilarityBoost ?? 0.75}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setApiKeys({ ...apiKeys, elevenLabsSimilarityBoost: parseFloat(e.target.value) })}
+                                className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-[#ff4e00]"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Inline manual credentials warning if not completed */}
+                          {!apiKeys.elevenLabsApiKey && (
+                            <div className="pt-2 animate-in slide-in-from-bottom-2 duration-300">
+                              <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
+                                <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">Insira sua Chave Elevenlabs</span>
+                                <p className="text-[10px] text-her-muted/80 leading-relaxed">Sua chave é necessária para autenticar o motor de locução em tempo real.</p>
+                                <input 
+                                  type="password"
+                                  placeholder="Cole sua xi-api-key da ElevenLabs..."
+                                  value={apiKeys.elevenLabsApiKey || ''}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => setApiKeys({ ...apiKeys, elevenLabsApiKey: e.target.value })}
+                                  className="w-full bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 text-xs font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#ff4e00]/40 transition-all"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* ORIGINAL GEMINI DEDICATED INTERFACE */
+                    <>
+                      <div onClick={handleVoiceToggle} className={cn(
+                        "cursor-pointer transition-all duration-500 group relative",
+                        liveState.status === 'connected' ? "pointer-events-auto" : "pointer-events-auto"
+                      )}>
+                        <InfinityLogo 
+                          active={liveState.status === 'connected'} 
+                          speaking={isSpeaking} 
+                          style="neural"
+                          thinking={isGenerating || isAnalyzingCode || isTranscribing}
+                          searching={isModelSearching}
+                        />
+                        
+                        {/* Floating invitation */}
+                        {liveState.status !== 'connected' && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: !showUi ? 0 : [0.4, 0.7, 0.4], y: 0 }}
+                            transition={{ duration: 4, repeat: Infinity }}
+                            className={cn(
+                              "absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap transition-all duration-500",
+                              !showUi && "opacity-0 pointer-events-none scale-95"
+                            )}
+                          >
+                            <span className="text-[10px] md:text-sm font-serif italic tracking-[0.3em] text-her-muted/80 uppercase">
+                              Me ative
+                            </span>
+                          </motion.div>
+                        )}
                       </div>
+                      
+                      {(chatHistory.length === 0 || liveState.status === 'connected') && (
+                        <div className={cn(
+                          "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
+                          !showUi && "opacity-0 pointer-events-none scale-95"
+                        )}>
+                          {/* Mini logo showing we are on Gemini Live page */}
+                          <div className="flex items-center gap-1.5 p-1 px-3.5 bg-white/[0.02] border border-white/[0.05] rounded-full mt-2 mb-2 pointer-events-auto z-50 animate-in fade-in duration-300">
+                            <span className="text-[9px] uppercase tracking-wider text-her-accent font-bold">Gemini Live Neural 📻</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className={cn(
+                              "w-1.5 h-1.5 rounded-full transition-all duration-500",
+                              isListening ? "bg-her-accent animate-pulse" : isWaitingForWakeWord ? "bg-her-accent/40 animate-pulse" : "bg-her-muted/30"
+                            )} />
+                            <span className="text-[9px] tracking-[0.3em] uppercase text-her-muted font-light">NEURAL LINK {isListening ? 'ACTIVE' : isWaitingForWakeWord ? 'VOICE TRIGGER READY' : 'IDLE'}</span>
+                          </div>
                       
                       <div className="h-6 flex items-center justify-center">
                         <AnimatePresence mode="wait">
@@ -6715,6 +6898,8 @@ ${isBad
                         </AnimatePresence>
                       </div>
                     </div>
+                  )}
+                    </>
                   )}
                 </motion.div>
 

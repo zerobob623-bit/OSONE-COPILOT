@@ -43,7 +43,7 @@ interface PersonalizationPanelProps {
   onAddNotification: (msg: string, type: 'success' | 'info' | 'error') => void;
 }
 
-type TabId = 'profile' | 'voice' | 'keys' | 'interface' | 'sync';
+type TabId = 'profile' | 'voice' | 'elevenlabs' | 'keys' | 'interface' | 'sync';
 
 export default function PersonalizationPanel({
   onMenuClick,
@@ -69,6 +69,8 @@ export default function PersonalizationPanel({
   const [activeSubTab, setActiveSubTab] = useState<TabId>('profile');
   const [elVerificationStatus, setElVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [elVerificationMessage, setElVerificationMessage] = useState('');
+  const [geminiVerificationStatus, setGeminiVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [geminiVerificationMessage, setGeminiVerificationMessage] = useState('');
   
   // Cloud Sync properties
   const [syncLinkId, setSyncLinkId] = useState<string>(() => {
@@ -79,6 +81,45 @@ export default function PersonalizationPanel({
   const [syncStatus, setSyncStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+
+  // Verification for Gemini API Key
+  const handleVerifyGemini = async () => {
+    if (!keys.gemini || !keys.gemini.trim()) {
+      setGeminiVerificationStatus('error');
+      setGeminiVerificationMessage('Por favor, configure sua chave de API Gemini antes de validar.');
+      return;
+    }
+    setGeminiVerificationStatus('testing');
+    setGeminiVerificationMessage('Handshake ativo. Testando cognição do Gemini...');
+    try {
+      const response = await fetch('/api/gemini/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          geminiApiKey: keys.gemini
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setGeminiVerificationStatus('success');
+        setGeminiVerificationMessage(data.message);
+        if (onAddNotification) {
+          onAddNotification('Handshake Gemini validado com sucesso!', 'success');
+        }
+      } else {
+        setGeminiVerificationStatus('error');
+        setGeminiVerificationMessage(data.message || 'Chave do Gemini rejeitada pelos servidores do Google.');
+        if (onAddNotification) {
+          onAddNotification(data.message || 'Falha ao validar chave API do Gemini.', 'error');
+        }
+      }
+    } catch (err: any) {
+      setGeminiVerificationStatus('error');
+      setGeminiVerificationMessage('Erro de rede: sem resposta dos servidores do Gemini.');
+    }
+  };
 
   // Verification for ElevenLabs API Key
   const handleVerifyElevenLabs = async () => {
@@ -258,7 +299,8 @@ export default function PersonalizationPanel({
         {[
           { id: 'profile', label: 'Perfil & Identidade', icon: UserCircle },
           { id: 'voice', label: 'Sintonia de Voz', icon: Volume2 },
-          { id: 'keys', label: 'Integrações & Chaves', icon: Key },
+          { id: 'elevenlabs', label: 'ElevenLabs & Gemini 3.5', icon: Cpu },
+          { id: 'keys', label: 'Chaves Extras', icon: Key },
           { id: 'interface', label: 'Estética do Orb', icon: Sliders },
           { id: 'sync', label: 'Sincronização Nuvem', icon: RefreshCw },
         ].map((subTab) => {
@@ -546,6 +588,51 @@ export default function PersonalizationPanel({
                     className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
                     placeholder="Insira sua API Key do Gemini..."
                   />
+                  <button
+                    onClick={handleVerifyGemini}
+                    disabled={geminiVerificationStatus === 'testing'}
+                    className={cn(
+                      "w-full mt-3 py-3.5 rounded-2xl text-[10px] uppercase tracking-[0.15em] font-bold transition-all flex items-center justify-center gap-2 group cursor-pointer",
+                      geminiVerificationStatus === 'testing' ? "bg-white/5 text-her-muted cursor-wait" :
+                      geminiVerificationStatus === 'success' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                      geminiVerificationStatus === 'error' ? "bg-red-500/10 text-red-500 border border-red-500/20" :
+                      "bg-her-accent/10 text-her-accent border border-her-accent/20 hover:bg-her-accent/20 active:scale-[0.98]"
+                    )}
+                  >
+                    {geminiVerificationStatus === 'testing' ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin text-her-accent" />
+                        Validando conexão Gemini...
+                      </>
+                    ) : geminiVerificationStatus === 'success' ? (
+                      <>
+                        <CheckCircle2 size={13} className="text-emerald-400" />
+                        Handshake Gemini Concluído com Sucesso
+                      </>
+                    ) : geminiVerificationStatus === 'error' ? (
+                      <>
+                        <AlertCircle size={13} className="text-red-500" />
+                        Falha no Handshake. Tentar Novamente
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={13} className="text-her-accent group-hover:rotate-180 transition-transform duration-500" />
+                        Testar Handshake Gemini
+                      </>
+                    )}
+                  </button>
+
+                  {geminiVerificationMessage && (
+                    <p className={cn(
+                      "mt-2 text-[10px] font-mono leading-relaxed p-3 rounded-xl border",
+                      geminiVerificationStatus === 'success' ? "bg-emerald-500/5 text-emerald-400/80 border-emerald-500/10" :
+                      geminiVerificationStatus === 'error' ? "bg-red-500/5 text-red-400/80 border-red-500/10" :
+                      "bg-white/[0.01] text-her-muted border-white/5"
+                    )}>
+                      {geminiVerificationMessage}
+                    </p>
+                  )}
+
                   <div className="flex items-center gap-2 mt-3 p-3 rounded-xl bg-orange-500/5 border border-orange-500/10">
                     <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse shrink-0" />
                     <p className="text-[10px] text-her-muted/60 leading-normal italic">
@@ -594,53 +681,245 @@ export default function PersonalizationPanel({
                   </div>
                 </div>
               </div>
+            </motion.div>
+          )}
 
-              {/* ElevenLabs Section */}
-              <div className="space-y-4 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+          {activeSubTab === 'elevenlabs' && (
+            <motion.div
+              key="elevenlabs"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">ElevenLabs & Gemini 3.5</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Conecte o motor de síntese de fala hiper-realista da ElevenLabs com a inteligência do Gemini 3.5.</p>
+              </div>
+
+              {/* Status and Brain selector section */}
+              <div className="p-5 bg-gradient-to-r from-her-accent/5 to-transparent border border-her-accent/10 rounded-3xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Volume2 size={13} className="text-her-accent" />
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#efefef]">ElevenLabs Speech API</h4>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-2 h-2 rounded-full bg-her-accent animate-pulse" />
+                    <div className="text-left">
+                      <span className="text-xs font-serif italic text-white block">Cérebro Conversacional</span>
+                      <span className="text-[10px] font-mono text-her-accent uppercase tracking-wider font-semibold">Gemini 3.5 Flash Ativo (Bilateral)</span>
+                    </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#efefef]">Voz ElevenLabs</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextEngine = voiceEngine === 'elevenlabs' ? 'gemini' : 'elevenlabs';
+                        setVoiceEngine(nextEngine);
+                        onAddNotification(nextEngine === 'elevenlabs' ? "Motor ElevenLabs ativado como canal principal de voz" : "Gemini 3.1 TTS ativado", "info");
+                      }}
+                      className={cn(
+                        "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                        voiceEngine === 'elevenlabs' ? "bg-her-accent" : "bg-white/10"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                        voiceEngine === 'elevenlabs' ? "translate-x-5" : "translate-x-0"
+                      )} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-her-muted/80 leading-relaxed font-light text-left">
+                  Esta conexão une com latência ultrabaixa o poder reflexivo de raciocínio da IA <strong className="text-white">Gemini 3.5</strong> para processar, pensar e articular as respostas textuais em milissegundos, com a oratória humana hiper-realista dos modelos de locução da <strong className="text-white">ElevenLabs</strong>. Suas interações por áudio/fala fluirão perfeitamente.
+                </p>
+              </div>
+
+              {/* API keys inputs and validation */}
+              <div className="space-y-4 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold select-none">Chave de API ElevenLabs</label>
+                    <span 
+                      className="text-[10px] text-her-accent font-medium hover:underline cursor-pointer flex items-center gap-1"
+                      onClick={() => window.open('https://elevenlabs.io', '_blank')}
+                    >
+                      Obter Chave <Info size={10} />
+                    </span>
+                  </div>
+                  <input 
+                    type="password"
+                    value={keys.elevenLabsApiKey || ''}
+                    onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-white placeholder:text-her-muted/20"
+                    placeholder="Insira sua xi-api-key da Elevenlabs..."
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold select-none">ID da Voz Clone (Voice ID)</label>
+                    <span className="text-[10px] text-her-muted/40 font-mono">Rachel (Padrão) se em branco</span>
+                  </div>
+                  <input 
+                    type="text"
+                    value={keys.elevenLabsVoiceId || ''}
+                    onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-zinc-300 placeholder:text-her-muted/25"
+                    placeholder="Ex: 21m00Tcm4TlvDq8ikWAM..."
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleVerifyElevenLabs}
+                  disabled={elVerificationStatus === 'testing'}
+                  className={cn(
+                    "w-full py-4 rounded-2xl text-[10px] uppercase tracking-[0.15em] font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
+                    elVerificationStatus === 'testing' ? "bg-white/5 text-her-muted cursor-wait" :
+                    elVerificationStatus === 'success' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                    elVerificationStatus === 'error' ? "bg-red-500/10 text-red-500 border border-red-500/20" :
+                    "bg-her-accent/10 text-her-accent border border-her-accent/20 hover:bg-her-accent/20 active:scale-[0.98]"
+                  )}
+                >
+                  {elVerificationStatus === 'testing' ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin text-her-accent" />
+                      Validando conexão ElevenLabs...
+                    </>
+                  ) : elVerificationStatus === 'success' ? (
+                    <>
+                      <CheckCircle2 size={13} className="text-emerald-400" />
+                      Conexão Estabelecida com Sucesso
+                    </>
+                  ) : elVerificationStatus === 'error' ? (
+                    <>
+                      <AlertCircle size={13} className="text-red-500" />
+                      Falha na Conexão. Tentar Novamente
+                    </>
+                  ) : (
+                    <>
+                      <Activity size={13} />
+                      Testar e Validar Conexão
+                    </>
+                  )}
+                </button>
+
+                {elVerificationStatus !== 'idle' && elVerificationMessage && (
+                  <div className={cn(
+                    "p-4 rounded-2xl text-xs leading-relaxed font-light flex items-start gap-3 border animate-in fade-in slide-in-from-top-2 duration-200",
+                    elVerificationStatus === 'success' ? "bg-emerald-500/5 text-emerald-300/90 border-emerald-500/10" :
+                    "bg-red-500/5 text-red-300/95 border-red-500/10"
+                  )}>
+                    {elVerificationStatus === 'success' ? (
+                      <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                    ) : (
+                      <AlertCircle size={14} className="shrink-0 mt-0.5 text-red-400" />
+                    )}
+                    <div className="space-y-1 text-left">
+                      <p className="font-medium text-[11px] uppercase tracking-wider">
+                        {elVerificationStatus === 'success' ? 'Sucesso de Handshake' : 'Verificação Recusada'}
+                      </p>
+                      <p className="font-sans text-[11px] opacity-80">{elVerificationMessage}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Advanced Controls & Parameters */}
+              <div className="pt-4 border-t border-white/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] uppercase tracking-[0.2em] text-her-muted font-bold">Parâmetros Vocais Avançados</label>
                   <button 
                     type="button"
-                    onClick={handleVerifyElevenLabs}
-                    disabled={elVerificationStatus === 'testing' || !keys.elevenLabsApiKey}
-                    className="text-[9px] uppercase tracking-widest bg-white/[0.03] hover:bg-white/[0.06] active:bg-white/[0.02] border border-white/[0.06] text-white px-3 py-1.5 rounded-xl transition-all font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => setKeys({ 
+                      ...keys, 
+                      elevenLabsStability: 0.5, 
+                      elevenLabsSimilarityBoost: 0.75, 
+                      elevenLabsStyle: 0.0,
+                      elevenLabsSpeakerBoost: true,
+                      elevenLabsModel: 'eleven_multilingual_v2'
+                    })}
+                    className="text-[9px] uppercase tracking-widest text-her-accent hover:underline font-bold"
                   >
-                    {elVerificationStatus === 'testing' ? "Sintonizando..." : "Verificar Sinal"}
+                    Resetar Ajustes
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">ElevenLabs API Key</label>
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] uppercase tracking-wider text-her-muted/60 font-bold text-left">Modelo de IA & Latência Verbal</label>
+                  <select 
+                    value={keys.elevenLabsModel || 'eleven_multilingual_v2'}
+                    onChange={(e) => setKeys({ ...keys, elevenLabsModel: e.target.value })}
+                    className="w-full bg-[#111111] border border-white/[0.05] rounded-xl px-4 py-3 focus:outline-none focus:border-her-accent/30 text-xs text-zinc-300 custom-select"
+                  >
+                    <option value="eleven_turbo_v2_5" className="bg-[#111111]">Eleven Turbo v2.5 (Bilateral - Alta Velocidade)</option>
+                    <option value="eleven_flash_v2_5" className="bg-[#111111]">Eleven Flash v2.5 (Baixa Latência)</option>
+                    <option value="eleven_multilingual_v2" className="bg-[#111111]">Eleven Multilingual v2 (Premium Riqueza Tonal)</option>
+                    <option value="eleven_turbo_v2" className="bg-[#111111]">Eleven Turbo v2 (Clássico Rápido)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-4 p-5 bg-white/[0.01] border border-white/[0.03] rounded-3xl">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[11px] text-her-muted/70 uppercase font-medium">
+                      <span>Estabilidade (Stability)</span>
+                      <span className="text-her-accent font-mono">{(keys.elevenLabsStability ?? 0.5).toFixed(2)}</span>
+                    </div>
                     <input 
-                      type="password"
-                      value={keys.elevenLabsApiKey || ''}
-                      onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
-                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
-                      placeholder="Insira sua API Key do ElevenLabs..."
+                      type="range" min="0.0" max="1.0" step="0.05"
+                      value={keys.elevenLabsStability ?? 0.5}
+                      onChange={(e) => setKeys({ ...keys, elevenLabsStability: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                    />
+                    <p className="text-[9px] text-her-muted/40 italic text-left leading-normal">Valores menores geram vozes mais expressivas e dinâmicas, porém menos consistentes.</p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-white/[0.02]">
+                    <div className="flex justify-between text-[11px] text-her-muted/70 uppercase font-medium">
+                      <span>Fidelidade do Clone (Similarity Boost)</span>
+                      <span className="text-her-accent font-mono">{(keys.elevenLabsSimilarityBoost ?? 0.75).toFixed(2)}</span>
+                    </div>
+                    <input 
+                      type="range" min="0.0" max="1.0" step="0.05"
+                      value={keys.elevenLabsSimilarityBoost ?? 0.75}
+                      onChange={(e) => setKeys({ ...keys, elevenLabsSimilarityBoost: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
+                    />
+                    <p className="text-[9px] text-her-muted/40 italic text-left leading-normal">Aumente para reforçar a similaridade exata com o clone de voz original cadastrado.</p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-white/[0.02]">
+                    <div className="flex justify-between text-[11px] text-her-muted/70 uppercase font-medium">
+                      <span>Exagero de Estilo (Style Out)</span>
+                      <span className="text-her-accent font-mono">{(keys.elevenLabsStyle ?? 0.0).toFixed(2)}</span>
+                    </div>
+                    <input 
+                      type="range" min="0.0" max="1.0" step="0.05"
+                      value={keys.elevenLabsStyle ?? 0.0}
+                      onChange={(e) => setKeys({ ...keys, elevenLabsStyle: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/5 rounded-lg appearance-none cursor-pointer accent-her-accent"
                     />
                   </div>
 
-                  {elVerificationMessage && (
-                    <div className={cn(
-                      "flex items-center gap-2.5 p-3.5 rounded-2xl text-[11px] font-medium leading-relaxed",
-                      elVerificationStatus === 'success' && "bg-emerald-500/10 border border-emerald-500/15 text-emerald-400",
-                      elVerificationStatus === 'error' && "bg-red-500/10 border border-red-500/15 text-red-400",
-                      elVerificationStatus === 'testing' && "bg-white/[0.02] border border-white/[0.05] text-her-muted"
-                    )}>
-                      {elVerificationStatus === 'testing' ? (
-                        <Loader2 size={12} className="animate-spin text-her-accent shrink-0" />
-                      ) : elVerificationStatus === 'success' ? (
-                        <CheckCircle2 size={13} className="shrink-0" />
-                      ) : (
-                        <AlertCircle size={13} className="shrink-0" />
-                      )}
-                      <span>{elVerificationMessage}</span>
+                  <div className="flex items-center justify-between pt-3 border-t border-white/[0.02]">
+                    <div className="flex flex-col text-left space-y-0.5">
+                      <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-wider">Impulso de Locução (Speaker Boost)</span>
+                      <span className="text-[9px] text-her-muted/60 leading-normal">Oferece um boost adicional na inteligibilidade fonética</span>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => setKeys({ ...keys, elevenLabsSpeakerBoost: !(keys.elevenLabsSpeakerBoost ?? true) })}
+                      className={cn(
+                        "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                        (keys.elevenLabsSpeakerBoost ?? true) ? "bg-her-accent" : "bg-white/10"
+                      )}
+                    >
+                      <span className={cn(
+                        "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                        (keys.elevenLabsSpeakerBoost ?? true) ? "translate-x-5" : "translate-x-0"
+                      )} />
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>

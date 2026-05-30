@@ -56,6 +56,8 @@ export const SettingsModal = ({
   const [connectionMessage, setConnectionMessage] = useState('');
   const [elVerificationStatus, setElVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [elVerificationMessage, setElVerificationMessage] = useState('');
+  const [geminiVerificationStatus, setGeminiVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [geminiVerificationMessage, setGeminiVerificationMessage] = useState('');
 
   // ====== NEURAL CONNECTION MEMORY SYNC STATES ======
   const [syncLinkId, setSyncLinkId] = useState<string>(() => {
@@ -204,6 +206,44 @@ export const SettingsModal = ({
     }
   };
 
+  const handleVerifyGemini = async () => {
+    if (!keys.gemini || !keys.gemini.trim()) {
+      setGeminiVerificationStatus('error');
+      setGeminiVerificationMessage('Por favor, configure sua chave de API Gemini nos ajustes antes de validar.');
+      return;
+    }
+    setGeminiVerificationStatus('testing');
+    setGeminiVerificationMessage('Handshake ativo. Testando cognição do Gemini...');
+    try {
+      const response = await fetch('/api/gemini/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          geminiApiKey: keys.gemini
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setGeminiVerificationStatus('success');
+        setGeminiVerificationMessage(data.message);
+        if (onAddNotification) {
+          onAddNotification('Handshake Gemini validado com sucesso!', 'success');
+        }
+      } else {
+        setGeminiVerificationStatus('error');
+        setGeminiVerificationMessage(data.message || 'Chave do Gemini rejeitada pelos servidores do Google.');
+        if (onAddNotification) {
+          onAddNotification(data.message || 'Falha ao validar chave API do Gemini.', 'error');
+        }
+      }
+    } catch (err: any) {
+      setGeminiVerificationStatus('error');
+      setGeminiVerificationMessage('Erro de rede: sem resposta dos servidores do Gemini.');
+    }
+  };
+
   const handleVerifyElevenLabs = async () => {
     if (!keys.elevenLabsApiKey || !keys.elevenLabsApiKey.trim()) {
       setElVerificationStatus('error');
@@ -332,6 +372,51 @@ export const SettingsModal = ({
                         className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-base md:text-sm font-light text-her-ink/80 placeholder:text-her-muted/20"
                         placeholder="Insira sua chave Gemini..."
                       />
+                      <button
+                        onClick={handleVerifyGemini}
+                        disabled={geminiVerificationStatus === 'testing'}
+                        className={cn(
+                          "w-full mt-3 py-3.5 rounded-2xl text-[10px] uppercase tracking-[0.15em] font-bold transition-all flex items-center justify-center gap-2 group cursor-pointer",
+                          geminiVerificationStatus === 'testing' ? "bg-white/5 text-her-muted cursor-wait" :
+                          geminiVerificationStatus === 'success' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                          geminiVerificationStatus === 'error' ? "bg-red-500/10 text-red-500 border border-red-500/20" :
+                          "bg-her-accent/10 text-her-accent border border-her-accent/20 hover:bg-her-accent/20 active:scale-[0.98]"
+                        )}
+                      >
+                        {geminiVerificationStatus === 'testing' ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-her-accent" />
+                            Validando conexão Gemini...
+                          </>
+                        ) : geminiVerificationStatus === 'success' ? (
+                          <>
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            Handshake Gemini Concluído com Sucesso
+                          </>
+                        ) : geminiVerificationStatus === 'error' ? (
+                          <>
+                            <AlertCircle size={13} className="text-red-500" />
+                            Falha no Handshake. Tentar Novamente
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw size={13} className="text-her-accent group-hover:rotate-180 transition-transform duration-500" />
+                            Testar Handshake Gemini
+                          </>
+                        )}
+                      </button>
+
+                      {geminiVerificationMessage && (
+                        <p className={cn(
+                          "mt-2 text-[10px] font-mono leading-relaxed p-3 rounded-xl border",
+                          geminiVerificationStatus === 'success' ? "bg-emerald-500/5 text-emerald-400/80 border-emerald-500/10" :
+                          geminiVerificationStatus === 'error' ? "bg-red-500/5 text-red-400/80 border-red-500/10" :
+                          "bg-white/[0.01] text-her-muted border-white/5"
+                        )}>
+                          {geminiVerificationMessage}
+                        </p>
+                      )}
+
                       <p className="mt-3 text-[10px] text-her-muted/40 italic leading-relaxed">
                         Chave necessária para o processamento de linguagem natural, transcrição de voz e visão computacional integrada do OSONE.
                       </p>
