@@ -245,11 +245,7 @@ export const SettingsModal = ({
 
   const tabs = [
     { id: 'general', label: 'Chaves', icon: Key },
-    { id: 'elevenlabs', label: 'ElevenLabs', icon: Volume2 },
-    { id: 'interface', label: 'Interface', icon: Palette },
-    { id: 'profile', label: 'Perfil', icon: UserCircle },
     { id: 'automation', label: 'Automação', icon: Cpu },
-    { id: 'sync', label: 'Sincronizar', icon: RefreshCw },
   ];
 
   return (

@@ -238,7 +238,7 @@ export default function PersonalizationPanel({
   };
 
   return (
-    <div className="w-full flex-1 flex flex-col md:flex-row h-full overflow-hidden bg-gradient-to-b from-[#0b0b0b] to-[#040404]">
+    <div className="w-full flex-1 flex flex-col md:flex-row h-full overflow-y-auto bg-gradient-to-b from-[#0b0b0b] to-[#040404]">
       {/* Sidebar de sub-navegação dos ajustes */}
       <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/[0.05] p-5 flex flex-col gap-1.5 shrink-0">
         <div className="flex items-center gap-3 mb-6">
@@ -289,7 +289,7 @@ export default function PersonalizationPanel({
       </div>
 
       {/* Conteúdo dinâmico do sub-tab */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+      <div className="flex-1 p-6 md:p-8 space-y-6">
         <AnimatePresence mode="wait">
           {activeSubTab === 'profile' && (
             <motion.div
