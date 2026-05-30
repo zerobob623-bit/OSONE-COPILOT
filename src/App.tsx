@@ -68,6 +68,7 @@ import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
 import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
+import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { LocalControl } from './components/LocalControl';
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
@@ -2504,7 +2505,7 @@ ${isBad
     };
   }, []);
 
-  const stopLiveSessionInternal = () => {
+  const stopLiveSessionInternal = (keepError = false) => {
     if (liveAnimationFrameRef.current) {
       cancelAnimationFrame(liveAnimationFrameRef.current);
       liveAnimationFrameRef.current = null;
@@ -2516,12 +2517,14 @@ ${isBad
     liveSessionRef.current = null;
     setIsListening(false);
     setIsSpeaking(false);
-    setLiveState({ status: 'idle' });
+    if (!keepError) {
+      setLiveState({ status: 'idle' });
+    }
     setIsWaitingForWakeWord(isHandsFreeActive); // Restart wake word listener only if hands-free is active
   };
 
-  const stopLiveSession = () => {
-    stopLiveSessionInternal();
+  const stopLiveSession = (keepError = false) => {
+    stopLiveSessionInternal(keepError);
     stopElevenLabsLiveSession();
   };
 
@@ -5187,7 +5190,7 @@ ${isBad
               setLiveState({ status: 'error', error: errorMessage || "Erro de rede na Live API." });
               addNotification("Erro na conexão Neural", "error");
             }
-            stopLiveSession();
+            stopLiveSession(true);
           }
         }
       });
@@ -6448,10 +6451,26 @@ ${isBad
               exit={{ opacity: 0 }}
               className="w-full h-full flex flex-col overflow-hidden relative p-0"
             >
-              <AuralSense 
+              <PersonalizationPanel 
                 onMenuClick={() => setIsSidebarOpen(true)}
                 onBack={() => setWorkspaceMode('home')}
                 keys={apiKeys}
+                setKeys={setApiKeys}
+                selectedVoice={selectedVoice}
+                setSelectedVoice={setSelectedVoice}
+                voiceEngine={voiceEngine}
+                setVoiceEngine={setVoiceEngine}
+                isChatAutoSpeakActive={isChatAutoSpeakActive}
+                setIsChatAutoSpeakActive={setIsChatAutoSpeakActive}
+                voiceModulation={voiceModulation}
+                setVoiceModulation={setVoiceModulation}
+                orbStyle={orbStyle}
+                setOrbStyle={setOrbStyle}
+                appTheme={appTheme}
+                setAppTheme={setAppTheme}
+                aiProfile={aiProfile}
+                setAiProfile={handleUpdateProfile}
+                onAddNotification={addNotification}
               />
             </motion.div>
           ) : workspaceMode === 'sounds' ? (
@@ -7270,7 +7289,7 @@ ${isBad
         {[
           { id: 'home', icon: Volume2, label: 'Início' },
           { id: 'writing', icon: FileText, label: 'Escrita' },
-          { id: 'aural_control', icon: Activity, label: 'Sentido' },
+          { id: 'aural_control', icon: Sliders, label: 'Ajustes' },
         ].map((item) => (
           <button
             key={item.id}

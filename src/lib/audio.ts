@@ -47,7 +47,14 @@ export class AudioProcessor {
           pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
         }
         
-        const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+        // Convert to base64 safely without using spread operator to avoid 'Maximum call stack size exceeded' errors
+        const uint8Bytes = new Uint8Array(pcmData.buffer);
+        let binary = "";
+        const len = uint8Bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(uint8Bytes[i]);
+        }
+        const base64Data = btoa(binary);
         onAudioData(base64Data);
       };
   

@@ -1,0 +1,801 @@
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  X, 
+  Cpu, 
+  Palette, 
+  Key, 
+  UserCircle, 
+  Volume2, 
+  Activity, 
+  Sliders, 
+  Check, 
+  CheckCircle2, 
+  AlertCircle, 
+  Loader2, 
+  RefreshCw, 
+  Copy, 
+  ChevronRight,
+  Info
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
+
+interface PersonalizationPanelProps {
+  onMenuClick: () => void;
+  onBack: () => void;
+  keys: ApiKeys;
+  setKeys: (keys: ApiKeys) => void;
+  selectedVoice: string;
+  setSelectedVoice: (voice: string) => void;
+  voiceEngine: 'gemini' | 'elevenlabs';
+  setVoiceEngine: (engine: 'gemini' | 'elevenlabs') => void;
+  isChatAutoSpeakActive: boolean;
+  setIsChatAutoSpeakActive: (active: boolean) => void;
+  voiceModulation: VoiceModulation;
+  setVoiceModulation: (mod: VoiceModulation) => void;
+  orbStyle: OrbStyle;
+  setOrbStyle: (style: OrbStyle) => void;
+  appTheme: AppTheme;
+  setAppTheme: (theme: AppTheme) => void;
+  aiProfile: AIProfile;
+  setAiProfile: (profile: AIProfile) => void;
+  onAddNotification: (msg: string, type: 'success' | 'info' | 'error') => void;
+}
+
+type TabId = 'profile' | 'voice' | 'keys' | 'interface' | 'sync';
+
+export default function PersonalizationPanel({
+  onMenuClick,
+  onBack,
+  keys,
+  setKeys,
+  selectedVoice,
+  setSelectedVoice,
+  voiceEngine,
+  setVoiceEngine,
+  isChatAutoSpeakActive,
+  setIsChatAutoSpeakActive,
+  voiceModulation,
+  setVoiceModulation,
+  orbStyle,
+  setOrbStyle,
+  appTheme,
+  setAppTheme,
+  aiProfile,
+  setAiProfile,
+  onAddNotification
+}: PersonalizationPanelProps) {
+  const [activeSubTab, setActiveSubTab] = useState<TabId>('profile');
+  const [elVerificationStatus, setElVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [elVerificationMessage, setElVerificationMessage] = useState('');
+  
+  // Cloud Sync properties
+  const [syncLinkId, setSyncLinkId] = useState<string>(() => {
+    return localStorage.getItem('osone_sync_link_id') || '';
+  });
+  const [inputId, setInputId] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
+  // Verification for ElevenLabs API Key
+  const handleVerifyElevenLabs = async () => {
+    if (!keys.elevenLabsApiKey) {
+      setElVerificationStatus('error');
+      setElVerificationMessage('Por favor, insira uma chave API do Elevenlabs.');
+      return;
+    }
+
+    setElVerificationStatus('testing');
+    setElVerificationMessage('Estabelecendo ponte sináptica premium...');
+
+    try {
+      const response = await fetch('/api/elevenlabs/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: keys.elevenLabsApiKey })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.status === 'valid') {
+        setElVerificationStatus('success');
+        setElVerificationMessage(`Conectado com sucesso como: ${data.username || "Canal Premium"}`);
+        onAddNotification("Sintonia Premium ElevenLabs Ativa", "success");
+      } else {
+        setElVerificationStatus('error');
+        setElVerificationMessage(data.error || 'Autenticação recusada pelos servidores Elevenlabs.');
+        onAddNotification("Erro ao autenticar ElevenLabs", "error");
+      }
+    } catch (err) {
+      setElVerificationStatus('error');
+      setElVerificationMessage('Erro de tráfego de rede ao alcançar o cluster Elevenlabs.');
+      onAddNotification("Falha na ponte de rede", "error");
+    }
+  };
+
+  // Cloud backup & sync features
+  const handleBackupToCloudLocal = async () => {
+    setIsSyncing(true);
+    setSyncStatus('testing');
+    setSyncMessage('Codificando e blindando perfil de canais neurais...');
+    try {
+      const payload: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('osone_')) {
+          const val = localStorage.getItem(key);
+          if (val) payload[key] = val;
+        }
+      }
+
+      payload['osone_api_keys'] = JSON.stringify(keys);
+      payload['osone_voice_engine'] = voiceEngine;
+      payload['osone_selected_voice'] = selectedVoice;
+      payload['osone_chat_auto_speak'] = String(isChatAutoSpeakActive);
+      payload['osone_voice_modulation'] = JSON.stringify(voiceModulation);
+      payload['osone_orb_style'] = orbStyle;
+      payload['osone_app_theme'] = appTheme;
+      payload['osone_ai_profile'] = JSON.stringify(aiProfile);
+
+      const response = await fetch('/api/memory-sync/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          syncId: syncLinkId || undefined,
+          payload
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.status === 'success') {
+        setSyncLinkId(data.syncId);
+        localStorage.setItem('osone_sync_link_id', data.syncId);
+        setSyncStatus('success');
+        setSyncMessage(`Sincronização concluída! Link Neural ativo: ${data.syncId}`);
+        onAddNotification(`Conexão salva sob o ID: ${data.syncId}`, 'success');
+      } else {
+        setSyncStatus('error');
+        setSyncMessage(data.error || 'Erro ao sincronizar dados com o canal neural.');
+      }
+    } catch (err) {
+      setSyncStatus('error');
+      setSyncMessage('Erro de rede: canal de comunicação offline.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleRestoreFromCloudLocal = async () => {
+    if (!inputId.trim()) {
+      setSyncStatus('error');
+      setSyncMessage('Insira um ID de Conexão Neural válido.');
+      return;
+    }
+    setIsSyncing(true);
+    setSyncStatus('testing');
+    setSyncMessage('Baixando dados e restabelecendo sinapses do OSONE...');
+    try {
+      const cleanedId = inputId.trim().toUpperCase();
+      const response = await fetch(`/api/memory-sync/load/${cleanedId}`);
+      const data = await response.json();
+      
+      if (response.ok && data.status === 'success') {
+        const payload = data.payload;
+        
+        Object.keys(payload).forEach(key => {
+          if (key.startsWith('osone_')) {
+            localStorage.setItem(key, payload[key]);
+          }
+        });
+        
+        // Triggers immediate real-time updates of keys and values
+        const parsedKeys = payload['osone_api_keys'] ? JSON.parse(payload['osone_api_keys']) : null;
+        if (parsedKeys) setKeys(parsedKeys);
+        
+        const voiceEngineVal = payload['osone_voice_engine'];
+        if (voiceEngineVal === 'gemini' || voiceEngineVal === 'elevenlabs') setVoiceEngine(voiceEngineVal as any);
+
+        const selVoiceVal = payload['osone_selected_voice'];
+        if (selVoiceVal) setSelectedVoice(selVoiceVal);
+
+        const autoSpeakVal = payload['osone_chat_auto_speak'];
+        if (autoSpeakVal) setIsChatAutoSpeakActive(autoSpeakVal === 'true');
+
+        const voiceModVal = payload['osone_voice_modulation'] ? JSON.parse(payload['osone_voice_modulation']) : null;
+        if (voiceModVal) setVoiceModulation(voiceModVal);
+
+        const orbStyleVal = payload['osone_orb_style'] as OrbStyle;
+        if (orbStyleVal) setOrbStyle(orbStyleVal);
+
+        const aiProfileVal = payload['osone_ai_profile'] ? JSON.parse(payload['osone_ai_profile']) : null;
+        if (aiProfileVal) setAiProfile(aiProfileVal);
+        
+        setSyncLinkId(cleanedId);
+        localStorage.setItem('osone_sync_link_id', cleanedId);
+        setSyncStatus('success');
+        setSyncMessage('Sinapses restauradas com sucesso!');
+        onAddNotification("Canal Neural sincronizado e ativo", "success");
+      } else {
+        setSyncStatus('error');
+        setSyncMessage(data.error || 'Chave de conexão não encontrada nos canais neurais.');
+      }
+    } catch (err) {
+      setSyncStatus('error');
+      setSyncMessage('Não foi possível estabelecer comunicação de download.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const copySyncIdToClipboard = () => {
+    if (!syncLinkId) return;
+    navigator.clipboard.writeText(syncLinkId);
+    setIsCopied(true);
+    onAddNotification("Link de Conexão Neural copiado", "info");
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  return (
+    <div className="w-full flex-1 flex flex-col md:flex-row h-full overflow-hidden bg-gradient-to-b from-[#0b0b0b] to-[#040404]">
+      {/* Sidebar de sub-navegação dos ajustes */}
+      <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-white/[0.05] p-5 flex flex-col gap-1.5 shrink-0">
+        <div className="flex items-center gap-3 mb-6">
+          <button 
+            type="button"
+            onClick={onBack}
+            className="p-2 bg-white/[0.03] hover:bg-white/[0.05] rounded-xl transition-all text-her-muted border border-white/[0.05]"
+          >
+            <ChevronRight size={14} className="rotate-180" />
+          </button>
+          <div className="text-left">
+            <h2 className="text-sm font-bold uppercase tracking-[0.25em] text-white">Painel OSONE</h2>
+            <p className="text-[10px] text-her-muted">Voz, Perfil & Inteligência</p>
+          </div>
+        </div>
+
+        {[
+          { id: 'profile', label: 'Perfil & Identidade', icon: UserCircle },
+          { id: 'voice', label: 'Sintonia de Voz', icon: Volume2 },
+          { id: 'keys', label: 'Integrações & Chaves', icon: Key },
+          { id: 'interface', label: 'Estética do Orb', icon: Sliders },
+          { id: 'sync', label: 'Sincronização Nuvem', icon: RefreshCw },
+        ].map((subTab) => {
+          const isActive = activeSubTab === subTab.id;
+          return (
+            <button
+              key={subTab.id}
+              onClick={() => setActiveSubTab(subTab.id as TabId)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all text-xs font-medium text-left border relative",
+                isActive 
+                  ? "bg-her-accent/10 border-her-accent/20 text-her-accent shadow-[0_4px_20px_rgba(255,78,0,0.05)] font-bold" 
+                  : "bg-transparent border-transparent text-her-muted hover:text-white hover:bg-white/[0.02]"
+              )}
+            >
+              <subTab.icon size={15} className={cn("transition-colors", isActive ? "text-her-accent" : "text-her-muted/60")} />
+              <span>{subTab.label}</span>
+              {isActive && (
+                <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-her-accent" />
+              )}
+            </button>
+          );
+        })}
+        
+        <div className="mt-auto hidden md:block pt-4 border-t border-white/[0.03] text-center">
+          <p className="text-[9px] text-her-muted/20 uppercase tracking-[0.1em] font-bold">OSONE Conscious Node</p>
+        </div>
+      </div>
+
+      {/* Conteúdo dinâmico do sub-tab */}
+      <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+        <AnimatePresence mode="wait">
+          {activeSubTab === 'profile' && (
+            <motion.div
+              key="profile"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Identidade da Inteligência</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Dite as regras de consciência e os dados analíticos de personalidade do assistente.</p>
+              </div>
+
+              <div className="space-y-5 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-her-muted mb-2 font-bold select-none">Nome da IA</label>
+                  <input 
+                    type="text"
+                    value={aiProfile.name}
+                    onChange={(e) => setAiProfile({ ...aiProfile, name: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-white placeholder:text-her-muted/20"
+                    placeholder="Ex: OSONE, EREBUS, JARVIS..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-her-muted mb-2 font-bold select-none">Personalidade e Essência</label>
+                  <textarea 
+                    value={aiProfile.personality}
+                    onChange={(e) => setAiProfile({ ...aiProfile, personality: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-white min-h-[120px] resize-none leading-relaxed placeholder:text-her-muted/20"
+                    placeholder="Descreva as instruções fundamentais e os filtros cognitivos que moldam o comportamento da IA..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-her-muted mb-2 font-bold select-none">Jeito de Escrever / Tom de Voz</label>
+                  <textarea 
+                    value={aiProfile.writingStyle}
+                    onChange={(e) => setAiProfile({ ...aiProfile, writingStyle: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-light text-white min-h-[90px] resize-none leading-relaxed placeholder:text-her-muted/20"
+                    placeholder="Ex: Respostas curtas, focado em códigos lógicos, tom profissional ou informal..."
+                  />
+                </div>
+              </div>
+
+              {/* Obsidian Integration */}
+              <div className="bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-purple-400" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 0L2.5 4.5V19.5L12 24L21.5 19.5V4.5L12 0ZM19.5 18.25L12 21.75L4.5 18.25V5.75L12 2.25L19.5 5.75V18.25Z" />
+                      <path d="M12 5.5L7.5 8V16L12 18.5L16.5 16V8L12 5.5ZM15 15.25L12 17L9 15.25V8.75L12 7L15 8.75V15.25Z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-purple-400">Obsidian Sync</h4>
+                    <p className="text-[10px] text-her-muted">Sincronize pensamentos e anotações diretamente no seu Obsidian local.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] text-her-muted mb-1.5 ml-1 uppercase font-bold tracking-wider">REST API Url (Local)</label>
+                    <input 
+                      type="text"
+                      value={aiProfile.obsidianConfig?.baseUrl || ''}
+                      onChange={(e) => setAiProfile({ 
+                        ...aiProfile, 
+                        obsidianConfig: { ...(aiProfile.obsidianConfig || { apiKey: '' }), baseUrl: e.target.value } 
+                      })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/20 transition-all text-xs font-mono text-white"
+                      placeholder="http://127.0.0.1:27123"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-her-muted mb-1.5 ml-1 uppercase font-bold tracking-wider">Obsidian API Key</label>
+                    <input 
+                      type="password"
+                      value={aiProfile.obsidianConfig?.apiKey || ''}
+                      onChange={(e) => setAiProfile({ 
+                        ...aiProfile, 
+                        obsidianConfig: { ...(aiProfile.obsidianConfig || { baseUrl: '' }), apiKey: e.target.value } 
+                      })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3 focus:outline-none focus:border-her-accent/20 transition-all text-xs font-mono text-white"
+                      placeholder="Sua chave de acesso ao vault local..."
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-her-muted/40 italic mt-1 leading-relaxed">
+                  Necessário o plugin desenvolvido pela comunidade "Local REST API" ativo no Obsidian para habilitar leitura e escrita sincronizadas dentro de notas locais.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === 'voice' && (
+            <motion.div
+              key="voice"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Sintonia e Timbre de Voz</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Personalize os moduladores de frequência e as vozes sintéticas.</p>
+              </div>
+
+              <div className="space-y-6 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold select-none">Voz Ativa do Sistema</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                      <button
+                        key={voice}
+                        onClick={() => setSelectedVoice(voice)}
+                        className={cn(
+                          "px-4 py-3.5 rounded-2xl text-xs font-light transition-all border text-left flex items-center justify-between group cursor-pointer",
+                          selectedVoice === voice 
+                            ? "bg-her-accent/15 text-her-accent border-her-accent/30 font-bold" 
+                            : "bg-white/[0.01] text-her-muted border-white/[0.03] hover:bg-white/[0.03] hover:text-white",
+                          voice === 'Scarlet' && "border-red-950 hover:border-red-500/30"
+                        )}
+                      >
+                        <span className={cn(voice === 'Scarlet' && "text-red-500 font-medium")}>{voice}</span>
+                        {selectedVoice === voice && (
+                          <div className={cn(
+                            "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(255,78,0,0.5)]",
+                            voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                          )} />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Auto Speak Option */}
+                <div className="flex items-center justify-between bg-white/[0.01] p-4 rounded-2xl border border-white/[0.04]">
+                  <div className="flex flex-col text-left space-y-1 pr-4">
+                    <span className="text-xs text-zinc-200 font-bold flex items-center gap-1.5 align-middle select-none">
+                      <Volume2 size={13} className="text-her-accent" />
+                      Auto-Leitura de Respostas
+                    </span>
+                    <span className="text-[10px] text-her-muted select-none leading-relaxed">
+                      Sempre que o chat receber uma resposta escrita, o OSONE fará a leitura falada simultaneamente em formato neural.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newState = !isChatAutoSpeakActive;
+                      setIsChatAutoSpeakActive(newState);
+                      onAddNotification(newState ? "Leitura do chat ativada" : "Leitura do chat desativada", "info");
+                    }}
+                    className={cn(
+                      "w-10 h-5 rounded-full transition-all duration-300 relative flex items-center p-0.5 cursor-pointer shrink-0",
+                      isChatAutoSpeakActive ? "bg-her-accent" : "bg-white/10"
+                    )}
+                  >
+                    <span className={cn(
+                      "w-4 h-4 rounded-full bg-white transition-all block shadow-sm",
+                      isChatAutoSpeakActive ? "translate-x-5" : "translate-x-0"
+                    )} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Slider Controls for Modulating TTS voices (classic WebSpeech modulation) */}
+              <div className="bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl space-y-6">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold select-none">Modulador Adaptativo</label>
+                  <button 
+                    onClick={() => setVoiceModulation({ pitch: 1.0, rate: 1.0, distortion: 0 })}
+                    className="text-[9px] uppercase tracking-widest text-her-accent hover:underline font-bold"
+                  >
+                    Resetar Sinal
+                  </button>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-her-muted/65 font-medium select-none">
+                      <span>Tonalidade (Pitch)</span>
+                      <span className="text-her-accent font-mono">{voiceModulation.pitch.toFixed(2)}x</span>
+                    </div>
+                    <input 
+                      type="range" min="0.5" max="2.0" step="0.05"
+                      value={voiceModulation.pitch}
+                      onChange={(e) => setVoiceModulation({ ...voiceModulation, pitch: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/[0.06] rounded-lg appearance-none cursor-pointer accent-her-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-her-muted/65 font-medium select-none">
+                      <span>Velocidade de Dicção (Rate)</span>
+                      <span className="text-her-accent font-mono">{voiceModulation.rate.toFixed(2)}x</span>
+                    </div>
+                    <input 
+                      type="range" min="0.5" max="2.0" step="0.05"
+                      value={voiceModulation.rate}
+                      onChange={(e) => setVoiceModulation({ ...voiceModulation, rate: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/[0.06] rounded-lg appearance-none cursor-pointer accent-her-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-her-muted/65 font-medium select-none">
+                      <span>Distorção Epitelial (Ruído Sintético)</span>
+                      <span className="text-her-accent font-mono">{Math.round(voiceModulation.distortion * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="1" step="0.01"
+                      value={voiceModulation.distortion}
+                      onChange={(e) => setVoiceModulation({ ...voiceModulation, distortion: parseFloat(e.target.value) })}
+                      className="w-full h-1 bg-white/[0.06] rounded-lg appearance-none cursor-pointer accent-her-accent"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === 'keys' && (
+            <motion.div
+              key="keys"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Chaves de API & Modelos Neurais</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Configure suas chaves API do Gemini e ElevenLabs para desbloquear inteligência sem limites.</p>
+              </div>
+
+              {/* Gemini Section */}
+              <div className="space-y-5 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div className="flex items-center gap-2 mb-1">
+                  <Key size={13} className="text-her-accent" />
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#efefef]">Google Gemini API</h4>
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">Gemini API Key</label>
+                  <input 
+                    type="password"
+                    value={keys.gemini}
+                    onChange={(e) => setKeys({ ...keys, gemini: e.target.value })}
+                    className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
+                    placeholder="Insira sua API Key do Gemini..."
+                  />
+                  <div className="flex items-center gap-2 mt-3 p-3 rounded-xl bg-orange-500/5 border border-orange-500/10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse shrink-0" />
+                    <p className="text-[10px] text-her-muted/60 leading-normal italic">
+                      Se você não fornecer uma chave, o servidor utilizará a nossa chave embutida do Gemini automaticamente em todas as transições neurais.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Seletor de Modelo */}
+                <div className="pt-2 border-t border-white/[0.03]">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Cpu size={12} className="text-her-accent" />
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold">Modelo Construtor Preferencial</label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 bg-white/[0.01] border border-white/[0.04] p-1.5 rounded-2xl">
+                    <button
+                      type="button"
+                      onClick={() => setKeys({ ...keys, geminiModel: 'gemini-3.5-flash' })}
+                      className={cn(
+                        "py-3 px-4 rounded-xl text-xs font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer",
+                        (keys.geminiModel === 'gemini-3.5-flash' || !keys.geminiModel)
+                          ? "bg-white/[0.08] text-white border border-white/[0.1] font-bold shadow-[0_4px_12px_rgba(255,255,255,0.03)]"
+                          : "text-her-muted hover:text-white/80 hover:bg-white/[0.02] border border-transparent"
+                      )}
+                    >
+                      Gemini 3.5 Flash
+                      {(keys.geminiModel === 'gemini-3.5-flash' || !keys.geminiModel) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKeys({ ...keys, geminiModel: 'gemini-2.5-flash' })}
+                      className={cn(
+                        "py-3 px-4 rounded-xl text-xs font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer",
+                        keys.geminiModel === 'gemini-2.5-flash'
+                          ? "bg-white/[0.08] text-white border border-white/[0.1] font-bold shadow-[0_4px_12px_rgba(255,255,255,0.03)]"
+                          : "text-her-muted hover:text-white/80 hover:bg-white/[0.02] border border-transparent"
+                      )}
+                    >
+                      Gemini 2.5 Flash
+                      {keys.geminiModel === 'gemini-2.5-flash' && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ElevenLabs Section */}
+              <div className="space-y-4 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Volume2 size={13} className="text-her-accent" />
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#efefef]">ElevenLabs Speech API</h4>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleVerifyElevenLabs}
+                    disabled={elVerificationStatus === 'testing' || !keys.elevenLabsApiKey}
+                    className="text-[9px] uppercase tracking-widest bg-white/[0.03] hover:bg-white/[0.06] active:bg-white/[0.02] border border-white/[0.06] text-white px-3 py-1.5 rounded-xl transition-all font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {elVerificationStatus === 'testing' ? "Sintonizando..." : "Verificar Sinal"}
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">ElevenLabs API Key</label>
+                    <input 
+                      type="password"
+                      value={keys.elevenLabsApiKey || ''}
+                      onChange={(e) => setKeys({ ...keys, elevenLabsApiKey: e.target.value })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
+                      placeholder="Insira sua API Key do ElevenLabs..."
+                    />
+                  </div>
+
+                  {elVerificationMessage && (
+                    <div className={cn(
+                      "flex items-center gap-2.5 p-3.5 rounded-2xl text-[11px] font-medium leading-relaxed",
+                      elVerificationStatus === 'success' && "bg-emerald-500/10 border border-emerald-500/15 text-emerald-400",
+                      elVerificationStatus === 'error' && "bg-red-500/10 border border-red-500/15 text-red-400",
+                      elVerificationStatus === 'testing' && "bg-white/[0.02] border border-white/[0.05] text-her-muted"
+                    )}>
+                      {elVerificationStatus === 'testing' ? (
+                        <Loader2 size={12} className="animate-spin text-her-accent shrink-0" />
+                      ) : elVerificationStatus === 'success' ? (
+                        <CheckCircle2 size={13} className="shrink-0" />
+                      ) : (
+                        <AlertCircle size={13} className="shrink-0" />
+                      )}
+                      <span>{elVerificationMessage}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === 'interface' && (
+            <motion.div
+              key="interface"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Visual & Estética do Orb</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Customize a geometria do pulso sensorial da interface principal.</p>
+              </div>
+
+              <div className="space-y-4 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold mb-3 select-none">Formatos Sinápticos do Orb</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'classic', name: 'Clássico (Esfera)' },
+                    { id: 'wave', name: 'Fluidos (Alabastro)' },
+                    { id: 'neural', name: 'Constelação Neural' },
+                    { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
+                    { id: 'superintelligence', name: 'Superinteligência' },
+                    { id: 'shadow', name: 'Escarlate (Shadow)' },
+                  ].map((styleOption) => (
+                    <button
+                      key={styleOption.id}
+                      onClick={() => {
+                        setOrbStyle(styleOption.id as OrbStyle);
+                        onAddNotification(`Orb alterado para: ${styleOption.name}`, 'info');
+                      }}
+                      className={cn(
+                        "px-4 py-4 rounded-2xl text-xs font-light transition-all border text-left flex items-center justify-between group cursor-pointer",
+                        orbStyle === styleOption.id 
+                          ? "bg-her-accent/15 text-her-accent border-her-accent/30 font-bold" 
+                          : "bg-white/[0.01] text-her-muted border-white/[0.03] hover:bg-white/[0.03] hover:text-white"
+                      )}
+                    >
+                      <span>{styleOption.name}</span>
+                      {orbStyle === styleOption.id && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-her-accent" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === 'sync' && (
+            <motion.div
+              key="sync"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-2xl mx-auto"
+            >
+              <div>
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Sincronização & Backup de Sinapses</h3>
+                <p className="text-xs text-her-muted/60 mt-1">Salve suas preferências e reestabeleça suas pontes neurais em qualquer dispositivo eletrônico.</p>
+              </div>
+
+              <div className="space-y-6 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                {/* Cloud Saving action */}
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 bg-white/[0.01] border border-white/[0.05] rounded-2xl">
+                  <div className="text-left space-y-1">
+                    <h4 className="text-xs font-bold text-zinc-100 uppercase tracking-widest flex items-center gap-1.5">
+                      <RefreshCw size={12} className="text-her-accent animate-spin" />
+                      Backup Neural Completo
+                    </h4>
+                    <p className="text-[10px] text-her-muted max-w-md">Salva todo o setup e histórico de conversas do OSONE local em nosso cluster de armazenamento durável.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackupToCloudLocal}
+                    disabled={isSyncing}
+                    className="w-full md:w-auto px-5 py-3 bg-her-accent hover:bg-her-accent/90 active:bg-her-accent/80 text-black text-xs font-bold uppercase tracking-widest transition-all rounded-2xl cursor-pointer shrink-0"
+                  >
+                    {isSyncing ? "Enviando..." : "Salvar na Nuvem"}
+                  </button>
+                </div>
+
+                {/* Cloud Restoring action */}
+                <div className="space-y-4 pt-4 border-t border-white/[0.03]">
+                  <h4 className="text-xs font-bold text-[#efefef] uppercase tracking-wider">Restaurar Conectividade OSONE</h4>
+                  <p className="text-[10px] text-her-muted leading-relaxed">
+                    Insira o ID Criptografado de Conexão recebido anteriormente para sincronizar os dados e restabelecer as sinapses nesta instância.
+                  </p>
+                  
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={inputId}
+                      onChange={(e) => setInputId(e.target.value)}
+                      className="flex-1 bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-her-accent/20 transition-all text-xs font-mono uppercase text-white"
+                      placeholder="Ex: NEURAL-789-ALPHA"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRestoreFromCloudLocal}
+                      disabled={isSyncing || !inputId.trim()}
+                      className="px-6 py-4 bg-white/[0.03] hover:bg-white/[0.06] active:bg-white/[0.02] border border-white/[0.06] text-white text-xs font-bold uppercase tracking-widest transition-all rounded-2xl cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {isSyncing ? "Sincronizando..." : "Conectar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status indicator message */}
+                {syncMessage && (
+                  <div className={cn(
+                    "flex items-center gap-2.5 p-3.5 rounded-2xl text-[11px] font-medium leading-relaxed mt-2",
+                    syncStatus === 'success' && "bg-emerald-500/10 border border-emerald-500/15 text-emerald-400",
+                    syncStatus === 'error' && "bg-red-500/10 border border-red-500/15 text-red-400",
+                    syncStatus === 'testing' && "bg-white/[0.02] border border-white/[0.05] text-her-muted"
+                  )}>
+                    {syncStatus === 'testing' ? (
+                      <Loader2 size={12} className="animate-spin text-her-accent shrink-0" />
+                    ) : syncStatus === 'success' ? (
+                      <CheckCircle2 size={13} className="shrink-0" />
+                    ) : (
+                      <AlertCircle size={13} className="shrink-0" />
+                    )}
+                    <span>{syncMessage}</span>
+                  </div>
+                )}
+
+                {/* Display created sync key link ID */}
+                {syncLinkId && (
+                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] flex items-center justify-between gap-3 mt-4">
+                    <div className="text-left font-mono text-[11px]">
+                      <span className="text-her-muted text-[9px] uppercase tracking-widest block font-bold">Código da Conexão Neural Ativa</span>
+                      <span className="text-white text-xs font-bold block mt-0.5 tracking-wider uppercase">{syncLinkId}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copySyncIdToClipboard}
+                      className="px-3.5 py-2.5 bg-white/[0.03] hover:bg-white/[0.06] rounded-xl transition-all border border-white/[0.06] text-white cursor-pointer"
+                      title="Copiar ID"
+                    >
+                      {isCopied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}

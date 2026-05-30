@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -105,8 +105,8 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                     mode === 'aural_control' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
                   )}
                 >
-                  <Activity size={18} />
-                  <span>Sentido Aural</span>
+                  <Sliders size={18} />
+                  <span>Ajustes & Perfil</span>
                 </button>
                 <button 
                   onClick={() => { setMode('local_control'); onClose(); }}
