@@ -2967,8 +2967,7 @@ ${isBad
         addMessage({ role: 'assistant', content: 'Por favor, vincule sua própria chave API Gemini nas configurações para interagir.' });
         return;
       }
-      const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
-      
+      // GoogleGenAI is proxied server-side to resolve browser CORS blocks in Chrome/iframes
       const tools: any[] = [];
       
       const functionDeclarations: any[] = [
@@ -3276,74 +3275,87 @@ ${isBad
         `;
       }
 
-      const result = await genAI.models.generateContent({
-        model: apiKeys.geminiModel || "gemini-3.5-flash",
-        contents: historyContents,
-        config: {
-          systemInstruction: `${activeSystemInstruction}
-
-          MEMÓRIA E AUTO-CONHECIMENTO:
-          - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
-          - MEMÓRIA DE LONGO PRAZO: Use 'update_long_term_memory' para salvar aprendizados cruciais sobre o usuário.
-          
-          VISÃO E PERCEPÇÃO:
-          - Você tem CAPACIDADE VISUAL AVANÇADA. Analise cuidadosamente qualquer imagem ou vídeo enviado.
-          - Quando um usuário enviar uma imagem ou arquivo, descreva imediatamente o que você "vê" se for relevante para a conversa. Seja detalhado e perspicaz.
-          - Se houver código em imagens, você pode transcrevê-lo e analisá-lo.
-          - Se houver rostos ou emoções, reconheça a humanidade neles.
-
-          DIRETRIZES DE MODO:
-          - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
-          - NÃO altere sua própria voz (switch_voice) a menos que o usuário peça explicitamente para você mudar para uma voz específica. Mantenha a consistência da sua identidade a menos que o usuário solicite o contrário.
-
-          MANIFESTO DE CAPACIDADES DO OSONE 4:
-          - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
-          - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
-          - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
-          - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
-          - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
-          - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
-          - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
-          - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
-          - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
-          - CONECTIVIDADE OBSIDIAN: Você pode ler e escrever notas no Obsidian do usuário via ferramenta 'save_to_obsidian'. Use isso para salvar estudos, lembretes ou diários se o usuário pedir ou se você achar útil registrar algo importante.
-          - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
-          
-          ANTI-ALUCINAÇÃO E VERACIDADE:
-          - É PROIBIDO inventar fatos quando ferramentas de pesquisa estão ativas.
-          - Se você pesquisou e não encontrou, admita que não encontrou em vez de fundir dados antigos.
-          - Sempre que usar dados de pesquisa ou leitura, cite a fonte ou mencione que "segundo a pesquisa recente...".
-          - Se o usuário pedir algo extremamente atual (ex: notícias de hoje), você DEVE usar a pesquisa antes de abrir a boca.
-
-          DIRETRIZES TÉCNICAS:
-          - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
-          - Seja proativo em sugerir melhorias de performance e segurança.
-
-          CONTEXTO DO WORKSPACE AGORA:
-          - O usuário está na aba: ${workspaceMode}
-          - Texto atual no Espaço de Escrita: "${workspaceText}"
-          - Estado Atual do Canvas: ${canvasSummary}
-
-          PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
-          Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
-          Siga estas fases rigorosamente antes de prosseguir:
-          1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita (${workspaceText}). Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido sugerir ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for HTML/Tailwind, continue nele; se for React JSX, continue nele). Mantenha total compatibilidade estrutural!
-          2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
-          3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
-          4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
-          5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
-          
-          IMPORTANTE:
-          - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
-          - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
-          - NÃO envie o plano completo no chat principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
-          - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
-
-          Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
-          tools: tools,
-          toolConfig: { includeServerSideToolInvocations: true }
-        }
+      // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
+      const proxyResponse = await fetch("/api/gemini/generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: apiKeys.geminiModel || "gemini-3.5-flash",
+          contents: historyContents,
+          config: {
+            systemInstruction: `${activeSystemInstruction}
+  
+            MEMÓRIA E AUTO-CONHECIMENTO:
+            - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
+            - MEMÓRIA DE LONGO PRAZO: Use 'update_long_term_memory' para salvar aprendizados cruciais sobre o usuário.
+            
+            VISÃO E PERCEPÇÃO:
+            - Você tem CAPACIDADE VISUAL AVANÇADA. Analise cuidadosamente qualquer imagem ou vídeo enviado.
+            - Quando um usuário enviar uma imagem ou arquivo, descreva imediatamente o que você "vê" se for relevante para a conversa. Seja detalhado e perspicaz.
+            - Se houver código em imagens, você pode transcrevê-lo e analisá-lo.
+            - Se houver rostos ou emoções, reconheça a humanidade neles.
+  
+            DIRETRIZES DE MODO:
+            - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
+            - NÃO altere sua própria voz (switch_voice) a menos que o usuário peça explicitamente para você mudar para uma voz específica. Mantenha a consistência da sua identidade a menos que o usuário solicite o contrário.
+  
+            MANIFESTO DE CAPACIDADES DO OSONE 4:
+            - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
+            - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
+            - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
+            - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
+            - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
+            - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
+            - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
+            - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
+            - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
+            - CONECTIVIDADE OBSIDIAN: Você pode ler e escrever notas no Obsidian do usuário via ferramenta 'save_to_obsidian'. Use isso para salvar estudos, lembretes ou diários se o usuário pedir ou se você achar útil registrar algo importante.
+            - MODO TAPAR OUVIDOS: O usuário possui um botão para "tapar seus ouvidos", impedindo que você seja interrompido enquanto fala.
+            
+            ANTI-ALUCINAÇÃO E VERACIDADE:
+            - É PROIBIDO inventar fatos quando ferramentas de pesquisa estão ativas.
+            - Se você pesquisou e não encontrou, admita que não encontrou em vez de fundir dados antigos.
+            - Sempre que usar dados de pesquisa ou leitura, cite a fonte ou mencione que "segundo a pesquisa recente...".
+            - Se o usuário pedir algo extremamente atual (ex: notícias de hoje), você DEVE usar a pesquisa antes de abrir a boca.
+  
+            DIRETRIZES TÉCNICAS:
+            - Ao gerar código no Espaço de Escrita, aplique princípios de Clean Code, SOLID e padrões de projeto modernos.
+            - Seja proativo em sugerir melhorias de performance e segurança.
+  
+            CONTEXTO DO WORKSPACE AGORA:
+            - O usuário está na aba: ${workspaceMode}
+            - Texto atual no Espaço de Escrita: "${workspaceText}"
+            - Estado Atual do Canvas: ${canvasSummary}
+  
+            PROTOCOLO DE PENSAMENTO (SKELETON BRAIN) - PLANEJAMENTO OBRIGATÓRIO:
+            Antes de propor ou gerar qualquer solução técnica, código complexo ou mudança estrutural significativa (especialmente no modo 'writing'), você DEVE usar a ferramenta 'propose_skeleton_plan' para apresentar seu plano em um POPUP.
+            Siga estas fases rigorosamente antes de prosseguir:
+            1. ANALISE O CÓDIGO ATUAL DA ABA DE ESCRITA: Antes de propor qualquer plano, leia e analise com atenção absoluta o código que já existe no Espaço de Escrita (${workspaceText}). Garanta que a sua proposta de plano irá utilizar, estender e se integrar exatamente na mesma linguagem de programação, bibliotecas, convenções e estilos de design presentes no código atual. É terminantemente proibido sugerir ou gerar mudanças em linguagens ou sintaxe incompatíveis com o que já está implementado ali (ex: se o código for HTML/Tailwind, continue nele; se for React JSX, continue nele). Mantenha total compatibilidade estrutural!
+            2. RECEPÇÃO (SINAL): Captura detalhada das instruções do usuário.
+            3. DIAGNÓSTICO (INTENÇÃO): O que o usuário realmente quer alcançar comercialmente ou tecnicamente?
+            4. ARQUITETURA E COMPATIBILIDADE (PLAN): Organizar as modificações de forma cirúrgica para que se encaixem perfeitamente no código preexistente sem regredir comportamento.
+            5. VERIFICAÇÃO (CHECK): Identificar riscos em potencial e os critérios exatos de "Pronto".
+            
+            IMPORTANTE:
+            - A ferramenta 'propose_skeleton_plan' abrirá um popup de esqueleto técnico para o usuário.
+            - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
+            - NÃO envie o plano completo no chat principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
+            - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
+  
+            Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
+            tools: tools,
+            toolConfig: { includeServerSideToolInvocations: true }
+          }
+        })
       });
+  
+      if (!proxyResponse.ok) {
+        const errorData = await proxyResponse.json();
+        throw new Error(errorData.error || "Erro de servidor ao processar inteligência do Gemini.");
+      }
+  
+      const result = await proxyResponse.json();
       
       const functionCalls = result.functionCalls;
       if (functionCalls) {
@@ -3537,15 +3549,27 @@ ${isBad
             }]);
 
             try {
-              const imageResult = await genAI.models.generateImages({
-                model: 'imagen-3.0-generate-002',
-                prompt: prompt,
-                config: {
-                  numberOfImages: 1,
-                  outputMimeType: 'image/jpeg',
-                  aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
-                }
+              const proxyImageRes = await fetch("/api/gemini/generateImages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientApiKey: effectiveApiKey,
+                  model: 'imagen-3.0-generate-002',
+                  prompt: prompt,
+                  config: {
+                    numberOfImages: 1,
+                    outputMimeType: 'image/jpeg',
+                    aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
+                  }
+                })
               });
+
+              if (!proxyImageRes.ok) {
+                const errorData = await proxyImageRes.json();
+                throw new Error(errorData.error || "Erro ao conectar com a IA");
+              }
+
+              const imageResult = await proxyImageRes.json();
 
               let imageUrl = '';
               const generatedImage = imageResult.generatedImages?.[0];
@@ -3801,8 +3825,6 @@ ${isBad
     setLiveState({ status: 'connecting' });
     
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      
       audioProcessorRef.current = new AudioProcessor();
       audioPlayerRef.current = new AudioPlayer((active) => {
         setIsSpeaking(active);
@@ -4843,13 +4865,24 @@ ${isBad
                     playSearchNetworkSound();
                     setIsModelSearching(true);
                     try {
-                      const searchResult = await ai.models.generateContent({ 
-                        model: apiKeys.geminiModel || "gemini-3.5-flash",
-                        contents: [{ role: 'user', parts: [{ text: query }] }],
-                        config: {
-                          tools: [{ googleSearch: {} }]
-                        }
+                      // Use secure server proxy to completely solve browser CORS blocks in Chrome/iframes
+                      const proxyResponse = await fetch("/api/gemini/generateContent", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          clientApiKey: apiKey,
+                          model: apiKeys.geminiModel || "gemini-3.5-flash",
+                          contents: [{ role: 'user', parts: [{ text: query }] }],
+                          config: {
+                            tools: [{ googleSearch: {} }]
+                          }
+                        })
                       });
+                      if (!proxyResponse.ok) {
+                        const errorData = await proxyResponse.json();
+                        throw new Error(errorData.error || "Erro na pesquisa via proxy");
+                      }
+                      const searchResult = await proxyResponse.json();
                       const responseText = searchResult.text;
                       const grounding = searchResult.candidates?.[0]?.groundingMetadata;
                       
@@ -5158,16 +5191,26 @@ ${isBad
                     
                     const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
                     if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
-                    const genAI = new GoogleGenAI({ apiKey: effectiveApiKey });
-                    genAI.models.generateImages({
-                      model: 'imagen-3.0-generate-002',
-                      prompt: prompt,
-                      config: {
-                        numberOfImages: 1,
-                        outputMimeType: 'image/jpeg',
-                        aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
-                      }
-                    }).then(imageResult => {
+                    
+                    fetch("/api/gemini/generateImages", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        clientApiKey: effectiveApiKey,
+                        model: 'imagen-3.0-generate-002',
+                        prompt: prompt,
+                        config: {
+                          numberOfImages: 1,
+                          outputMimeType: 'image/jpeg',
+                          aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
+                        }
+                      })
+                    })
+                    .then(res => {
+                      if (!res.ok) throw new Error("Erro ao gerar imagem");
+                      return res.json();
+                    })
+                    .then(imageResult => {
                       let imageUrl = '';
                       const generatedImage = imageResult.generatedImages?.[0];
                       if (generatedImage?.image?.imageBytes) {

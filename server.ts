@@ -788,6 +788,70 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // POST secure proxy endpoint for general Gemini content generation (supports history, tools, etc.)
+  app.post("/api/gemini/generateContent", async (req, res) => {
+    try {
+      const { contents, model, config, clientApiKey } = req.body;
+      const apiKey = clientApiKey || getSecretGeminiKey();
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida. Insira uma chave válida nos Ajustes." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateContent({
+        model: model || "gemini-3.5-flash",
+        contents: contents,
+        config: config
+      });
+
+      return res.json(response);
+    } catch (err: any) {
+      console.error("Erro no proxy server-side generateContent:", err);
+      return res.status(500).json({ error: err.message || "Erro ao conectar com a IA" });
+    }
+  });
+
+  // POST secure proxy endpoint for Imagen image generation
+  app.post("/api/gemini/generateImages", async (req, res) => {
+    try {
+      const { prompt, model, config, clientApiKey } = req.body;
+      const apiKey = clientApiKey || getSecretGeminiKey();
+      
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida. Insira uma chave válida nos Ajustes." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const response = await ai.models.generateImages({
+        model: model || "imagen-3.0-generate-002",
+        prompt: prompt,
+        config: config
+      });
+
+      return res.json(response);
+    } catch (err: any) {
+      console.error("Erro no proxy server-side generateImages:", err);
+      return res.status(500).json({ error: err.message || "Erro ao gerar imagem" });
+    }
+  });
+
   // POST endpoint for verifying Gemini API credentials in real-time
   app.post("/api/gemini/verify", async (req, res) => {
     try {
