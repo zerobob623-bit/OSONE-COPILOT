@@ -10,6 +10,12 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Polyfill global WebSocket for Node.js environments (like Node 18 or 20)
+// to ensure @google/genai live connection is functional in production.
+if (typeof globalThis.WebSocket === "undefined") {
+  (globalThis as any).WebSocket = WebSocket;
+}
+
 async function startServer() {
   const app = express();
   const server = http.createServer(app);
@@ -1043,7 +1049,7 @@ Nome do interlocutor: ${senderName}`;
   server.on("upgrade", (request, socket, head) => {
     try {
       const reqUrl = request.url || "";
-      const pathname = reqUrl.split("?")[0];
+      const pathname = reqUrl.split("?")[0].replace(/\/$/, "");
       
       if (pathname === "/api/live-ws") {
         wss.handleUpgrade(request, socket, head, (ws) => {
