@@ -20,7 +20,6 @@ import {
   Check,
   FileText
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { cn } from '../lib/utils';
 import { generatePDF } from '../lib/pdfUtils';
 
@@ -123,7 +122,6 @@ export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalDa
 
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
       const imc = calculateIMC();
       
       const prompt = `Aja como um especialista em Saúde, Nutrição e Personal Styling. 
@@ -144,15 +142,27 @@ export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalDa
       
       Use um tom profissional, acolhedor e motivador. Use formatação Markdown (negrito para títulos).`;
 
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
+      const response = await fetch("/api/gemini/generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: apiKey,
+          model: "gemini-3.5-flash",
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          config: {
+            tools: [{ googleSearch: {} }]
+          }
+        })
       });
 
-      setAdvice(result.text || "");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro de rede no proxy do servidor.");
+      }
+
+      const result = await response.json();
+      const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      setAdvice(textResponse);
     } catch (error) {
       console.error("Erro na consulta:", error);
       alert("Falha na conexão com a central neural de saúde.");

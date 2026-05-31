@@ -2928,9 +2928,8 @@ ${isBad
   };
 
   const handleHomeChat = async (directMessage?: string) => {
-    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0) || !effectiveApiKey || effectiveApiKey.trim() === '') {
-      if (!effectiveApiKey || effectiveApiKey.trim() === '') setIsSettingsOpen(true);
+    // Permitir prosseguir mesmo sem chave local para que o servidor possa tentar usar a chave de fallback
+    if (((!homePrompt.trim() && !directMessage) && attachedFiles.length === 0)) {
       return;
     }
 
@@ -2961,12 +2960,7 @@ ${isBad
       setIsModelSearching(true);
     }
     try {
-      const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-      if (!effectiveApiKey || effectiveApiKey.trim() === '') {
-        setIsSettingsOpen(true);
-        addMessage({ role: 'assistant', content: 'Por favor, vincule sua própria chave API Gemini nas configurações para interagir.' });
-        return;
-      }
+      const effectiveApiKey = apiKeys.gemini || '';
       // GoogleGenAI is proxied server-side to resolve browser CORS blocks in Chrome/iframes
       const tools: any[] = [];
       
@@ -5189,8 +5183,7 @@ ${isBad
                       content: `Gerando imagem para: "${prompt}"...` 
                     });
                     
-                    const effectiveApiKey = apiKeys.gemini || (process.env.GEMINI_API_KEY as string) || '';
-                    if (!effectiveApiKey || effectiveApiKey.trim() === '') return;
+                    const effectiveApiKey = apiKeys.gemini || '';
                     
                     fetch("/api/gemini/generateImages", {
                       method: "POST",

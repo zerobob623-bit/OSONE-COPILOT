@@ -285,8 +285,8 @@ async function startServer() {
         return res.json({ status: "error", error: "Gemini API key is not configured" });
       }
 
-      // Use modern GoogleGenAI SDK to speak with Gemini 3.5-flash
-      const ai = new GoogleGenAI({ apiKey: geminiApiKeyToUse });
+      // Use modern GoogleGenAI SDK to speak with Gemini 3.5-flash (forcing Developer API over Vertex AI)
+      const ai = new GoogleGenAI({ apiKey: geminiApiKeyToUse, vertexai: false });
       const systemPrompt = `Você é o OSONE 4, o cérebro eletrônico central de inteligência artificial de elite, hiperfocado em ajudar o usuário com uma clareza deslumbrante, respostas estruturadas, elegantes e um toque futurista e polido.
 Você está atendendo o usuário pelo WhatsApp em nome do proprietário deste dispositivo OSONE. Responda diretamente e com muita inteligência, clareza, formatação impecável de parágrafos breves e emojis adequados.
 Nome do interlocutor: ${senderName}`;
@@ -603,9 +603,10 @@ Nome do interlocutor: ${senderName}`;
         });
       }
 
-      // Initialize the Gemini SDK
+      // Initialize the Gemini SDK (forcing Developer API over Vertex AI)
       const ai = new GoogleGenAI({
         apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build'
@@ -726,6 +727,7 @@ Nome do interlocutor: ${senderName}`;
 
       const ai = new GoogleGenAI({
         apiKey: apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -762,6 +764,7 @@ Nome do interlocutor: ${senderName}`;
 
       const ai = new GoogleGenAI({
         apiKey: apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -800,6 +803,7 @@ Nome do interlocutor: ${senderName}`;
 
       const ai = new GoogleGenAI({
         apiKey: apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -832,6 +836,7 @@ Nome do interlocutor: ${senderName}`;
 
       const ai = new GoogleGenAI({
         apiKey: apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -861,14 +866,31 @@ Nome do interlocutor: ${senderName}`;
       }
 
       const trimApiKey = geminiApiKey.trim();
-      const ai = new GoogleGenAI({ apiKey: trimApiKey });
       
-      const testRes = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "responder 'ok'",
+      // Realizar chamada HTTP direta à API do Gemini para evitar auto-detecção do Vertex AI em plataformas GCP/Cloud Run
+      const verifyRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${trimApiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "responder 'ok'" }] }]
+        })
       });
+
+      if (!verifyRes.ok) {
+        const errorData = await verifyRes.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || "Erro retornado pela API do Gemini. Verifique a validade e permissões da chave.";
+        return res.status(verifyRes.status).json({
+          success: false,
+          message: `Falha no Handshake: ${errorMessage}`
+        });
+      }
+
+      const testRes = await verifyRes.json();
+      const replyText = testRes.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      if (testRes && testRes.text) {
+      if (replyText) {
         return res.json({
           success: true,
           message: "Conexão bem-sucedida! Handshake concluído com a API do Gemini."
@@ -876,14 +898,14 @@ Nome do interlocutor: ${senderName}`;
       } else {
         return res.status(400).json({
           success: false,
-          message: "O Gemini respondeu sem texto válido. Verifique o acesso da chave."
+          message: "O Gemini respondeu sem texto válido. Verifique o acesso e cota da chave."
         });
       }
     } catch (err: any) {
       console.error("Error inside /api/gemini/verify endpoint:", err);
       return res.status(400).json({
         success: false,
-        message: err.message || "A API do Gemini retornou um erro ao processar. Certifique-se de que a chave tem permissões e saldo de cobrança ativos."
+        message: err.message || "A API do Gemini retornou um erro de rede ao processar. Certifique-se de que a chave tem permissões e saldo de cobrança ativos."
       });
     }
   });
@@ -983,6 +1005,7 @@ Nome do interlocutor: ${senderName}`;
 
       const ai = new GoogleGenAI({
         apiKey: apiKey,
+        vertexai: false,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',
@@ -1059,6 +1082,7 @@ Nome do interlocutor: ${senderName}`;
 
     const ai = new GoogleGenAI({
       apiKey: apiKey,
+      vertexai: false,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',

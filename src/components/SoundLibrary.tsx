@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Music, Plus, Trash2, Play, Volume2, X, Search, Upload, Link, Square, Edit2, Sparkles, Wand2, Music2, Brain } from 'lucide-react';
 import { cn, safeJsonParse } from '../lib/utils';
 import { SoundEffect } from '../types';
-import { GoogleGenAI } from "@google/genai";
 
 interface SoundLibraryProps {
   sounds: SoundEffect[];
@@ -60,8 +59,6 @@ export const SoundLibrary = ({ sounds, playingUrl, apiKeys, onAddSound, onUpdate
     setIsGenerating(true);
     
     try {
-      const ai = new GoogleGenAI({ apiKey });
-
       const prompt = `Você é um gerador de efeitos sonoros e músicas via IA para o sistema operacional OSONE.
       O usuário quer o seguinte som: "${aiPrompt}"
       
@@ -85,11 +82,24 @@ export const SoundLibrary = ({ sounds, playingUrl, apiKeys, onAddSound, onUpdate
       - https://assets.mixkit.co/active_storage/sfx/3001/3001-preview.mp3 (Retro game jump)
       `;
 
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt
+      const response = await fetch("/api/gemini/generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: apiKey,
+          model: "gemini-2.5-flash",
+          contents: [{ role: "user", parts: [{ text: prompt }] }]
+        })
       });
-      const data = safeJsonParse(result.text || "", { name: "Som", category: "funny", url: "" });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro de rede no proxy do servidor.");
+      }
+
+      const result = await response.json();
+      const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const data = safeJsonParse(textResponse, { name: "Som", category: "funny", url: "" });
       
       onAddSound({
         name: `[AI] ${data.name}`,
