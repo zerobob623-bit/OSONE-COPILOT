@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "framework": null,
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/gemini/verify", "destination": "/api/gemini/verify" },
+    { "source": "/api/gemini/generateContent", "destination": "/api/gemini/generateContent" },
+    { "source": "/api/gemini/generateImages", "destination": "/api/gemini/generateImages" },
+    { "source": "/api/generate", "destination": "/api/generate" },
+    { "source": "/api/chat-intel", "destination": "/api/chat-intel" },
+    { "source": "/api/tts", "destination": "/api/tts" },
+    { "source": "/api/elevenlabs/verify", "destination": "/api/elevenlabs/verify" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
