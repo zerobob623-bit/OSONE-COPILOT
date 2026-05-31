@@ -73,14 +73,11 @@ import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { LocalControl } from './components/LocalControl';
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
-import { SemanticMemory } from './components/SemanticMemory';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
-import { SoundEffect, DrawingObject } from './types';
+import { SoundEffect, DrawingObject, User } from './types';
 import { generatePDF } from './lib/pdfUtils';
-import { auth, signInWithPopup, googleProvider, onAuthStateChanged, db, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, isFirebaseEnabled } from './lib/firebase';
-import type { User } from './lib/firebase';
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -5736,18 +5733,6 @@ ${isBad
             </button>
           )}
 
-          {/* Semantic Memory Pulsing Brain Node Dot */}
-          <button 
-            onClick={() => setIsSemanticMemoryOpen(true)}
-            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted flex items-center justify-center relative md:mx-1"
-            title="Memória Semântica OSONE (Longo Prazo)"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.85)]"></span>
-            </span>
-          </button>
-
           {/* MODO DUO (PODCAST) HEADER ACTIVATOR */}
           <div className="relative">
             <button 
@@ -7774,11 +7759,6 @@ ${isBad
         user={user}
         onLogout={handleLogout}
         onLogin={handleLogin}
-      />
-      <SemanticMemory 
-        isOpen={isSemanticMemoryOpen} 
-        onClose={() => setIsSemanticMemoryOpen(false)} 
-        onAddNotification={addNotification}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 

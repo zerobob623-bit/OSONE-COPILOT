@@ -9,6 +9,13 @@ export interface AIProfile {
   };
 }
 
+export interface User {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+}
+
 export interface ApiKeys {
   gemini: string;
   googleHomeId?: string;

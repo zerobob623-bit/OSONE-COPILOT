@@ -302,7 +302,6 @@ export default function PersonalizationPanel({
           { id: 'elevenlabs', label: 'ElevenLabs & Gemini 3.5', icon: Cpu },
           { id: 'keys', label: 'Chaves Extras', icon: Key },
           { id: 'interface', label: 'Estética do Orb', icon: Sliders },
-          { id: 'sync', label: 'Sincronização Nuvem', icon: RefreshCw },
         ].map((subTab) => {
           const isActive = activeSubTab === subTab.id;
           return (
