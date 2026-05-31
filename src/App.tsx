@@ -78,6 +78,7 @@ import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject, User } from './types';
 import { generatePDF } from './lib/pdfUtils';
+import { resolveAudioUrl, deleteAudio } from './lib/audioDb';
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -576,8 +577,9 @@ export default function App() {
 
   const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
   const [playingSoundUrl, setPlayingSoundUrl] = useState<string | null>(null);
+  const [isSoundPaused, setIsSoundPaused] = useState<boolean>(false);
 
-  const playSoundEffect = (url: string) => {
+  const playSoundEffect = async (url: string) => {
     // If we're just covering ears, we should still hear sounds.
     // Only block if we had a real systemic mute (but we repurposed the button)
     
@@ -587,32 +589,45 @@ export default function App() {
       const previousUrl = playingSoundUrl;
       soundEffectAudioRef.current = null;
       setPlayingSoundUrl(null);
+      setIsSoundPaused(false);
       
       // Se clicou no mesmo que já estava tocando, apenas para
       if (previousUrl === url) return;
     }
 
-    const audio = new Audio(url);
-    audio.volume = 0.6;
-    soundEffectAudioRef.current = audio;
-    setPlayingSoundUrl(url);
+    try {
+      const resolvedUrl = await resolveAudioUrl(url);
+      const audio = new Audio(resolvedUrl);
+      audio.volume = 0.6;
+      soundEffectAudioRef.current = audio;
+      setPlayingSoundUrl(url);
+      setIsSoundPaused(false);
 
-    audio.onended = () => {
+      audio.onended = () => {
+        setPlayingSoundUrl(null);
+        soundEffectAudioRef.current = null;
+        setIsSoundPaused(false);
+      };
+
+      audio.onerror = (e) => {
+        // Failed to play silently, probably broken link or unplayable format
+        setPlayingSoundUrl(null);
+        soundEffectAudioRef.current = null;
+        setIsSoundPaused(false);
+      };
+
+      audio.play().catch(err => {
+        // Audio playback failed
+        setPlayingSoundUrl(null);
+        soundEffectAudioRef.current = null;
+        setIsSoundPaused(false);
+      });
+    } catch (err) {
+      console.error("Erro ao reproduzir som:", err);
       setPlayingSoundUrl(null);
       soundEffectAudioRef.current = null;
-    };
-
-    audio.onerror = (e) => {
-      // Failed to play silently, probably broken link or unplayable format
-      setPlayingSoundUrl(null);
-      soundEffectAudioRef.current = null;
-    };
-
-    audio.play().catch(err => {
-      // Audio playback failed
-      setPlayingSoundUrl(null);
-      soundEffectAudioRef.current = null;
-    });
+      setIsSoundPaused(false);
+    }
   };
 
   const playSearchNetworkSound = () => {
@@ -661,6 +676,23 @@ export default function App() {
       soundEffectAudioRef.current.pause();
       soundEffectAudioRef.current = null;
       setPlayingSoundUrl(null);
+      setIsSoundPaused(false);
+    }
+  };
+
+  const pauseSoundEffect = () => {
+    if (soundEffectAudioRef.current) {
+      soundEffectAudioRef.current.pause();
+      setIsSoundPaused(true);
+    }
+  };
+
+  const resumeSoundEffect = () => {
+    if (soundEffectAudioRef.current && isSoundPaused) {
+      soundEffectAudioRef.current.play().catch(err => {
+        console.error("Erro ao retomar áudio:", err);
+      });
+      setIsSoundPaused(false);
     }
   };
 
@@ -3081,6 +3113,40 @@ ${isBad
       });
 
       functionDeclarations.push({
+        name: "control_audio",
+        description: "Controla a reprodução de áudio, permitindo pausar, retomar ou parar o som ou música que está tocando atualmente.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            action: {
+              type: Type.STRING,
+              enum: ["pause", "resume", "stop"],
+              description: "A ação a ser tomada com o áudio atual (pause, resume ou stop)."
+            }
+          },
+          required: ["action"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "search_sound_library",
+        description: "Busca efeitos sonoros ou músicas na biblioteca do OSONE pelo nome ou categoria (ex: 'musica'). Isso ajuda o OSONE a descobrir quais faixas de música até 5 minutos estão disponíveis para que ele possa sugerir playlists completas.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: {
+              type: Type.STRING,
+              description: "Termo de busca pelo nome do som ou música (opcional)."
+            },
+            category: {
+              type: Type.STRING,
+              description: "Filtrar por categoria específica (ex: 'musica', 'synth', 'ambient', 'epic', 'funny') (opcional)."
+            }
+          }
+        }
+      });
+
+      functionDeclarations.push({
         name: "export_to_excel",
         description: "Gera um arquivo Excel (.xlsx) para o usuário baixar a partir de dados estruturados em formato JSON, a partir da edição ou criação que o usuário pedir. Use para tabelas, planilhas, relatórios baseados em grade.",
         parameters: {
@@ -3294,6 +3360,7 @@ ${isBad
             MANIFESTO DE CAPACIDADES DO OSONE 4:
             - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
             - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
+            - BIBLIOTECA DE SONS E MÚSICAS: Você possui aba dedicada para reproduzir/gerenciar músicas e áudios de até 5 minutos (limite de 50MB via IndexedDB, resolvendo limites normais do localStorage). Na aba "Biblioteca de Sons e Efeitos", o usuário pode buscar músicas pelo nome no campo de pesquisa, adicionar arquivos locais de música e criar playlists com músicas apenas filtradas/marcadas na categoria "Música".
             - ESCRITA (Writing): Aba central de criação. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente neste espaço. Não existe sistema de pastas; todo o seu output técnico ou textual deve ser concentrado aqui como um documento único.
             - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
             - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
@@ -3610,6 +3677,46 @@ ${isBad
                 content: `Desculpe, não encontrei o som '${name}' na minha biblioteca.` 
               }]);
             }
+          } else if (call.name === "control_audio") {
+            const { action } = call.args as any;
+            if (action === "pause") {
+              pauseSoundEffect();
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: `*Música/áudio pausado pelo OSONE.*`
+              }]);
+            } else if (action === "resume") {
+              resumeSoundEffect();
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: `*Retomando reprodução da música/áudio.*`
+              }]);
+            } else if (action === "stop") {
+              stopSoundEffect();
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant' as const,
+                content: `*Reprodução de áudio parada.*`
+              }]);
+            }
+          } else if (call.name === "search_sound_library") {
+            const { query, category } = call.args as any;
+            const matches = soundLibrary.filter(s => {
+              const q = query ? query.toLowerCase() : "";
+              const matchesQ = !q || s.name.toLowerCase().includes(q);
+              const matchesC = !category || s.category.toLowerCase() === category.toLowerCase();
+              return matchesQ && matchesC;
+            });
+            const resultsStr = matches.length > 0 
+              ? matches.map(s => `- **${s.name}** [ID: ${s.id}] (Categoria: *${s.category}*)`).slice(0, 15).join("\n")
+              : "Nenhum som ou música correspondente foi encontrado na biblioteca.";
+            setChatHistory(prev => [...prev, {
+              id: Math.random().toString(36).substr(2, 9),
+              role: 'assistant' as const,
+              content: `*Busca na Biblioteca de Sons OSONE:* (fração de resultados)\n\n${resultsStr}\n\n*Você pode reproduzir qualquer um destes sons pedindo para mim ou clicando nele na aba de Sons.*`
+            }]);
           } else if (call.name === 'export_to_excel') {
             const { fileName, data } = call.args as any;
             try {
@@ -4356,6 +4463,38 @@ ${isBad
                       }
                     },
                     required: ["sound_name"]
+                  }
+                },
+                {
+                  name: "control_audio",
+                  description: "Controla a reprodução de áudio, permitindo pausar, retomar ou parar o som ou música que está tocando atualmente.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      action: {
+                        type: Type.STRING,
+                        enum: ["pause", "resume", "stop"],
+                        description: "A ação a ser tomada com o áudio atual (pause, resume ou stop)."
+                      }
+                    },
+                    required: ["action"]
+                  }
+                },
+                {
+                  name: "search_sound_library",
+                  description: "Busca efeitos sonoros ou músicas na biblioteca do OSONE pelo nome ou categoria (ex: 'musica'). Isso ajuda a descobrir quais faixas estão disponíveis para que se possa montar playlists.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      query: {
+                        type: Type.STRING,
+                        description: "Termo de busca pelo nome do som ou música (opcional)."
+                      },
+                      category: {
+                        type: Type.STRING,
+                        description: "Filtrar por categoria específica (ex: 'musica', 'synth', 'ambient') (opcional)."
+                      }
+                    }
                   }
                 },
                 {
@@ -5239,6 +5378,35 @@ ${isBad
                         response: { result: `Erro: Som '${name}' não encontrado na biblioteca.` }
                       });
                     }
+                  } else if (call.name === "control_audio") {
+                    const action = call.args.action as string;
+                    if (action === "pause") {
+                      pauseSoundEffect();
+                    } else if (action === "resume") {
+                      resumeSoundEffect();
+                    } else if (action === "stop") {
+                      stopSoundEffect();
+                    }
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Ação de áudio '${action}' executada com sucesso.` }
+                    });
+                  } else if (call.name === "search_sound_library") {
+                    const query = call.args.query as string || "";
+                    const category = call.args.category as string || "";
+                    const matches = soundLibrary.filter(s => {
+                      const q = query.toLowerCase();
+                      const matchesQ = !q || s.name.toLowerCase().includes(q);
+                      const matchesC = !category || s.category.toLowerCase() === category.toLowerCase();
+                      return matchesQ && matchesC;
+                    });
+                    const results = matches.map(s => ({ id: s.id, name: s.name, category: s.category }));
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Busca bem sucedida. Encontrados ${results.length} resultados.`, sounds: results }
+                    });
                   }
                 }
 
@@ -6571,7 +6739,17 @@ ${isBad
                 apiKeys={apiKeys}
                 onAddSound={(s) => setSoundLibrary(prev => [...prev, { ...s, id: Math.random().toString(36).substr(2, 9) } as SoundEffect])}
                 onUpdateSound={(id, updated) => setSoundLibrary(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s))}
-                onRemoveSound={(id) => setSoundLibrary(prev => prev.filter(s => s.id !== id))}
+                onRemoveSound={async (id) => {
+                  const soundToRemove = soundLibrary.find(s => s.id === id);
+                  if (soundToRemove && soundToRemove.url && soundToRemove.url.startsWith('db://')) {
+                    try {
+                      await deleteAudio(soundToRemove.url);
+                    } catch (e) {
+                      console.error("Erro ao deletar audio do IndexedDB:", e);
+                    }
+                  }
+                  setSoundLibrary(prev => prev.filter(s => s.id !== id));
+                }}
                 onRestoreDefaults={() => {
                   if (confirm('Tem certeza que deseja restaurar os sons padrão? Isso manterá seus sons personalizados se você os adicionou manualmente.')) {
                     setSoundLibrary(prev => {
@@ -6587,6 +6765,9 @@ ${isBad
                 }}
                 onPlaySound={playSoundEffect}
                 onStopSound={stopSoundEffect}
+                isSoundPaused={isSoundPaused}
+                onPauseSound={pauseSoundEffect}
+                onResumeSound={resumeSoundEffect}
                 onClose={() => setWorkspaceMode('home')}
               />
             </motion.div>
@@ -7524,6 +7705,122 @@ ${isBad
           </button>
         ))}
       </nav>
+
+      {/* Floating Music Player Bar */}
+      <AnimatePresence>
+        {playingSoundUrl && workspaceMode !== 'sounds' && showUi && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.95, x: "-50%" }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+            exit={{ opacity: 0, y: 30, scale: 0.95, x: "-50%" }}
+            transition={{ type: "spring", stiffness: 260, damping: 22 }}
+            className={cn(
+              "fixed left-1/2 z-[55] w-[92%] max-w-sm bg-black/90 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.85)] p-2.5 px-4 flex items-center justify-between gap-3 pointer-events-auto",
+              isChatExpanded ? "bottom-[120px] md:bottom-28" : "bottom-[92px] md:bottom-24"
+            )}
+          >
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              {/* Spinning album disc */}
+              <div 
+                onClick={() => {
+                  setWorkspaceMode('sounds');
+                  addNotification("Biblioteca de Sons Aberta", "info");
+                }}
+                className="w-9 h-9 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center relative overflow-hidden shrink-0 shadow-inner cursor-pointer group"
+                title="Sintonizar sons"
+              >
+                <motion.div
+                  animate={isSoundPaused ? {} : { rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
+                  className="w-full h-full flex items-center justify-center text-her-accent text-opacity-80 group-hover:text-white transition-colors"
+                >
+                  <Music size={15} />
+                </motion.div>
+                {/* Center of the vinyl disc */}
+                <span className="absolute w-2 h-2 rounded-full bg-zinc-950 border border-white/10" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[7.5px] uppercase font-mono tracking-widest text-her-accent/80 font-bold block">
+                    {soundLibrary.find(s => s.url === playingSoundUrl)?.category === 'musica' ? 'MÚSICA' : 'AMBIENTE'}
+                  </span>
+                  
+                  {/* Visualizer bars */}
+                  <div className="flex items-end gap-[1.5px] h-2 pb-0.5">
+                    <motion.span 
+                      animate={isSoundPaused ? { height: 2 } : { height: [2, 7, 2] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut", delay: 0.1 }}
+                      className="w-[1px] bg-her-accent/90 rounded-full" 
+                    />
+                    <motion.span 
+                      animate={isSoundPaused ? { height: 2 } : { height: [2, 7, 2] }}
+                      transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
+                      className="w-[1px] bg-amber-400 rounded-full" 
+                    />
+                    <motion.span 
+                      animate={isSoundPaused ? { height: 2 } : { height: [2, 7, 2] }}
+                      transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
+                      className="w-[1px] bg-her-accent/90 rounded-full" 
+                    />
+                  </div>
+                </div>
+
+                <h4 
+                  onClick={() => {
+                    setWorkspaceMode('sounds');
+                    addNotification("Biblioteca de Sons Aberta", "info");
+                  }}
+                  className="text-xs font-sans font-medium text-white hover:text-her-accent transition-colors truncate cursor-pointer leading-tight font-sans"
+                  title="Ajustar sons e playlists"
+                >
+                  {soundLibrary.find(s => s.url === playingSoundUrl)?.name || "Faixa OSONE"}
+                </h4>
+              </div>
+            </div>
+
+            {/* Controls panel */}
+            <div className="flex items-center gap-1 shrink-0 bg-white/[0.02] border border-white/5 rounded-xl p-1">
+              {/* Play/Pause Button */}
+              {isSoundPaused ? (
+                <button
+                  onClick={resumeSoundEffect}
+                  className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                  title="Retomar Áudio"
+                >
+                  <Play size={13} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  onClick={pauseSoundEffect}
+                  className="p-2 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                  title="Pausar Áudio"
+                >
+                  <Pause size={13} fill="currentColor" />
+                </button>
+              )}
+
+              {/* Stop Button */}
+              <button
+                onClick={stopSoundEffect}
+                className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                title="Parar e Fechar"
+              >
+                <Square size={13} fill="currentColor" />
+              </button>
+              
+              {/* Navigate to Sounds Library Button */}
+              <button
+                onClick={() => setWorkspaceMode('sounds')}
+                className="p-2 text-zinc-500 hover:text-zinc-300 hover:bg-white/5 rounded-lg transition-all border-l border-white/5"
+                title="Abrir Biblioteca Completa"
+              >
+                <Sliders size={13} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile Backdrop for Sidebar/Settings */}
       <AnimatePresence>

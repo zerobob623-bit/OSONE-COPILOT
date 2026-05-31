@@ -41,6 +41,21 @@ async function startServer() {
     return "";
   };
 
+  // Gracefully formats Gemini API errors, notifying the user when their key quota is exhausted
+  const formatGeminiError = (err: any): string => {
+    const msg = err?.message || String(err);
+    if (
+      msg.includes("429") ||
+      msg.includes("RESOURCE_EXHAUSTED") ||
+      msg.toLowerCase().includes("quota") ||
+      msg.toLowerCase().includes("limit") ||
+      msg.toLowerCase().includes("exceeded")
+    ) {
+      return "Sua cota da API do Gemini foi excedida ou houve limite de taxa (Erro 429). Por favor, insira sua própria API Key válida do Google no painel de Ajustes (ícone de engrenagem) ou verifique o limite do seu plano em https://ai.google.dev/gemini-api/docs/rate-limits.";
+    }
+    return msg;
+  };
+
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
@@ -754,7 +769,7 @@ Nome do interlocutor: ${senderName}`;
       return res.json({ text: response.text || "" });
     } catch (err: any) {
       console.error("Error inside /api/chat-intel endpoint:", err);
-      return res.status(500).json({ error: err.message || "Erro de servidor ao processar inteligência do Gemini." });
+      return res.status(500).json({ error: formatGeminiError(err) });
     }
   });
 
@@ -793,7 +808,7 @@ Nome do interlocutor: ${senderName}`;
       return res.json({ text: response.text || "" });
     } catch (err: any) {
       console.error("Error inside /api/generate endpoint:", err);
-      return res.status(500).json({ error: err.message || "Erro de servidor ao processar inteligência do Gemini." });
+      return res.status(500).json({ error: formatGeminiError(err) });
     }
   });
 
@@ -826,7 +841,7 @@ Nome do interlocutor: ${senderName}`;
       return res.json(response);
     } catch (err: any) {
       console.error("Erro no proxy server-side generateContent:", err);
-      return res.status(500).json({ error: err.message || "Erro ao conectar com a IA" });
+      return res.status(500).json({ error: formatGeminiError(err) });
     }
   });
 
@@ -859,7 +874,7 @@ Nome do interlocutor: ${senderName}`;
       return res.json(response);
     } catch (err: any) {
       console.error("Erro no proxy server-side generateImages:", err);
-      return res.status(500).json({ error: err.message || "Erro ao gerar imagem" });
+      return res.status(500).json({ error: formatGeminiError(err) });
     }
   });
 
