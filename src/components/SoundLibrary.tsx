@@ -22,6 +22,8 @@ interface SoundLibraryProps {
   onPlaySound: (url: string) => void;
   onStopSound: () => void;
   onClose: () => void;
+  chosenInitSoundUrl?: string;
+  onSelectInitSound?: (url: string) => void;
 }
 
 interface Playlist {
@@ -43,7 +45,9 @@ export const SoundLibrary = ({
   onRestoreDefaults, 
   onPlaySound, 
   onStopSound, 
-  onClose 
+  onClose,
+  chosenInitSoundUrl,
+  onSelectInitSound
 }: SoundLibraryProps) => {
   const [filter, setFilter] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -76,6 +80,7 @@ export const SoundLibrary = ({
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Auto categories
   const categories = ['all', ...Array.from(new Set(sounds.map(s => s.category)))];
@@ -220,8 +225,9 @@ export const SoundLibrary = ({
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return;
     const apiKey = apiKeys.gemini;
+    setAiError(null);
     if (!apiKey || apiKey.trim() === '') {
-      alert("Por favor, vincule sua própria chave API Gemini nas configurações para gerar sons.");
+      setAiError("Por favor, vincule sua própria chave API Gemini nas configurações para gerar sons.");
       return;
     }
     
@@ -278,9 +284,9 @@ export const SoundLibrary = ({
 
       setAiPrompt('');
       setIsAiModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Generation Error:", error);
-      alert("Erro ao gerar som com IA. Verifique sua chave API.");
+      setAiError(error?.message || "Erro ao gerar som com IA. Verifique sua chave API.");
     } finally {
       setIsGenerating(false);
     }
@@ -336,7 +342,7 @@ export const SoundLibrary = ({
         </div>
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => setIsAiModalOpen(true)}
+            onClick={() => { setIsAiModalOpen(true); setAiError(null); }}
             className="px-4 py-2.5 bg-purple-500/10 text-purple-200 border border-purple-500/20 hover:bg-purple-500/20 transition-all uppercase tracking-wider text-[10px] rounded-lg flex items-center gap-2"
           >
             <Sparkles size={12} className="text-purple-400" />
@@ -441,6 +447,18 @@ export const SoundLibrary = ({
                         {sound.category}
                       </span>
                       <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => onSelectInitSound?.(sound.url)}
+                          className={cn(
+                            "p-1 rounded-md transition-all",
+                            chosenInitSoundUrl === sound.url 
+                              ? "text-purple-400 bg-purple-500/10 border border-purple-500/20" 
+                              : "text-zinc-500 hover:text-white hover:bg-white/5"
+                          )}
+                          title="Tocar ao inicializar via viva-voz"
+                        >
+                          <Sparkles size={11} className={chosenInitSoundUrl === sound.url ? "animate-pulse" : ""} />
+                        </button>
                         <button 
                           onClick={() => openEdit(sound)}
                           className="p-1 opacity-0 group-hover:opacity-100 text-her-muted hover:text-her-accent transition-all"
@@ -676,7 +694,21 @@ export const SoundLibrary = ({
                       </div>
 
                       {/* Playlist Assignment Control Side */}
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => onSelectInitSound?.(sound.url)}
+                          className={cn(
+                            "px-2 py-1 text-[9px] uppercase font-bold tracking-wider rounded-md border flex items-center gap-1.5 transition-all",
+                            chosenInitSoundUrl === sound.url
+                              ? "bg-purple-500/10 border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                              : "bg-white/[0.01] border-white/[0.05] text-white/40 hover:text-white/80 hover:bg-white/[0.03]"
+                          )}
+                          title="Tocar esta faixa ao ativar o sistema via viva-voz (Ei Osone / Palmas)"
+                        >
+                          <Sparkles size={10} className={chosenInitSoundUrl === sound.url ? "animate-pulse text-purple-400" : "text-white/30"} />
+                          <span>{chosenInitSoundUrl === sound.url ? "Inicialização On" : "Tocar no Início"}</span>
+                        </button>
+
                         {playlists.length > 0 && activePlaylistId === null && (
                           <div className="relative group/pl">
                             <span className="text-[9px] uppercase tracking-wider text-her-muted border border-white/[0.05] px-2 py-1 rounded-md bg-white/[0.01] hover:bg-white/[0.05] cursor-pointer flex items-center gap-1.5 transition-all">
@@ -917,7 +949,7 @@ export const SoundLibrary = ({
                       <p className="text-[9px] text-her-muted uppercase tracking-[0.2em] font-light">Geração de áudio neural</p>
                     </div>
                   </div>
-                  <button onClick={() => setIsAiModalOpen(false)} className="p-2 hover:bg-white/[0.03] rounded-full">
+                  <button onClick={() => { setIsAiModalOpen(false); setAiError(null); }} className="p-2 hover:bg-white/[0.03] rounded-full">
                     <X size={18} />
                   </button>
                 </div>
@@ -955,6 +987,18 @@ export const SoundLibrary = ({
                       Impacto Épico
                     </button>
                   </div>
+
+                  {aiError && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-300 text-xs rounded-2xl leading-relaxed font-light">
+                      <p className="font-bold flex items-center gap-1.5 mb-1.5 text-red-400 uppercase text-[9px] tracking-wider">
+                        <span>⚠️ Erro na Síntese Virtual</span>
+                      </p>
+                      <p>{aiError}</p>
+                      <p className="mt-3 text-[10px] text-zinc-400">
+                        *Nota: Se sua cota estiver excedida (Limite 429), insira sua própria API Key do Google no painel central de Ajustes.*
+                      </p>
+                    </div>
+                  )}
 
                   <button 
                     onClick={handleAiGenerate}

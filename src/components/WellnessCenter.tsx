@@ -163,9 +163,10 @@ export function WellnessCenter({ externalData, onUpdate, apiKeys }: { externalDa
       const result = await response.json();
       const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
       setAdvice(textResponse);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro na consulta:", error);
-      alert("Falha na conexão com a central neural de saúde.");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setAdvice(`### ⚠️ Erro de Consulta de Saúde\n\nNão foi possível obter a assessoria da central de saúde.\n\n**Detalhes técnicos:**\n> ${errorMsg}\n\n*Nota: Se você ultrapassou a cota de testes (Limite 429), configure sua própria Chave API válida do Google no painel de Ajustes (engrenagem no topo) para restabelecer os serviços neurais.*`);
     } finally {
       setIsGenerating(false);
     }

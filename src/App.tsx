@@ -73,6 +73,7 @@ import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { LocalControl } from './components/LocalControl';
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
+import { OSONEMap } from './components/OSONEMap';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
@@ -575,6 +576,19 @@ export default function App() {
     localStorage.setItem('osone_sound_library', JSON.stringify(soundLibrary));
   }, [soundLibrary]);
 
+  const [chosenInitSoundUrl, setChosenInitSoundUrl] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('osone_chosen_init_sound');
+      return saved || 'https://assets.mixkit.co/active_storage/sfx/2374/2374-preview.mp3';
+    } catch {
+      return 'https://assets.mixkit.co/active_storage/sfx/2374/2374-preview.mp3';
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_chosen_init_sound', chosenInitSoundUrl);
+  }, [chosenInitSoundUrl]);
+
   const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
   const [playingSoundUrl, setPlayingSoundUrl] = useState<string | null>(null);
   const [isSoundPaused, setIsSoundPaused] = useState<boolean>(false);
@@ -808,6 +822,89 @@ export default function App() {
   const [selectedVoice, setSelectedVoice] = useState<string>(() => {
     return localStorage.getItem('osone_selected_voice') || 'Zephyr';
   });
+
+  const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
+
+  const tryOpenInInternalMap = (url: string, title?: string): boolean => {
+    const lowercaseUrl = url.toLowerCase();
+    const lowercaseTitle = (title || "").toLowerCase();
+    
+    // Common map-related terms and cities to grab and open internally
+    const mapKeywords = [
+      'mapa', 'map', 'localização', 'location', 'direções', 'navegação', 
+      'coordenadas', 'coordinates', 'latitude', 'longitude', 'endereço', 
+      'address', 'route', 'rota', 'gps', 'geoportal', 'nominatim', 
+      'vistas', 'relevo', 'satélite', 'urbanismo', 'cartografia', 'país', 'cidade'
+    ];
+
+    const commonCities = [
+      'são paulo', 'tóquio', 'tokyo', 'paris', 'nova york', 'new york', 
+      'rio de janeiro', 'reykjavík', 'londres', 'london', 'roma', 'rome', 
+      'berlim', 'berlin', 'lisboa', 'lisbon', 'madri', 'madrid', 'brasil', 
+      'buenos aires', 'salvador', 'belo horizonte', 'fortaleza', 'curitiba',
+      'manaus', 'recife', 'porto alegre', 'mumbai', 'singapura', 'pequim',
+      'cairo', 'sydney', 'toronto', 'chicago', 'los angeles', 'moscou'
+    ];
+
+    const isMatch = 
+      lowercaseUrl.includes('google.com/maps') || 
+      lowercaseUrl.includes('maps.google') || 
+      lowercaseUrl.includes('openstreetmap') || 
+      lowercaseUrl.includes('geoportal') || 
+      lowercaseUrl.includes('maps/') ||
+      lowercaseUrl.includes('/maps') ||
+      lowercaseUrl.includes('place/') ||
+      lowercaseUrl.includes('/place') ||
+      mapKeywords.some(keyword => lowercaseTitle.includes(keyword) || lowercaseUrl.includes(keyword)) ||
+      commonCities.some(city => lowercaseTitle.includes(city) || lowercaseUrl.includes(city)) ||
+      /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(title || "");
+
+    if (isMatch) {
+      let query = "";
+      
+      try {
+        const urlObj = new URL(url);
+        
+        if (urlObj.searchParams.has('q')) {
+          query = urlObj.searchParams.get('q') || "";
+        } else if (urlObj.searchParams.has('query')) {
+          query = urlObj.searchParams.get('query') || "";
+        } else if (urlObj.searchParams.has('place')) {
+          query = urlObj.searchParams.get('place') || "";
+        }
+        
+        if (!query && url.includes('/place/')) {
+          const parts = url.split('/place/');
+          if (parts.length > 1) {
+            const subparts = parts[1].split('/');
+            query = decodeURIComponent(subparts[0].replace(/\+/g, ' '));
+          }
+        }
+      } catch (e) {
+        if (url.includes('?q=')) {
+          const qPart = url.split('?q=')[1];
+          if (qPart) {
+            query = decodeURIComponent(qPart.split('&')[0].replace(/\+/g, ' '));
+          }
+        }
+      }
+      
+      if (!query && title && !title.startsWith('http') && title.toLowerCase() !== 'map' && title.toLowerCase() !== 'mapa') {
+        query = title;
+      }
+      
+      if (!query) {
+        query = "São Paulo, Brasil";
+      }
+      
+      setMapSearchQuery(query);
+      setWorkspaceMode('map');
+      addNotification(`🗺️ Aberto no Mapa OSONE: ${query}`, "success");
+      return true;
+    }
+    
+    return false;
+  };
 
   useEffect(() => {
     localStorage.setItem('osone_selected_voice', selectedVoice);
@@ -2199,6 +2296,11 @@ ${isBad
         
         addNotification("Ativando via voz...", "success");
 
+        // Play the chosen initialization sound!
+        if (chosenInitSoundUrl) {
+          playSoundEffect(chosenInitSoundUrl).catch(err => console.error("Error playing startup sound:", err));
+        }
+
         // Disparar o chat com a frase "Ei, Osone"
         // Isso fará o chat abrir e a IA responder por texto
         setIsChatExpanded(true);
@@ -2239,7 +2341,104 @@ ${isBad
       stoppedManually = true;
       try { wakeWordRec.stop(); } catch(e) {}
     };
-  }, [isWaitingForWakeWord, isListening, isTranscribing, isElevenLabsLiveActive, liveState.status]);
+  }, [isWaitingForWakeWord, isListening, isTranscribing, isElevenLabsLiveActive, liveState.status, chosenInitSoundUrl]);
+
+  // Clap Detector - triggers hands-free activation with clap sounds as requested!
+  useEffect(() => {
+    if (!isWaitingForWakeWord || isListening || isElevenLabsLiveActive) return;
+
+    let audioCtx: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let stream: MediaStream | null = null;
+    let animId: number | null = null;
+    let stopped = false;
+
+    const startClapDetection = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (stopped) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const history: number[] = [];
+        const historyLen = 25;
+        let lastClapTime = 0;
+
+        const loop = () => {
+          if (stopped) return;
+          analyser!.getByteFrequencyData(dataArray);
+
+          // Sum energy levels
+          let currentVolume = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            currentVolume += dataArray[i];
+          }
+          currentVolume = currentVolume / dataArray.length;
+
+          // Maintain floating background history window
+          if (history.length >= historyLen) {
+            history.shift();
+          }
+          history.push(currentVolume);
+
+          const avgHistory = history.reduce((a, b) => a + b, 0) / history.length;
+          const now = Date.now();
+
+          // Standard clap threshold pattern: sudden peak above 55 volume and 3.4x average background noise
+          if (currentVolume > 55 && currentVolume > avgHistory * 3.4 && (now - lastClapTime > 2000)) {
+            lastClapTime = now;
+            console.log("👏 Clap detected! Volume:", currentVolume, "Background average:", avgHistory);
+
+            addNotification("👏 Palma detectada! Ativando OSONE...", "success");
+
+            // Play the selected initialization sound!
+            if (chosenInitSoundUrl) {
+              playSoundEffect(chosenInitSoundUrl).catch(err => console.error("Error playing startup sound:", err));
+            }
+
+            // Expand primary text chat and issue the greeting prompt
+            setIsChatExpanded(true);
+            handleHomeChat("Ei, Osone");
+
+            // Trigger live agent audio connection shortly after
+            setTimeout(() => {
+              if (liveStateRef.current.status !== 'connected' && liveStateRef.current.status !== 'connecting') {
+                startLiveSession();
+              }
+            }, 1500);
+          }
+
+          animId = requestAnimationFrame(loop);
+        };
+
+        loop();
+      } catch (err) {
+        console.warn("Microphone access denied or busy for clap detection:", err);
+      }
+    };
+
+    startClapDetection();
+
+    return () => {
+      stopped = true;
+      if (animId) cancelAnimationFrame(animId);
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+      if (audioCtx) {
+        audioCtx.close().catch(e => {});
+      }
+    };
+  }, [isWaitingForWakeWord, isListening, isElevenLabsLiveActive, chosenInitSoundUrl]);
 
   const stopElevenLabsLiveSession = () => {
     setIsElevenLabsLiveActive(false);
@@ -3041,6 +3240,20 @@ ${isBad
               distortion: { type: Type.NUMBER, description: "Nível de distorção (0.0 a 1.0). Default 0.0." }
             }
           }
+        },
+        {
+          name: "open_map_workspace",
+          description: "Abre o mapa geográfico integrado dentro do próprio OSONE 4 para visualizar uma cidade, país, endereço ou coordenadas.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              location: { 
+                type: Type.STRING, 
+                description: "O nome da cidade, país ou endereço completo a ser localizado no mapa (ex: 'São Paulo', 'Tóquio', 'Paris')." 
+              }
+            },
+            required: ["location"]
+          }
         }
       ];
 
@@ -3454,12 +3667,31 @@ ${isBad
           } else if (call.name === 'openUrl') {
             const url = (call.args as any).url;
             const title = (call.args as any).title || url;
-            window.open(url, '_blank');
+            const handledInternally = tryOpenInInternalMap(url, title);
+            if (!handledInternally) {
+              window.open(url, '_blank');
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `Entendido. Abri a guia: ${title}` 
+              }]);
+            } else {
+              setChatHistory(prev => [...prev, { 
+                id: Math.random().toString(36).substr(2, 9), 
+                role: 'assistant' as const, 
+                content: `🗺️ Sintonizei o mapa do OSONE integrado em **${title}**.` 
+              }]);
+            }
+          } else if (call.name === 'open_map_workspace') {
+            const loc = (call.args as any).location;
+            setMapSearchQuery(loc);
+            setWorkspaceMode('map');
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
-              content: `Entendido. Abri a guia: ${title}` 
+              content: `🗺️ Canal Cartográfico: Sintonizando visualizador geográfico integrado em **${loc}**.` 
             }]);
+            addNotification(`Mapa sintonizado em ${loc}`, "success");
           } else if (call.name === 'search_chat_history') {
             const query = (call.args as any).query.toLowerCase();
             const results = chatHistory.filter(msg => 
@@ -3871,9 +4103,13 @@ ${isBad
           handleBiometricAnalysis(userMessage, text, hasImagesOnCall);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao enviar mensagem:", error);
-      addMessage({ role: 'assistant' as const, content: "Desculpe, tive um problema ao processar sua mensagem." });
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      addMessage({ 
+        role: 'assistant' as const, 
+        content: `⚠️ **Erro de Conexão Neural (Gemini API)**\n\nNão foi possível processar a resposta do assistente.\n\n**Detalhe do Erro:**\n> ${errorMsg}\n\n*Caso o erro seja de cota excedida (Limite 429), você pode continuar utilizando o OSONE configurando sua própria chave de API nas Configurações (ícone de engrenagem no cabeçalho superior).*` 
+      });
     } finally {
       setIsGenerating(false);
       setIsModelSearching(false);
@@ -4554,6 +4790,12 @@ ${isBad
               ).catch(err => {
                 console.error("Erro no AudioProcessor:", err);
                 setIsListening(false);
+                setLiveState({ 
+                  status: 'error', 
+                  error: "Permissão de microfone negada. Clique no ícone de cadeado do navegador para liberar, ou abra em uma nova aba." 
+                });
+                addNotification("Acesso ao microfone negado ou bloqueado.", "error");
+                stopLiveSession(true);
               });
               
               if (attachedFiles.length > 0) {
@@ -4820,6 +5062,16 @@ ${isBad
                       name: call.name,
                       id: call.id,
                       response: { result: "Notificação exibida." }
+                    });
+                  } else if (call.name === 'open_map_workspace') {
+                    const loc = (call.args as any).location;
+                    setMapSearchQuery(loc);
+                    setWorkspaceMode('map');
+                    addNotification(`Mapa sintonizado em ${loc}`, "success");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Mapa sintonizado com sucesso em ${loc}.` }
                     });
                   } else if (call.name === 'draw_on_canvas') {
                     const { objects, clearFirst } = call.args as any;
@@ -5258,11 +5510,14 @@ ${isBad
                   } else if (call.name === "openUrl") {
                     const url = call.args.url as string;
                     const title = (call.args.title as string) || url;
-                    window.open(url, '_blank');
+                    const handledInternally = tryOpenInInternalMap(url, title);
+                    if (!handledInternally) {
+                      window.open(url, '_blank');
+                    }
                     responses.push({
                       name: call.name,
                       id: call.id,
-                      response: { result: `Guia '${title}' aberta com sucesso.` }
+                      response: { result: handledInternally ? `Mapa integrado aberto localmente para '${title}'.` : `Guia '${title}' aberta com sucesso.` }
                     });
                   } else if (call.name === "click_screen") {
                     const x = call.args.x as number;
@@ -6769,6 +7024,11 @@ ${isBad
                 onPauseSound={pauseSoundEffect}
                 onResumeSound={resumeSoundEffect}
                 onClose={() => setWorkspaceMode('home')}
+                chosenInitSoundUrl={chosenInitSoundUrl}
+                onSelectInitSound={(url) => {
+                  setChosenInitSoundUrl(url);
+                  addNotification("✨ Trilha de inicialização atualizada com sucesso!", "success");
+                }}
               />
             </motion.div>
           ) : workspaceMode === 'local_control' ? (
@@ -6790,6 +7050,22 @@ ${isBad
               className="w-full flex-1 flex flex-col min-h-0"
             >
               <WhatsAppIntegration defaultGeminiKey={apiKeys.gemini} />
+            </motion.div>
+          ) : workspaceMode === 'map' ? (
+            <motion.div
+              key="workspace-map"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <OSONEMap 
+                onClose={() => setWorkspaceMode('home')} 
+                initialSearchQuery={mapSearchQuery}
+                onLocationFound={(placeName) => {
+                  setMapSearchQuery(placeName);
+                }}
+              />
             </motion.div>
           ) : (
             <motion.div 
@@ -8001,7 +8277,12 @@ ${isBad
                 <div className="p-2 bg-zinc-900/40 border-t border-white/5 flex gap-2">
                   {popup.url && (
                     <button
-                      onClick={() => window.open(popup.url, '_blank')}
+                      onClick={() => {
+                        const handledInternally = tryOpenInInternalMap(popup.url!, popup.title);
+                        if (!handledInternally) {
+                          window.open(popup.url, '_blank');
+                        }
+                      }}
                       className="flex-1 py-1 px-2.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/30 text-sky-400 text-[10px] font-sans font-medium rounded-lg flex items-center justify-center gap-1.5 transition-all"
                     >
                       <Globe size={11} />

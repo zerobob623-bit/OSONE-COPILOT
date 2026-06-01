@@ -33,7 +33,7 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp';
+export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp' | 'map';
 
 export interface DrawingObject {
   id: string;

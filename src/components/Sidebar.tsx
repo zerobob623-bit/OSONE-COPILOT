@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -97,6 +97,16 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <Gamepad2 size={18} />
                   <span>Interativo</span>
+                </button>
+                <button 
+                  onClick={() => { setMode('map'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'map' ? "bg-purple-500/10 text-purple-300 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Compass size={18} className="text-purple-400" />
+                  <span>Mapa Neural</span>
                 </button>
                 <button 
                   onClick={() => { setMode('aural_control'); onClose(); }}
