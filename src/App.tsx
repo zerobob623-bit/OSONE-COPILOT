@@ -81,6 +81,225 @@ import { SoundEffect, DrawingObject, User } from './types';
 import { generatePDF } from './lib/pdfUtils';
 import { resolveAudioUrl, deleteAudio } from './lib/audioDb';
 
+// --- Vercel/Static Direct Client-Side Fallback for Gemini ---
+const originalFetch = window.fetch.bind(window);
+const customFetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+  if (urlStr.includes("/api/")) {
+    const isGeminiContentProxy = urlStr.includes("/api/gemini/generateContent") || urlStr.includes("/api/chat-intel");
+    const isGeminiGenerateProxy = urlStr.includes("/api/generate");
+    const isGeminiImageProxy = urlStr.includes("/api/gemini/generateImages");
+
+    if (isGeminiContentProxy || isGeminiGenerateProxy || isGeminiImageProxy) {
+      const isVercel = window.location.hostname.includes("vercel.app") || window.location.hostname.includes("github.io") || !window.location.port;
+      
+      let useFallback = isVercel;
+      let response: Response | null = null;
+
+      if (!isVercel) {
+        try {
+          response = await originalFetch(input, init);
+          if (response.status === 404 || response.status === 502 || response.status === 504) {
+            useFallback = true;
+          }
+        } catch (e) {
+          useFallback = true;
+        }
+      }
+
+      if (useFallback) {
+        let clientApiKey = "";
+        let geminiModel = "gemini-3.5-flash";
+        try {
+          const stored = localStorage.getItem("osone_api_keys");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            clientApiKey = parsed.gemini || "";
+            geminiModel = parsed.geminiModel || "gemini-3.5-flash";
+          }
+        } catch (_) {}
+
+        let reqBody: any = {};
+        if (init && init.body) {
+          try {
+            reqBody = JSON.parse(init.body as string);
+            if (!clientApiKey) {
+              clientApiKey = reqBody.clientApiKey || reqBody.geminiApiKey || "";
+            }
+          } catch (_) {}
+        }
+
+        if (clientApiKey) {
+          console.log("[Vercel-OSONE Fallback] Intercepting fetch and making direct client-side call to Google Gemini API...");
+          
+          try {
+            if (isGeminiContentProxy) {
+              const selectedModel = reqBody.model || geminiModel;
+              const contents = reqBody.contents || (reqBody.historyContents ? reqBody.historyContents : []);
+              const systemInstruction = reqBody.config?.systemInstruction || reqBody.systemInstruction || "";
+              
+              let sysInstructionParts = undefined;
+              if (systemInstruction) {
+                sysInstructionParts = {
+                  parts: [{ text: systemInstruction }]
+                };
+              }
+
+              const generationConfig: any = {};
+              if (reqBody.config?.temperature !== undefined) generationConfig.temperature = reqBody.config.temperature;
+              if (reqBody.config?.maxOutputTokens !== undefined) generationConfig.maxOutputTokens = reqBody.config.maxOutputTokens;
+              if (reqBody.config?.responseMimeType !== undefined) generationConfig.responseMimeType = reqBody.config.responseMimeType;
+              if (reqBody.responseMimeType !== undefined) generationConfig.responseMimeType = reqBody.responseMimeType;
+
+              const payload: any = {
+                contents: contents
+              };
+              if (sysInstructionParts) {
+                payload.systemInstruction = sysInstructionParts;
+              }
+              if (Object.keys(generationConfig).length > 0) {
+                payload.generationConfig = generationConfig;
+              }
+
+              const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${clientApiKey}`;
+              const directRes = await originalFetch(geminiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+
+              if (!directRes.ok) {
+                const errText = await directRes.text();
+                return new Response(JSON.stringify({ error: `Direct Gemini error: ${errText}` }), {
+                  status: directRes.status,
+                  headers: { "Content-Type": "application/json" }
+                });
+              }
+
+              const geminiData = await directRes.json();
+              const textResult = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              
+              const formattedOutput = {
+                text: textResult,
+                candidates: geminiData.candidates
+              };
+
+              return new Response(JSON.stringify(formattedOutput), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+              });
+            }
+
+            if (isGeminiGenerateProxy) {
+              const selectedModel = reqBody.model || geminiModel;
+              const promptText = reqBody.prompt || "";
+              const systemInstruction = reqBody.systemInstruction || "";
+
+              let sysInstructionParts = undefined;
+              if (systemInstruction) {
+                sysInstructionParts = {
+                  parts: [{ text: systemInstruction }]
+                };
+              }
+
+              const generationConfig: any = {};
+              if (reqBody.responseMimeType !== undefined) generationConfig.responseMimeType = reqBody.responseMimeType;
+
+              const contents = [{
+                role: "user",
+                parts: [{ text: promptText }]
+              }];
+
+              const payload: any = {
+                contents: contents
+              };
+              if (sysInstructionParts) {
+                payload.systemInstruction = sysInstructionParts;
+              }
+              if (Object.keys(generationConfig).length > 0) {
+                payload.generationConfig = generationConfig;
+              }
+
+              const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${clientApiKey}`;
+              const directRes = await originalFetch(geminiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+
+              if (!directRes.ok) {
+                const errText = await directRes.text();
+                return new Response(JSON.stringify({ error: `Direct Gemini error: ${errText}` }), {
+                  status: directRes.status,
+                  headers: { "Content-Type": "application/json" }
+                });
+              }
+
+              const geminiData = await directRes.json();
+              const textResult = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+              return new Response(JSON.stringify({ text: textResult }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+              });
+            }
+
+            if (isGeminiImageProxy) {
+              const selectedModel = reqBody.model || "imagen-3.0-generate-002";
+              const promptStr = reqBody.prompt || "";
+              const numberOfImages = reqBody.config?.numberOfImages || 1;
+              const outputMimeType = reqBody.config?.outputMimeType || "image/jpeg";
+              const aspectRatio = reqBody.config?.aspectRatio || "1:1";
+
+              const payload = {
+                prompt: promptStr,
+                numberOfImages: numberOfImages,
+                outputMimeType: outputMimeType,
+                aspectRatio: aspectRatio
+              };
+
+              const imagenUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateImages?key=${clientApiKey}`;
+              const directRes = await originalFetch(imagenUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+              });
+
+              if (!directRes.ok) {
+                const errText = await directRes.text();
+                return new Response(JSON.stringify({ error: `Direct Imagen error: ${errText}` }), {
+                  status: directRes.status,
+                  headers: { "Content-Type": "application/json" }
+                });
+              }
+
+              const imagenData = await directRes.json();
+              return new Response(JSON.stringify(imagenData), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+              });
+            }
+
+          } catch (err: any) {
+            console.error("[Vercel-OSONE Fallback] Error in client-side direct fallback:", err);
+            return new Response(JSON.stringify({ error: `Direct Gemini error: ${err.message}` }), {
+              status: 500,
+              headers: { "Content-Type": "application/json" }
+            });
+          }
+        }
+      }
+
+      if (response) return response;
+    }
+  }
+
+  return originalFetch(input, init);
+};
+
+const fetch = customFetch;
+
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
   { id: '1', name: 'Boing', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3' },
@@ -1543,12 +1762,21 @@ export default function App() {
       const saved = localStorage.getItem('osone_chat_history');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return Array.isArray(parsed) ? parsed : [];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       }
     } catch (e) {
       console.error("Failed to parse chat history:", e);
     }
-    return [];
+    // Retorna mensagem de acolhimento inicial estática imediata para evitar consumo de cota e lentidão na inicialização
+    return [
+      {
+        id: "welcome",
+        role: "assistant",
+        content: "### Bem-vindo ao OSONE 4! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+      }
+    ];
   });
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatHistoryRef = useRef<Message[]>([]);
@@ -1581,16 +1809,7 @@ export default function App() {
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveSilenceRef = useRef<number>(0);
 
-  const [guestGreeted, setGuestGreeted] = useState(false);
-  useEffect(() => {
-    if (isGuestMode && !guestGreeted && chatHistory.length === 0) {
-      const timer = setTimeout(() => {
-        handleHomeChat("Protocolo de Ativação Local: Cumprimente o visitante, cite as horas, o clima (use busca se necessário) e ofereça ajuda técnica.");
-        setGuestGreeted(true);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [isGuestMode, guestGreeted, chatHistory.length]);
+  const [guestGreeted, setGuestGreeted] = useState(true);
 
 
 interface SearchPopupItem {
@@ -1624,6 +1843,7 @@ interface SearchPopupItem {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const isCameraActiveRef = useRef(false);
+  const [isCameraFullScreen, setIsCameraFullScreen] = useState(false);
   
   useEffect(() => {
     isCameraActiveRef.current = isCameraActive;
@@ -1646,7 +1866,7 @@ interface SearchPopupItem {
       liveVideoRef.current.srcObject = cameraStreamRef.current;
       liveVideoRef.current.play().catch(e => console.error("Video play error:", e));
     }
-  }, [isCameraActive]);
+  }, [isCameraActive, isCameraFullScreen]);
 
   const [lyrics, setLyrics] = useState<{ title?: string; content: string } | null>(null);
   const [isSinging, setIsSinging] = useState(false);
@@ -2960,7 +3180,8 @@ ${isBad
       });
 
       if (!response.ok) {
-        throw new Error("Erro na requisição ao servidor");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Erro na requisição ao servidor");
       }
 
       const data = await response.json();
@@ -2968,7 +3189,7 @@ ${isBad
       if (Array.isArray(json)) {
         setCodeSuggestions(json.slice(0, 3));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao analisar código:", error);
     } finally {
       setIsAnalyzingCode(false);
@@ -8480,51 +8701,124 @@ ${isBad
       {/* Camera Preview Overlay */}
       <AnimatePresence>
         {isCameraActive && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className="fixed bottom-28 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md overflow-hidden border border-white/20 shadow-2xl group"
-          >
-            <video 
-              ref={liveVideoRef} 
-              className={cn(
-                "w-full h-full object-cover",
-                cameraFacingMode === 'user' ? "scale-x-[-1]" : ""
-              )}
-              autoPlay 
-              playsInline 
-              muted 
-            />
-            {/* Analysis Overlay/HUD */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-0 border-[1px] border-her-accent/30 m-2 border-dashed animate-[spin_10s_linear_infinite]" />
-              <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 bg-her-accent/80">
-                <div className="w-1.5 h-1.5 bg-white animate-pulse" />
-                <span className="text-[9px] font-bold text-white uppercase tracking-widest font-mono">VISION_ACTIVE</span>
-              </div>
-              <div className="absolute bottom-3 left-3 right-3 text-[8px] text-white/50 font-mono flex justify-between">
-                <span>FPS: 30</span>
-                <span>{cameraFacingMode.toUpperCase()}</span>
-              </div>
-            </div>
-            <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={toggleCamera}
-                className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg flex items-center justify-center backdrop-blur-sm"
-                title="Encerrar Visão"
+          isCameraFullScreen ? (
+            <motion.div
+              key="fullscreen-camera"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 sm:p-8"
+              onClick={() => setIsCameraFullScreen(false)}
+            >
+              <div 
+                className="relative w-full max-w-4xl aspect-video md:aspect-[4/3] bg-zinc-950 rounded-2xl overflow-hidden border border-white/20 shadow-2xl group flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
               >
-                <X size={12} />
-              </button>
-              <button 
-                onClick={switchCamera}
-                className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm"
-                title="Inverter Câmera"
-              >
-                <RefreshCw size={12} />
-              </button>
-            </div>
-          </motion.div>
+                <video 
+                  ref={liveVideoRef} 
+                  className={cn(
+                    "w-full h-full object-cover",
+                    cameraFacingMode === 'user' ? "scale-x-[-1]" : ""
+                  )}
+                  autoPlay 
+                  playsInline 
+                  muted 
+                />
+                {/* Analysis Overlay/HUD */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 border-[1.5px] border-purple-500/30 m-4 border-dashed animate-[spin_15s_linear_infinite] rounded-lg" />
+                  <div className="absolute top-5 left-5 flex items-center gap-2 px-3 py-1.5 bg-purple-600/80 rounded-md shadow-lg">
+                    <div className="w-2 h-2 bg-white animate-pulse" />
+                    <span className="text-[10px] font-bold text-white uppercase tracking-widest font-mono">VISION_ACTIVE_FULLSCREEN</span>
+                  </div>
+                  <div className="absolute bottom-5 left-5 right-5 text-[10px] text-white/70 font-mono flex justify-between bg-black/50 backdrop-blur-md p-2 px-3 rounded-xl border border-white/10 max-w-xs shadow-xl">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      LIVE FPS: 30
+                    </span>
+                    <span>MODE: {cameraFacingMode.toUpperCase()}</span>
+                  </div>
+                </div>
+                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                  <button 
+                    onClick={toggleCamera}
+                    className="p-2.5 bg-red-500/80 hover:bg-red-600 text-white rounded-xl flex items-center justify-center backdrop-blur-sm transition-colors shadow-lg"
+                    title="Encerrar Visão"
+                  >
+                    <X size={16} />
+                  </button>
+                  <button 
+                    onClick={switchCamera}
+                    className="p-2.5 bg-white/15 hover:bg-white/30 text-white rounded-xl flex items-center justify-center backdrop-blur-sm transition-colors shadow-lg"
+                    title="Inverter Câmera"
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                  <button 
+                    onClick={() => setIsCameraFullScreen(false)}
+                    className="p-2.5 bg-white/15 hover:bg-white/30 text-white rounded-xl flex items-center justify-center backdrop-blur-sm transition-colors shadow-lg"
+                    title="Tela Normal"
+                  >
+                    <Minimize size={16} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="mini-camera"
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 20 }}
+              className="fixed bottom-28 left-6 z-40 w-48 h-64 bg-black/40 backdrop-blur-md overflow-hidden border border-white/20 shadow-2xl group rounded-xl"
+            >
+              <video 
+                ref={liveVideoRef} 
+                className={cn(
+                  "w-full h-full object-cover",
+                  cameraFacingMode === 'user' ? "scale-x-[-1]" : ""
+                )}
+                autoPlay 
+                playsInline 
+                muted 
+              />
+              {/* Analysis Overlay/HUD */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 border-[1px] border-her-accent/30 m-2 border-dashed animate-[spin_10s_linear_infinite] rounded-lg" />
+                <div className="absolute top-3 left-3 flex items-center gap-2 px-2 py-1 bg-her-accent/80 rounded-sm">
+                  <div className="w-1.5 h-1.5 bg-white animate-pulse" />
+                  <span className="text-[9px] font-bold text-white uppercase tracking-widest font-mono">VISION_ACTIVE</span>
+                </div>
+                <div className="absolute bottom-3 left-3 right-3 text-[8px] text-white/50 font-mono flex justify-between">
+                  <span>FPS: 30</span>
+                  <span>{cameraFacingMode.toUpperCase()}</span>
+                </div>
+              </div>
+              <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                <button 
+                  onClick={toggleCamera}
+                  className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+                  title="Encerrar Visão"
+                >
+                  <X size={12} />
+                </button>
+                <button 
+                  onClick={switchCamera}
+                  className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+                  title="Inverter Câmera"
+                >
+                  <RefreshCw size={12} />
+                </button>
+                <button 
+                  onClick={() => setIsCameraFullScreen(true)}
+                  className="p-1.5 bg-white/20 hover:bg-white/40 text-white rounded-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+                  title="Tela Cheia"
+                >
+                  <Maximize size={12} />
+                </button>
+              </div>
+            </motion.div>
+          )
         )}
       </AnimatePresence>
     </motion.div>

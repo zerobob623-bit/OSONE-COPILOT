@@ -53,6 +53,15 @@ async function startServer() {
     ) {
       return "Sua cota da API do Gemini foi excedida ou houve limite de taxa (Erro 429). Por favor, insira sua própria API Key válida do Google no painel de Ajustes (ícone de engrenagem) ou verifique o limite do seu plano em https://ai.google.dev/gemini-api/docs/rate-limits.";
     }
+    if (
+      msg.includes("503") ||
+      msg.includes("UNAVAILABLE") ||
+      msg.toLowerCase().includes("high demand") ||
+      msg.toLowerCase().includes("temporary") ||
+      msg.toLowerCase().includes("temporarily")
+    ) {
+      return "O modelo da API do Gemini está temporariamente congestionado com alta demanda global (Erro 503 / UNAVAILABLE). Por favor, aguarde alguns segundos e clique em enviar novamente, ou selecione outro modelo (como gemini-2.5-flash ou gemini-1.5-flash) nas Configurações (ícone de engrenagem no cabeçalho superior) para obter respostas mais estáveis.";
+    }
     return msg;
   };
 
@@ -756,15 +765,44 @@ Nome do interlocutor: ${senderName}`;
         }
       });
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: historyContents,
-        config: {
-          maxOutputTokens: 250,
-          temperature: 0.7,
-          systemInstruction: systemInstruction
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: historyContents,
+          config: {
+            maxOutputTokens: 250,
+            temperature: 0.7,
+            systemInstruction: systemInstruction
+          }
+        });
+      } catch (err: any) {
+        const is503 = err?.message?.includes("503") || 
+                      err?.message?.includes("UNAVAILABLE") || 
+                      err?.message?.toLowerCase()?.includes("high demand") ||
+                      err?.message?.toLowerCase()?.includes("temporary") ||
+                      err?.message?.toLowerCase()?.includes("temporarily");
+        
+        if (is503) {
+          console.warn("Model gemini-3.5-flash is temporarily unavailable for chat-intel. Retrying with reliable gemini-2.5-flash fallback...");
+          try {
+            response = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: historyContents,
+              config: {
+                maxOutputTokens: 250,
+                temperature: 0.7,
+                systemInstruction: systemInstruction
+              }
+            });
+          } catch (fallbackErr) {
+            console.error("Fallback to gemini-2.5-flash failed for chat-intel:", fallbackErr);
+            throw err; // throw original 503 error
+          }
+        } else {
+          throw err;
         }
-      });
+      }
 
       return res.json({ text: response.text || "" });
     } catch (err: any) {
@@ -799,11 +837,36 @@ Nome do interlocutor: ${senderName}`;
       if (systemInstruction) config.systemInstruction = systemInstruction;
       if (responseMimeType) config.responseMimeType = responseMimeType;
 
-      const response = await ai.models.generateContent({
-        model: selectedModel,
-        contents: prompt,
-        config: config
-      });
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: selectedModel,
+          contents: prompt,
+          config: config
+        });
+      } catch (err: any) {
+        const is503 = err?.message?.includes("503") || 
+                      err?.message?.includes("UNAVAILABLE") || 
+                      err?.message?.toLowerCase()?.includes("high demand") ||
+                      err?.message?.toLowerCase()?.includes("temporary") ||
+                      err?.message?.toLowerCase()?.includes("temporarily");
+        
+        if (is503 && selectedModel !== "gemini-2.1-flash" && selectedModel !== "gemini-2.5-flash") {
+          console.warn(`Model ${selectedModel} is temporarily unavailable for api/generate. Retrying with gemini-2.5-flash fallback...`);
+          try {
+            response = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: prompt,
+              config: config
+            });
+          } catch (fallbackErr) {
+            console.error("Fallback to gemini-2.5-flash failed for api/generate:", fallbackErr);
+            throw err; // throw original
+          }
+        } else {
+          throw err;
+        }
+      }
 
       return res.json({ text: response.text || "" });
     } catch (err: any) {
@@ -832,11 +895,37 @@ Nome do interlocutor: ${senderName}`;
         }
       });
 
-      const response = await ai.models.generateContent({
-        model: model || "gemini-3.5-flash",
-        contents: contents,
-        config: config
-      });
+      let response;
+      const selectedModel = model || "gemini-3.5-flash";
+      try {
+        response = await ai.models.generateContent({
+          model: selectedModel,
+          contents: contents,
+          config: config
+        });
+      } catch (err: any) {
+        const is503 = err?.message?.includes("503") || 
+                      err?.message?.includes("UNAVAILABLE") || 
+                      err?.message?.toLowerCase()?.includes("high demand") ||
+                      err?.message?.toLowerCase()?.includes("temporary") ||
+                      err?.message?.toLowerCase()?.includes("temporarily");
+        
+        if (is503 && selectedModel !== "gemini-2.1-flash" && selectedModel !== "gemini-2.5-flash") {
+          console.warn(`Model ${selectedModel} is temporarily unavailable for proxy/generateContent. Retrying with gemini-2.5-flash fallback...`);
+          try {
+            response = await ai.models.generateContent({
+              model: "gemini-2.5-flash",
+              contents: contents,
+              config: config
+            });
+          } catch (fallbackErr) {
+            console.error("Fallback to gemini-2.5-flash failed for proxy/generateContent:", fallbackErr);
+            throw err; // throw original
+          }
+        } else {
+          throw err;
+        }
+      }
 
       return res.json(response);
     } catch (err: any) {

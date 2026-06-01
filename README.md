@@ -18,19 +18,3 @@ View your app in AI Studio: https://ai.studio/apps/6386d2bd-28da-476a-b186-4e838
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-
-Passo a passo simples para o usuário:
-Instalar o Node.js (compatível com Windows, Mac e Linux).
-
-Baixar/Clonar o repositório do seu código.
-No terminal da pasta, rodar os comandos padrão da web:
-
-code
-Bash
-# Para instalar os pacotes necessários
-npm install
-
-# Para iniciar o servidor em ambiente de desenvolvimento local
-npm run dev
-
-Abrir no navegador local: http://localhost:3000 (ou a porta correspondente).
