@@ -35,7 +35,16 @@ const customFetch = async function (input: RequestInfo | URL, init?: RequestInit
       isMemorySyncSave ||
       isMemorySyncLoad
     ) {
-      const isVercel = window.location.hostname.includes("vercel.app") || window.location.hostname.includes("github.io") || !window.location.port;
+      const hasBackendServer = window.location.hostname.includes(".run.app") || 
+                               window.location.hostname.includes("localhost") || 
+                               window.location.hostname.includes("127.0.0.1") ||
+                               window.location.hostname.includes("webcontainer-api.io");
+
+      const isVercel = !hasBackendServer && (
+        window.location.hostname.includes("vercel.app") || 
+        window.location.hostname.includes("github.io") || 
+        window.location.hostname.includes("netlify.app")
+      );
       
       let useFallback = isVercel;
       let response: Response | null = null;
@@ -43,7 +52,13 @@ const customFetch = async function (input: RequestInfo | URL, init?: RequestInit
       if (!isVercel) {
         try {
           response = await originalFetch(input, init);
-          if (response.status === 404 || response.status === 502 || response.status === 504) {
+          const contentType = response?.headers?.get("content-type") || "";
+          if (
+            response.status === 404 || 
+            response.status === 502 || 
+            response.status === 504 ||
+            (contentType.includes("text/html") && urlStr.includes("/api/"))
+          ) {
             useFallback = true;
           }
         } catch (e) {

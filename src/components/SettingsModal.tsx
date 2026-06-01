@@ -285,7 +285,11 @@ export const SettingsModal = ({
 
   const tabs = [
     { id: 'general', label: 'Chaves', icon: Key },
+    { id: 'elevenlabs', label: 'ElevenLabs', icon: Volume2 },
+    { id: 'interface', label: 'Interface', icon: Palette },
+    { id: 'profile', label: 'Perfil', icon: UserCircle },
     { id: 'automation', label: 'Automação', icon: Cpu },
+    { id: 'sync', label: 'Sincronia', icon: RefreshCw },
   ];
 
   return (
@@ -322,7 +326,7 @@ export const SettingsModal = ({
             </div>
 
             {/* Tabs Navigation */}
-            <div className="flex px-4 pt-2 bg-white/[0.01]">
+            <div className="grid grid-cols-3 gap-1 p-3 bg-white/[0.01] border-b border-white/[0.05]">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -331,20 +335,14 @@ export const SettingsModal = ({
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as TabId)}
                     className={cn(
-                      "flex-1 flex flex-col items-center gap-1.5 py-4 transition-all relative border-b-2",
+                      "flex flex-col items-center gap-1 py-2 transition-all relative rounded-xl border border-transparent cursor-pointer",
                       isActive 
-                        ? "text-her-accent border-her-accent" 
-                        : "text-her-muted opacity-40 hover:opacity-100 border-transparent"
+                        ? "text-her-accent bg-her-accent/5 border-her-accent/10 font-bold" 
+                        : "text-her-muted opacity-50 hover:opacity-100 hover:bg-white/[0.02]"
                     )}
                   >
-                    <Icon size={18} className={isActive ? "animate-pulse" : ""} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">{tab.label}</span>
-                    {isActive && (
-                      <motion.div 
-                        layoutId="activeTab"
-                        className="absolute inset-0 bg-her-accent/5 -z-10"
-                      />
-                    )}
+                    <Icon size={14} className={isActive ? "animate-pulse mt-0.5" : "mt-0.5"} />
+                    <span className="text-[9px] font-bold uppercase tracking-wider">{tab.label}</span>
                   </button>
                 );
               })}
