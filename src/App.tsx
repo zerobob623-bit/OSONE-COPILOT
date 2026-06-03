@@ -72,7 +72,7 @@ import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
-import { LocalControl } from './components/LocalControl';
+
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
 import { TeacherWhiteboard } from './components/TeacherWhiteboard';
@@ -338,29 +338,9 @@ export default function App() {
     return () => window.removeEventListener('osone_aural_update', handleAuralUpdate);
   }, []);
 
+  // Cleaned up global click behavior to prevent accidental UI hiding
   useEffect(() => {
-    const handleGlobalClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      // Do not toggle UI if user clicks on any standard interactive elements or modal components
-      if (
-        target.closest('button') || 
-        target.closest('input') || 
-        target.closest('textarea') || 
-        target.closest('select') || 
-        target.closest('a') ||
-        target.closest('[role="button"]') ||
-        target.closest('[role="dialog"]') ||
-        target.closest('#sidebar') ||
-        target.closest('.interactive') ||
-        target.closest('.sidebar-container') ||
-        target.closest('.modal-container')
-      ) {
-        return;
-      }
-      setShowUi(prev => !prev);
-    };
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
+    // UI toggle is now controlled strictly via the prominent header UI/Vox button
   }, []);
 
   useEffect(() => {
@@ -926,6 +906,13 @@ export default function App() {
   const [showWhiteboard, setShowWhiteboard] = useState<boolean>(() => {
     return localStorage.getItem('osone_show_whiteboard') !== 'false';
   });
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('osone_subtitles_enabled') !== 'false';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_subtitles_enabled', String(subtitlesEnabled));
+  }, [subtitlesEnabled]);
   const [customSkill, setCustomSkill] = useState<{ name: string; content: string } | null>(() => {
     try {
       const saved = localStorage.getItem('osone_custom_skill');
@@ -4152,6 +4139,7 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
             
             if (extractedBoardText && extractedBoardText.trim()) {
               setWhiteboardText(extractedBoardText.trim());
+              setShowWhiteboard(true);
               addNotification("📝 O Professor atualizou a Lousa da aula!", "success");
             }
             
@@ -5054,6 +5042,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     
                     if (extractedBoardText && extractedBoardText.trim()) {
                       setWhiteboardText(extractedBoardText.trim());
+                      setShowWhiteboard(true);
                       addNotification("📝 O Professor atualizou a Lousa da aula!", "success");
                     }
                     
@@ -6264,6 +6253,46 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             <Headphones size={14} className={isHandsFreeActive ? "animate-pulse" : ""} />
             <span className="hidden sm:inline">{isHandsFreeActive ? "HANDS-FREE ON" : "VOZ PASSIVA"}</span>
           </button>
+
+          {/* TOGGLE LEGENDA SUPERIOR */}
+          <button
+            onClick={() => {
+              setSubtitlesEnabled(!subtitlesEnabled);
+              addNotification(subtitlesEnabled ? "Legendas desativadas." : "Legendas em tempo real ativadas!", "info");
+            }}
+            className={cn(
+              "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1",
+              subtitlesEnabled 
+                ? "bg-sky-500/10 border-sky-500/35 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.25)]" 
+                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+            )}
+            title={subtitlesEnabled ? "Desativar Legendas" : "Ativar Legendas em Tempo Real"}
+          >
+            <MessageSquare size={13} className={subtitlesEnabled ? "scale-110 text-sky-400" : ""} />
+            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
+              {subtitlesEnabled ? "LEG: ON" : "LEG: OFF"}
+            </span>
+          </button>
+
+          {/* MODO VOZ LIVRE (IMERSIVO) TOGGLE */}
+          <button
+            onClick={() => {
+              setShowUi(false);
+              addNotification("Modo Voz Livre ativado! Interface minimizada para foco absoluto.", "info");
+            }}
+            className={cn(
+              "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1",
+              !showUi 
+                ? "bg-purple-500/20 border-purple-500/35 text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.25)]" 
+                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+            )}
+            title="Ativar Modo Imersivo / Voz Livre (Minimizar Toda a Interface)"
+          >
+            <EyeOff size={13} />
+            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
+              VOZ LIVRE
+            </span>
+          </button>
           
           {showInstallButton && (
             <button 
@@ -6276,32 +6305,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             </button>
           )}
 
-          {/* LOUSA VIRTUAL QUICK TOGGLE IF DUO MODE OR CUSTOM SKILL ACTIVE */}
-          {(isDuoMode || customSkill) && (
-            <button
-              onClick={() => {
-                setShowWhiteboard(!showWhiteboard);
-                addNotification(showWhiteboard ? "Lousa escolar ocultada do chat." : "Lousa escolar exibida ao lado do chat!", "success");
-              }}
-              className={cn(
-                "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1",
-                showWhiteboard 
-                  ? "bg-emerald-500/10 border-emerald-500/35 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]" 
-                  : "bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:border-white/20 hover:bg-white/[0.05]"
-              )}
-              title={showWhiteboard ? "Ocultar Lousa do Professor" : "Exibir Lousa do Professor"}
-            >
-              <span className="relative flex h-1.5 w-1.5">
-                {showWhiteboard && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                )}
-                <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", showWhiteboard ? "bg-emerald-400" : "bg-neutral-500")}></span>
-              </span>
-              <span className="hidden sm:inline-block tracking-widest text-[9px] font-bold uppercase">
-                {showWhiteboard ? "LOUSA: ON" : "LOUSA: OFF"}
-              </span>
-            </button>
-          )}
+
 
           {/* MODO DUO (SALA DE PROFESSORES) HEADER ACTIVATOR */}
           <div className="relative">
@@ -6429,29 +6433,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       </div>
                     </div>
 
-                    {/* Lousa Escolar (Whiteboard) Control */}
-                    <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
-                      <div className="flex flex-col text-left">
-                        <span className="text-[11px] text-zinc-300 font-medium select-none">Lousa Escolar Virtual:</span>
-                        <span className="text-[8px] text-zinc-500 select-none">Exibe anotações de aula ao lado do chat</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          const state = !showWhiteboard;
-                          setShowWhiteboard(state);
-                          addNotification(state ? "Lousa escolar ativada!" : "Lousa escolar desativada", "info");
-                        }}
-                        className={cn(
-                          "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
-                          showWhiteboard ? "bg-emerald-500" : "bg-white/10"
-                        )}
-                      >
-                        <span className={cn(
-                          "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
-                          showWhiteboard ? "translate-x-5" : "translate-x-0"
-                        )} />
-                      </button>
-                    </div>
+
 
                     {/* Speak Automatically */}
                     <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
@@ -7437,16 +7419,6 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 }}
               />
             </motion.div>
-          ) : workspaceMode === 'local_control' ? (
-            <motion.div
-              key="workspace-local-control"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full flex-1 flex flex-col min-h-0"
-            >
-              <LocalControl onClose={() => setWorkspaceMode('home')} />
-            </motion.div>
           ) : workspaceMode === 'whatsapp' ? (
             <motion.div
               key="workspace-whatsapp"
@@ -7791,27 +7763,12 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 <div className={cn(
                   "flex-1 transition-all duration-700 w-full min-h-0 pt-12 translate-z-0",
                   (liveState.status === 'connected' || !isChatExpanded || !showUi) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
-                  (isDuoMode || customSkill) && showWhiteboard ? "grid grid-cols-1 lg:grid-cols-12 gap-6 h-full overflow-hidden" : "flex flex-col overflow-hidden h-full"
+                  "flex flex-col overflow-hidden h-full"
                 )}>
-                  {/* Left Column (Chat + Profiles) */}
-                  <div className={cn(
-                    "flex flex-col min-h-0 relative",
-                    (isDuoMode || customSkill) && showWhiteboard ? "lg:col-span-7 h-full" : "flex-1 h-full flex flex-col overflow-hidden"
-                  )}>
+                  {/* Chat Content Panel */}
+                  <div className="flex-1 h-full flex flex-col overflow-hidden relative">
                     {(chatHistory.length > 0 || isDuoMode || customSkill) && (
                       <div className="flex justify-between items-center px-2 md:px-0 mb-3 shrink-0">
-                        {(isDuoMode || customSkill) && (
-                          <button
-                            onClick={() => {
-                              setShowWhiteboard(!showWhiteboard);
-                              addNotification(showWhiteboard ? "Lousa ocultada." : "Lousa ativada ao lado do chat!", "info");
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-full border border-sky-500/20 text-[10px] font-mono tracking-wider uppercase transition-all active:scale-95 cursor-pointer"
-                          >
-                            <BookOpen size={12} className="animate-pulse" />
-                            {showWhiteboard ? "Ocultar Lousa" : "Visualizar Lousa"}
-                          </button>
-                        )}
                         {chatHistory.length > 0 && (
                           <button 
                             onClick={() => {
@@ -7850,15 +7807,15 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                             
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => setShowWhiteboard(!showWhiteboard)}
+                                onClick={() => setSubtitlesEnabled(!subtitlesEnabled)}
                                 className={cn(
                                   "flex items-center gap-1 px-2 py-0.5 rounded text-[8.5px] tracking-wider uppercase border font-mono transition-all duration-300 pointer-events-auto cursor-pointer",
-                                  showWhiteboard 
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" 
+                                  subtitlesEnabled 
+                                    ? "bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/20" 
                                     : "bg-white/5 text-stone-400 border-white/5 hover:bg-white/10"
                                 )}
                               >
-                                🏫 Lousa: {showWhiteboard ? "ON" : "OFF"}
+                                💬 Legendas: {subtitlesEnabled ? "ON" : "OFF"}
                               </button>
                               
                               <span className="text-[10px] uppercase font-mono tracking-tight text-white/50">
@@ -7959,14 +7916,15 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           className={cn(
-                            "group relative text-base md:text-lg font-light leading-relaxed tracking-tight shrink-0 flex flex-col",
-                            msg.role === 'user' 
-                              ? "text-her-accent/50 text-right italic items-end" 
-                              : "text-her-ink/80 text-left items-start"
+                            "group relative shrink-0 flex flex-col mb-4 w-full",
+                            msg.role === 'user' ? "items-end" : "items-start"
                           )}
                         >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="opacity-20 text-[10px] uppercase tracking-[0.2em]">
+                          <div className={cn(
+                            "flex items-center gap-2 mb-1 select-none",
+                            msg.role === 'user' ? "justify-end" : "justify-start"
+                          )}>
+                            <span className="opacity-20 text-[9px] uppercase tracking-[0.2em] font-mono font-bold">
                               {msg.role === 'user' ? 'VOCÊ' : 'OSONE'}
                             </span>
                             
@@ -8078,7 +8036,19 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                 );
                               }
                               
-                              return msg.content;
+                              if (msg.role === 'user') {
+                                return (
+                                  <div className="inline-block max-w-[85%] bg-her-accent/10 border border-her-accent/15 px-4.5 py-2.5 rounded-2xl rounded-tr-none text-zinc-150 text-xs sm:text-sm font-normal tracking-wide text-left shadow-lg backdrop-blur-md">
+                                    {msg.content}
+                                  </div>
+                                );
+                              }
+                              
+                              return (
+                                <div className="inline-block max-w-[85%] bg-white/[0.03] border border-white/5 px-4.5 py-2.5 rounded-2xl rounded-tl-none text-stone-200 text-xs sm:text-sm font-light tracking-wide leading-relaxed text-left shadow-lg backdrop-blur-md whitespace-pre-wrap">
+                                  {msg.content}
+                                </div>
+                              );
                             })()}
                             {msg.imageUrl && (
                               <div className="mt-4 relative group rounded-xl overflow-hidden shadow-sm border border-her-muted/20">
@@ -8123,26 +8093,9 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
 
                       <div ref={chatEndRef} />
                     </div>
-                  </div>
 
-                  {/* Right Column: Teacher Whiteboard (Lousa do Professor) */}
-                  {(isDuoMode || customSkill) && showWhiteboard && (
-                    <motion.div 
-                      key="teacher-whiteboard-wrapper"
-                      initial={{ opacity: 0, scale: 0.98, x: 15 }}
-                      animate={{ opacity: 1, scale: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.98, x: -15 }}
-                      className="lg:col-span-5 h-full flex flex-col justify-center shrink-0 min-h-[380px] lg:min-h-0"
-                    >
-                      <TeacherWhiteboard 
-                        text={whiteboardText}
-                        onChangeText={setWhiteboardText}
-                        isWriting={isSpeaking || isGenerating || isAnalyzingCode}
-                        speakerName={customSkill ? `Estudo: ${customSkill.name}` : (duoSpeakingHost === 'hostA' && isSpeaking ? "Prof. Sean" : (duoSpeakingHost === 'hostB' && isSpeaking ? "Co-Docente" : null))}
-                        onClear={() => setWhiteboardText('')}
-                      />
-                    </motion.div>
-                  )}
+
+                  </div>
                 </div>
 
                 {/* Chat Input Area */}
@@ -8151,8 +8104,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                   !showUi && "opacity-0 pointer-events-none translate-y-4"
                 )}>
                   <div className={cn(
-                    "flex justify-between items-center px-10 mb-0 transition-all duration-300",
-                    !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-20"
+                    "flex justify-between items-center px-4 md:px-6 mb-0 transition-all duration-300",
+                    !isChatExpanded ? "opacity-0 h-0 pointer-events-none mb-0 overflow-hidden" : "opacity-100 h-10 md:h-12"
                   )}>
                     <div className="flex items-center gap-2">
                       <VoiceSwitcher 
@@ -8169,12 +8122,12 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                         <button 
                           onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                           className={cn(
-                            "w-9 h-9 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
+                             "w-7 h-7 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
                             isScreenSharing ? "text-her-accent border-her-accent/20" : "text-her-muted"
                           )}
                           title={isScreenSharing ? "Parar Tela" : "Compartilhar Tela"}
                         >
-                          {isScreenSharing ? <MonitorOff size={14} /> : <Monitor size={14} />}
+                          {isScreenSharing ? <MonitorOff size={11} /> : <Monitor size={11} />}
                         </button>
                       </div>
                   </div>
@@ -8185,14 +8138,14 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                     <button 
                       onClick={handleTranscriptionToggle}
                       className={cn(
-                        "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
+                        "w-9 h-9 rounded-full flex items-center justify-center transition-all duration-500 relative shrink-0",
                         isTranscribing 
                           ? "bg-her-accent/20 text-her-accent border border-her-accent/30 mic-glow" 
                           : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05]"
                       )}
                       title={isTranscribing ? "Parar Transcrição" : "Transcrever Áudio"}
                     >
-                      {isTranscribing ? <MicOff size={16} /> : <Mic size={16} />}
+                      {isTranscribing ? <MicOff size={14} /> : <Mic size={14} />}
                     </button>
                     
                     <div className={cn(
@@ -8215,73 +8168,73 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           {/* Clipe / Enviar documentos para análise */}
                           <button 
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-9 h-9 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Anexar documentos para análise"
                           >
-                            <Paperclip size={16} />
+                            <Paperclip size={14} />
                           </button>
 
                           <button 
                             onClick={() => setIsChatExpanded(true)}
-                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-9 h-9 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Escrever mensagem"
                           >
-                            <MessageSquare size={16} />
+                            <MessageSquare size={14} />
                           </button>
                           
                           <button 
                             onClick={() => setIsPersonaSwitcherOpen(true)}
-                            className="w-10 h-10 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
+                            className="w-9 h-9 rounded-full bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] flex items-center justify-center transition-all hover:text-her-accent"
                             title="Modos de Personalidade"
                           >
-                            <UserIcon size={16} />
+                            <UserIcon size={14} />
                           </button>
 
                           <button 
                             onClick={toggleCamera}
                             className={cn(
-                              "w-10 h-10 rounded-full flex items-center justify-center transition-all border",
+                              "w-9 h-9 rounded-full flex items-center justify-center transition-all border",
                               isCameraActive 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30 shadow-[0_0_15px_rgba(242,125,38,0.2)]" 
                                 : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-her-accent"
                             )}
                             title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
                           >
-                            {isCameraActive ? <Eye size={16} className="animate-pulse" /> : <EyeOff size={16} />}
+                            {isCameraActive ? <Eye size={14} className="animate-pulse" /> : <EyeOff size={14} />}
                           </button>
 
                           <button 
                             onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                             className={cn(
-                              "w-10 h-10 rounded-full flex items-center justify-center transition-all border",
+                              "w-9 h-9 rounded-full flex items-center justify-center transition-all border",
                               isScreenSharing 
                                 ? "bg-her-accent/20 text-her-accent border-her-accent/30" 
                                 : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05]"
                             )}
                             title={isScreenSharing ? "Compartilhar Tela" : "Parar Tela"}
                           >
-                            {isScreenSharing ? <MonitorOff size={16} /> : <Monitor size={16} />}
+                            {isScreenSharing ? <MonitorOff size={14} /> : <Monitor size={14} />}
                           </button>
                         </div>
                       ) : (
                         <motion.div 
                           initial={{ width: 0, opacity: 0 }}
                           animate={{ width: '100%', opacity: 1 }}
-                          className="flex-1 flex flex-col gap-0 bg-white/[0.03] backdrop-blur-md border-t border-white/[0.05] relative w-full"
+                          className="flex-1 flex flex-col gap-0 bg-white/[0.02] backdrop-blur-md border border-white/[0.08] rounded-2xl overflow-hidden relative w-full"
                         >
                           {attachedFiles.length > 0 && (
-                            <div className="flex flex-wrap gap-2 px-10 pt-4 pb-2 bg-black/20">
+                            <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1 bg-black/20">
                               {attachedFiles.map((file, idx) => (
-                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-4 py-2 text-[10px] text-her-muted border border-white/5 shadow-sm">
+                                <div key={idx} className="flex items-center gap-2 bg-white/5 px-3 py-1 text-[10px] text-her-muted border border-white/5 shadow-sm rounded-lg">
                                   <span className="truncate max-w-[150px]">{file.name}</span>
                                   <button onClick={() => removeFile(idx)} className="hover:text-red-400 p-1">
-                                    <X size={12} />
+                                    <X size={11} />
                                   </button>
                                 </div>
                               ))}
                             </div>
                           )}
-                          <div className="flex items-center h-24">
+                          <div className="flex items-center h-12 md:h-13">
                             <input 
                               type="file"
                               ref={fileInputRef}
@@ -8291,9 +8244,10 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                             />
                             <button 
                               onClick={() => fileInputRef.current?.click()}
-                              className="w-20 h-full text-her-muted hover:text-her-accent transition-colors border-r border-white/5 flex items-center justify-center"
+                              className="w-12 h-full text-her-muted hover:text-her-accent transition-colors border-r border-white/5 flex items-center justify-center shrink-0"
+                              title="Anexar arquivos"
                             >
-                              <Paperclip size={20} />
+                              <Paperclip size={16} />
                             </button>
                             <button 
                               onClick={() => {
@@ -8303,17 +8257,17 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                 addNotification(newValue ? "Busca no Google ATIVADA" : "Busca no Google DESATIVADA", "success");
                               }}
                               className={cn(
-                                "w-20 h-full transition-all duration-300 border-r border-white/5 flex flex-col items-center justify-center gap-1.5 relative text-[9px] uppercase font-mono select-none",
+                                "w-14 h-full transition-all duration-300 border-r border-white/5 flex flex-col items-center justify-center gap-0.5 relative text-[8px] uppercase font-mono select-none shrink-0",
                                 isGoogleSearchActive 
-                                  ? "text-sky-400 bg-sky-500/5 hover:bg-sky-500/10" 
-                                  : "text-her-muted hover:text-white hover:bg-white/5"
+                                  ? "text-sky-450 bg-sky-500/5 hover:bg-sky-500/10" 
+                                  : "text-her-muted hover:text-white"
                               )}
                               title={isGoogleSearchActive ? "Busca no Google Ativada (Grounding)" : "Busca no Google Desativada"}
                             >
-                              <Globe size={18} className={cn(isGoogleSearchActive && "animate-pulse")} />
-                              <span className="text-[7.5px] tracking-wider font-extrabold">{isGoogleSearchActive ? "Web ON" : "Web OFF"}</span>
+                              <Globe size={13} className={cn(isGoogleSearchActive && "animate-pulse")} />
+                              <span className="text-[7px] tracking-wider font-bold">{isGoogleSearchActive ? "Web ON" : "Web OFF"}</span>
                               {isGoogleSearchActive && (
-                                <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-sky-400 rounded-full" />
+                                <span className="absolute top-1 right-1 w-1 h-1 bg-sky-400 rounded-full" />
                               )}
                             </button>
                             <input 
@@ -8324,34 +8278,34 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                 if (e.key === 'Enter') handleHomeChat();
                                 if (e.key === 'Escape') setIsChatExpanded(false);
                               }}
-                              placeholder="Diga algo para o OSONE..."
-                              className="flex-1 bg-transparent px-8 focus:outline-none text-base md:text-lg font-light text-her-ink/80 placeholder:text-her-muted/20"
+                              placeholder="Escreva algo para o OSONE..."
+                              className="flex-1 bg-transparent px-4 focus:outline-none text-[13px] md:text-sm font-light text-her-ink/85 placeholder:text-stone-500/50"
                               autoFocus
                             />
-                            <div className="flex items-center h-full">
+                            <div className="flex items-center h-full shrink-0">
                               <button 
                                 onClick={handleTranscriptionToggle}
                                 className={cn(
-                                  "w-20 h-full text-her-muted hover:text-her-accent transition-colors border-l border-white/5 flex items-center justify-center relative",
+                                  "w-12 h-full text-her-muted hover:text-her-accent transition-colors border-l border-white/5 flex items-center justify-center relative",
                                   isTranscribing && "text-her-accent bg-her-accent/5"
                                 )}
                                 title={isTranscribing ? "Parar Gravação" : "Gravar Voz"}
                               >
-                                {isTranscribing ? <MicOff size={20} className="text-her-accent animate-pulse" /> : <Mic size={20} />}
+                                {isTranscribing ? <MicOff size={16} className="text-her-accent animate-pulse" /> : <Mic size={16} />}
                               </button>
                               <button 
                                 onClick={() => handleHomeChat()}
                                 disabled={!homePrompt.trim() && attachedFiles.length === 0}
-                                className="w-24 h-full bg-her-accent/20 text-her-accent hover:bg-her-accent/30 transition-all disabled:opacity-20 disabled:grayscale border-l border-white/5 flex items-center justify-center"
+                                className="w-14 h-full bg-her-accent/15 text-her-accent hover:bg-her-accent/25 transition-all disabled:opacity-20 disabled:grayscale border-l border-white/5 flex items-center justify-center"
                               >
-                                <Send size={22} />
+                                <Send size={15} />
                               </button>
                               <button 
                                 onClick={() => setIsChatExpanded(false)}
-                                className="w-20 h-full text-her-muted hover:text-red-400 transition-colors border-l border-white/5 flex items-center justify-center"
+                                className="w-12 h-full text-her-muted hover:text-red-400 transition-colors border-l border-white/5 flex items-center justify-center"
                                 title="Recolher"
                               >
-                                <X size={20} />
+                                <X size={15} />
                               </button>
                             </div>
                           </div>
@@ -8773,6 +8727,94 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
           })}
         </AnimatePresence>
       </div>
+
+      {/* Pop-up de Legendas Cinematográficas Globais (Estilo Uma Frase por Vez) */}
+      <AnimatePresence>
+        {subtitlesEnabled && voiceTranscript && (
+          <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-2xl pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, y: 15, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 260, damping: 25 }}
+              className="bg-black/95 backdrop-blur-2xl border-2 border-white/15 rounded-2xl px-8 py-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] flex flex-col gap-1.5 text-center relative overflow-hidden"
+            >
+              {/* Dynamic decorative cinematic bars */}
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-500 to-her-accent" />
+              <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-b from-her-accent to-sky-500" />
+              
+              <span className="text-[9px] uppercase font-mono tracking-[0.25em] text-sky-400 font-extrabold flex items-center justify-center gap-1.5 opacity-90">
+                <span className="inline-block w-2 h-2 rounded-full bg-sky-500 animate-ping" />
+                {customSkill ? `${customSkill.name.toUpperCase()} • DIÁLOGO` : "COGNITIVE SUBTITLES"}
+              </span>
+              
+              <p className="text-sm md:text-base font-sans font-black text-[#fef9c3] tracking-wide leading-relaxed drop-shadow-[0_3px_5px_rgba(0,0,0,0.95)]">
+                "{voiceTranscript.split('. ').slice(-1)[0]}"
+              </p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Botão de Restauração para Interface quando em Modo Imersivo (Voz Livre) */}
+      <AnimatePresence>
+        {!showUi && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 right-4 z-[9999] pointer-events-auto"
+          >
+            <button
+              onClick={() => {
+                setShowUi(true);
+                addNotification("Interface restaurada!", "success");
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#fef9c3] hover:bg-[#fef08a] text-zinc-950 rounded-full font-mono text-[9px] font-black uppercase tracking-widest shadow-[0_4px_30px_rgba(254,249,195,0.45)] hover:scale-105 active:scale-95 transition-all cursor-pointer border border-[#fef08a]"
+            >
+              <Eye className="w-3.5 h-3.5 animate-pulse" />
+              <span>Mostrar Controles</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Pop-up de Lousa Escolar Virtual com Botão de Fechar X */}
+      <AnimatePresence>
+        {showWhiteboard && (isDuoMode || customSkill) && (
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", stiffness: 300, damping: 28 }}
+              className="relative w-full max-w-4xl h-[85vh] max-h-[650px] flex flex-col pointer-events-auto"
+            >
+              {/* Botão de Fechar X no Canto Superior Direito */}
+              <button
+                onClick={() => {
+                  setShowWhiteboard(false);
+                  addNotification("Lousa fechada. Você pode reabrir quando houver novas atualizações do professor.", "info");
+                }}
+                className="absolute -top-3 -right-3 z-[110] w-9 h-9 bg-red-600 hover:bg-red-500 active:scale-95 text-white rounded-full flex items-center justify-center shadow-lg transition-all hover:rotate-90 cursor-pointer border-2 border-white/20 animate-in fade-in zoom-in-50 duration-200"
+                title="Fechar Lousa"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="w-full h-full rounded-2xl overflow-hidden shadow-2xl">
+                <TeacherWhiteboard 
+                  text={whiteboardText}
+                  onChangeText={setWhiteboardText}
+                  isWriting={isSpeaking || isGenerating || isAnalyzingCode}
+                  speakerName={customSkill ? `Estudo: ${customSkill.name}` : (duoSpeakingHost === 'hostA' && isSpeaking ? "Prof. Sean" : (duoSpeakingHost === 'hostB' && isSpeaking ? "Co-Docente" : null))}
+                  onClear={() => setWhiteboardText('')}
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Modals & Overlays */}
       {/* Notifications Layer */}

@@ -118,16 +118,7 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                   <Sliders size={18} />
                   <span>Ajustes & Perfil</span>
                 </button>
-                <button 
-                  onClick={() => { setMode('local_control'); onClose(); }}
-                  className={cn(
-                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
-                    mode === 'local_control' ? "bg-her-accent/10 text-her-accent border border-her-accent/20" : "hover:bg-white/[0.02] text-her-ink/60"
-                  )}
-                >
-                  <Cpu size={18} />
-                  <span>Computador Local</span>
-                </button>
+
                 <button 
                   onClick={() => { setMode('whatsapp'); onClose(); }}
                   className={cn(
