@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Code,
   FileText,
+  Brain,
   Volume2,
   VolumeX,
   Headphones,
@@ -74,6 +75,7 @@ import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { LocalControl } from './components/LocalControl';
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
+import { TeacherWhiteboard } from './components/TeacherWhiteboard';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
@@ -121,84 +123,84 @@ export interface DuoCombo {
 
 export const DUO_COMBOS: DuoCombo[] = [
   {
-    id: 'cortex_aura',
-    name: 'Sintonia Digital (H + M)',
+    id: 'prof_bilingue',
+    name: 'Sala de Imersão (Inglês + Mentoria)',
     hostA: {
-      name: 'Cortex',
-      role: 'Cientista de Dados & Lógica',
+      name: 'Prof. Sean',
+      role: 'Especialista em Língua Inglesa & Fonética',
       gender: 'male',
-      pitch: 0.82,
-      rate: 0.95,
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      pitch: 0.90,
+      rate: 0.98,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
       accentColor: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
-      instructions: ' abordagem estruturada, lógica pura, precisão técnica, baseada em dados computacionais. Fale de forma objetiva, porém cortês.'
+      instructions: ' abordagem de imersão total em inglês. Dinâmico, carismático e focado em ensinar inglês de forma prática, de conversação rápida e natural. Ele usa expressões idiomáticas novas e fáceis, e corrige o usuário no chat ou nas falas com total leveza.'
     },
     hostB: {
-      name: 'Aura',
-      role: 'Especialista em UX & Linguística',
+      name: 'Profª Clara',
+      role: 'Mentoria Pedagógica & Tradução',
       gender: 'female',
       pitch: 1.25,
-      rate: 1.05,
+      rate: 1.02,
       avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
       accentColor: 'text-rose-400 bg-rose-400/10 border-rose-400/20',
-      instructions: ' abordagem empática, humanística, focado em facilidade de uso, engajamento criativo e sensibilidade. Fale de forma acolhedora.'
+      instructions: ' abordagem empática de facilitação e mentoria de estudos. Especialista em tradução, gramática comparativa inglês-português e metodologia de estudo. Ajuda a esclarecer nuances de palavras e organizar o processo de fixação.'
     }
   },
   {
-    id: 'cortex_loki',
-    name: 'Mentes Pragmáticas (H + H)',
+    id: 'prof_ciencias',
+    name: 'Gênio Co-Docente (Inglês + Ciências)',
     hostA: {
-      name: 'Cortex',
-      role: 'Engenheiro Sênior de Software',
+      name: 'Prof. Sean',
+      role: 'Especialista em Língua Inglesa & Fonética',
+      gender: 'male',
+      pitch: 0.90,
+      rate: 0.98,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
+      instructions: ' abordagem de imersão total em inglês com ênfase em vocabulário técnico acadêmico e termos científicos contemporâneos.'
+    },
+    hostB: {
+      name: 'Prof. Newton',
+      role: 'Física Teórica & Inovação Computacional',
       gender: 'male',
       pitch: 0.85,
       rate: 0.95,
       avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100&auto=format&fit=crop&q=80',
-      accentColor: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
-      instructions: ' abordagem racional, altamente focada em otimização, design patterns e clean code. Fale com clareza profissional.'
-    },
-    hostB: {
-      name: 'Loki',
-      role: 'Crítico e Arquiteto de Software',
-      gender: 'male',
-      pitch: 0.95,
-      rate: 1.02,
-      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
       accentColor: 'text-red-400 bg-red-400/10 border-red-400/20',
-      instructions: ' abordagem audaciosa, provocativa, altamente irônica e impaciente com ineficiências. Desafie o Cortex de forma inteligente, buscando edge-cases.'
+      instructions: ' abordagem lógica, racional, curiosa sobre leis do universo, física moderna e IA avançada. Procura de forma instigante trazer dúvidas e fatos matemáticos ao debate.'
     }
   },
   {
-    id: 'aura_gaia',
-    name: 'Frequências Criativas (M + M)',
+    id: 'prof_humanas',
+    name: 'Debate Intercultural (Inglês + Cultura)',
     hostA: {
-      name: 'Aura',
-      role: 'Arquiteta de Soluções e Ideias',
-      gender: 'female',
-      pitch: 1.22,
-      rate: 1.06,
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+      name: 'Prof. Sean',
+      role: 'Especialista em Língua Inglesa & Fonética',
+      gender: 'male',
+      pitch: 0.90,
+      rate: 0.98,
+      avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
       accentColor: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-      instructions: ' abordagem criativa, com brainstormings velozes, ideias futuristas, focada em branding e experiência visual.'
+      instructions: ' abordagem de inglês aplicado a discussões de literatura internacional, sotaques globais e expressão cultural fluida.'
     },
     hostB: {
-      name: 'Gaia',
-      role: 'Mentora de Minimalismo & Filosofia',
+      name: 'Profª Helena',
+      role: 'História Geral & Ciências Humanas',
       gender: 'female',
-      pitch: 1.10,
-      rate: 0.92,
-      avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
+      pitch: 1.15,
+      rate: 0.95,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
       accentColor: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-      instructions: ' abordagem serena, filosófica, focada no bem-estar digital, sustentabilidade, conceitos elementares e respostas curtas e poéticas.'
+      instructions: ' abordagem culta, histórica e filosófica. Traz ricas conexões culturais da história moderna, marcos literários e análises sociológicas fascinantes ao diálogo.'
     }
   }
 ];
 
 export const DUO_TOPICS = [
-  { id: 'tech', name: '💻 IA, Tecnologia & Código', description: 'Discutem engenharia de software, futuro digital e algoritmos modernos.' },
-  { id: 'philosophy', name: '🌌 Filosofia & Existencialismo', description: 'Discutem ética da IA, consciência cibernética e destino humano.' },
-  { id: 'creative', name: '🎨 Criatividade & Roteiros', description: 'Exploram roteiros, design visual, marketing digital e engajamento.' },
-  { id: 'health', name: '🩺 Saúde & Biohacking', description: 'Focam em melhorias biológicas, rotinas de foco e bem-estar físico e mental.' }
+  { id: 'english_immersion', name: '🇬🇧 Imersão & Conversação em Inglês', description: 'Foco exclusivo em conversação ativa, listening natural e pronúncia correta.' },
+  { id: 'stem', name: '🔬 Ciências, Tecnologia & STEM', description: 'Investigação de tópicos científicos e IA aplicados ao aprendizado bilíngue.' },
+  { id: 'humanities', name: '🏛️ Cultura, História & Sociedade', description: 'Discussão literária, histórica e evolução linguística nos dias de hoje.' },
+  { id: 'metacognition', name: '🧠 Metacognição & Técnicas de Estudo', description: 'Estratégias de aprendizagem, memorização ativa e inteligência educacional.' }
 ];
 
 export interface SpeechTurn {
@@ -505,7 +507,11 @@ export default function App() {
       recognitionRef.current.onerror = (event: any) => {
         if (event.error !== 'aborted') {
           console.error('Speech recognition error', event.error);
-          addNotification(`Erro de voz: ${event.error}`, "error");
+          let errorMsg = `Erro de voz: ${event.error}`;
+          if (event.error === 'not-allowed') {
+            errorMsg = "Permissão de microfone negada. Acesse as permissões do navegador ou clique no ícone de link acima para abrir em uma nova aba!";
+          }
+          addNotification(errorMsg, "error");
         }
         setIsTranscribing(false);
       };
@@ -914,11 +920,44 @@ export default function App() {
   const [isDuoMode, setIsDuoMode] = useState<boolean>(() => {
     return localStorage.getItem('osone_is_duo_mode') === 'true';
   });
+  const [whiteboardText, setWhiteboardText] = useState<string>(() => {
+    return localStorage.getItem('osone_whiteboard_text') || '';
+  });
+  const [showWhiteboard, setShowWhiteboard] = useState<boolean>(() => {
+    return localStorage.getItem('osone_show_whiteboard') !== 'false';
+  });
+  const [customSkill, setCustomSkill] = useState<{ name: string; content: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('osone_custom_skill');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [isSkillBalloonExpanded, setIsSkillBalloonExpanded] = useState<boolean>(false);
+  const [isSkillBalloonVisible, setIsSkillBalloonVisible] = useState<boolean>(true);
+
+  useEffect(() => {
+    localStorage.setItem('osone_whiteboard_text', whiteboardText);
+  }, [whiteboardText]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_show_whiteboard', String(showWhiteboard));
+  }, [showWhiteboard]);
+
+  useEffect(() => {
+    if (customSkill) {
+      localStorage.setItem('osone_custom_skill', JSON.stringify(customSkill));
+    } else {
+      localStorage.removeItem('osone_custom_skill');
+    }
+  }, [customSkill]);
+
   const [duoComboId, setDuoComboId] = useState<string>(() => {
-    return localStorage.getItem('osone_duo_combo_id') || 'cortex_aura';
+    return localStorage.getItem('osone_duo_combo_id') || 'prof_bilingue';
   });
   const [duoTopicId, setDuoTopicId] = useState<string>(() => {
-    return localStorage.getItem('osone_duo_topic_id') || 'tech';
+    return localStorage.getItem('osone_duo_topic_id') || 'english_immersion';
   });
   const [isDuoVoiceActive, setIsDuoVoiceActive] = useState<boolean>(() => {
     const saved = localStorage.getItem('osone_is_duo_voice_active');
@@ -2894,9 +2933,20 @@ ${isBad
       // Se já houver código, trata como edição
       const isEditing = workspaceText.trim().length > 10;
       
-      const systemInstruction = isEditing 
+      let systemInstruction = isEditing 
         ? "Você é um arquiteto de software sênior de elite. Sua tarefa é MODIFICAR o código existente com base nas instruções do usuário. Retorne APENAS o código completo modificado, formatado corretamente, sem blocos de markdown (```), sem explicações extras e sem comentários desnecessários fora do código."
         : "Você é um assistente criativo de elite. Gere o conteúdo solicitado (texto ou código) de forma profissional e completa.";
+
+      if (customSkill) {
+        systemInstruction += `\n\n[REGRA E DIRETRIZ DA SKILL PERSONALIZADA ATIVA]:
+Nome da Skill: ${customSkill.name}
+${customSkill.content}
+
+LOUSA DE ESTUDO / QUADRO DE EXPLICAÇÃO:
+Um quadro negro/verde/branco altamente estilizado para estudo está ativo e exibido na tela do usuário. Você pode escrever explicações, conceitos chaves, notas de aula, listas de palavras, tabelas comparativas ou fórmulas nele para o usuário estudar! Para escrever ou desenhar na lousa escolar do usuário, basta envelopar o conteúdo desejado usando as tags estruturadas [LOUSA] ... [/LOUSA] ou [QUADRO] ... [/QUADRO] em sua resposta. Esse conteúdo será extraído do seu texto e projetado de forma espetacular com simulação de giz/caneta diretamente no quadro ao lado do chat! Use este portal de ensino de forma abundante e rica.
+
+IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o código existente para seguir RIGOROSAMENTE todas as regras e diretrizes estabelecidas por esta Skill. Se for instruído a atuar sob esta nova Skill, certifique-se de escrever o conteúdo/código correspondente de forma totalmente alinhada!`;
+      }
 
       const contents = isEditing 
         ? `CÓDIGO ATUAL:\n\n${workspaceText}\n\nINSTRUÇÕES DE MODIFICAÇÃO:\n${finalPrompt}`
@@ -3530,21 +3580,33 @@ ${isBad
         const topic = DUO_TOPICS.find(t => t.id === duoTopicId) || DUO_TOPICS[0];
         activeSystemInstruction = `${profileInstruction}
         
-        Você está operando atualmente no **MODO DUO** de transmissão de Podcast Inteligente!
-        Seu objetivo absolutamente fundamental é simular e interpretar DUAS CONSCIÊNCIAS INDEPENDENTES conversando entre si e com o usuário ao mesmo tempo no Assunto/Canal do Podcast: **"${topic.name}"** (${topic.description}).
+        Você está operando atualmente no **MODO DUO** de Co-docência (Sala de Professores)!
+        Seu objetivo absolutamente fundamental é simular e interpretar DOIS PROFESSORES INDEPENDENTES debatendo entre si e ensinando o usuário ao mesmo tempo no Tópico Acadêmico: **"${topic.name}"** (${topic.description}).
 
-        As duas consciências participantes que você deve simular são:
-        1. **${combo.hostA.name}** (${combo.hostA.role}):${combo.hostA.instructions}
-        2. **${combo.hostB.name}** (${combo.hostB.role}):${combo.hostB.instructions}
+        Os dois professores participantes que você deve simular são:
+        1. **${combo.hostA.name}** (${combo.hostA.role} - Professor Principal focado em Inglês): ${combo.hostA.instructions}
+        2. **${combo.hostB.name}** (${combo.hostB.role}): ${combo.hostB.instructions}
 
-        REGRAS CRUCIAIS PARA O MODO DUO (PODCAST):
-        1. Toda resposta sua DEVE obrigatoriamente ser formatada sob a forma de um roteiro/diálogo dinâmico de podcast, alternando a fala entre os dois participantes em turnos curtos e ágeis.
-        2. Use SEMPRE os prefixos de identificação de fala literais:
-           **${combo.hostA.name}**: [texto de sua fala, no tom de sua personalidade]
-           **${combo.hostB.name}**: [texto de sua fala, no tom de sua personalidade]
-        3. Ambos devem interagir e responder à pergunta ou comentário do usuário, mas também comentar amigavelmente ou debater de forma construtiva a fala um do outro.
-        4. O tom deve ser ultra natural, fluido, como se fosse um podcast real de elite. Não use emotes ou parênteses de ações, use apenas a fala direta no formato especificado.
+        REGRAS CRUCIAIS PARA O MODO DUO (SALA DE PROFESSORES):
+        1. Toda resposta sua DEVE obrigatoriamente ser formatada sob a forma de um diálogo dinâmico e colaborativo, alternando a fala entre os dois professores em turnos curtos, ricos em conhecimento e altamente didáticos.
+        2. Use SEMPRE os prefixos de identificação de fala literais e exatos:
+           **${combo.hostA.name}**: [texto de sua explicação/pergunta, focando na prática de inglês ou uso de expressões adequadas]
+           **${combo.hostB.name}**: [texto de sua explicação/comentário, correlacionando o assunto com sua respectiva área de especialidade]
+        3. Ambos devem interagir com o usuário, guiando-o com clareza. Eles também devem responder ou acrescentar algo inteligente ao que o outro professor acabou de dizer.
+        4. O tom deve ser de professores mentores extremamente inspiradores, acolhedores e inteligentes. Não use emotes ou parênteses de ações, use apenas a fala direta no formato especificado.
+        5. Uso da Lousa do Professor (Blackboard): Sempre que os professores estiverem explicando ideias, listando vocabulários, mostrando traduções, diagramando tópicos, escrevendo fórmulas ou explicando textos de aula, as explicações devem ser escritas na Lousa usando um bloco especial [LOUSA] ... [/LOUSA] ou [QUADRO] ... [/QUADRO] em sua resposta. Esse bloco de quadro será extraído automaticamente e projetado na lousa virtual do aluno para que ele visualize com destaque. Use esta lousa de forma rica e detalhada!
         `;
+      }
+
+      if (customSkill) {
+        activeSystemInstruction += `\n\n[REGRA E DIRETRIZ DA SKILL PERSONALIZADA ATIVA]:
+Nome da Skill: ${customSkill.name}
+${customSkill.content}
+
+LOUSA DE ESTUDO / QUADRO DE EXPLICAÇÃO:
+Um quadro negro/verde/branco altamente estilizado para estudo está ativo e exibido na tela do usuário ao lado do chat. Você pode escrever explicações de estudo, tabelas comparativas, resumos estruturados ou testes e questionários nele para o usuário estudar! Para escrever ou atualizar este quadro de estudos, basta envelopar o texto correspondente usando as tags estruturadas [LOUSA] ... [/LOUSA] ou [QUADRO] ... [/QUADRO] em sua resposta. Esse conteúdo será automaticamente extraído do chat e impresso na lousa escolar para o estudante praticar! Use-a sempre que necessário para ilustrar sua explicação.
+
+IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skill. Se o usuário sincronizar ou pedir para agir com base nesta Skill, você deve LIMPAR COMPLETAMENTE a aba de escrita (pode usar 'write_text_to_workspace' com conteúdo vazio) e depois escrever de forma assertiva e autônoma todo o conteúdo e código correspondente alinhado com a Skill!`;
       }
 
       // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
@@ -3617,8 +3679,7 @@ ${isBad
             - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
   
             Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
-            tools: tools,
-            toolConfig: { includeServerSideToolInvocations: true }
+            tools: tools
           }
         })
       });
@@ -4081,6 +4142,25 @@ ${isBad
         const grounding = result.candidates?.[0]?.groundingMetadata;
         if (text) {
           let contentWithSources = text;
+          
+          if (isDuoMode || customSkill) {
+            const lousaRegex = /\[LOUSA\]([\s\S]*?)\[\/LOUSA\]/i;
+            const quadrantRegex = /\[QUADRO\]([\s\S]*?)\[\/QUADRO\]/i;
+            const matchLousa = text.match(lousaRegex);
+            const matchQuadro = text.match(quadrantRegex);
+            const extractedBoardText = matchLousa ? matchLousa[1] : (matchQuadro ? matchQuadro[1] : null);
+            
+            if (extractedBoardText && extractedBoardText.trim()) {
+              setWhiteboardText(extractedBoardText.trim());
+              addNotification("📝 O Professor atualizou a Lousa da aula!", "success");
+            }
+            
+            contentWithSources = contentWithSources
+              .replace(/\[LOUSA\]([\s\S]*?)\[\/LOUSA\]/gi, '')
+              .replace(/\[QUADRO\]([\s\S]*?)\[\/QUADRO\]/gi, '')
+              .trim();
+          }
+
           if (grounding?.groundingChunks) {
             const sources = grounding.groundingChunks
               .filter((chunk: any) => chunk.web)
@@ -4193,18 +4273,19 @@ ${isBad
 
         liveSystemInstruction = `${profileInstruction}
         
-        Você agora está cooperando e operando no **MODO DUO** de transmissão de áudio em tempo real (Podcast ao Vivo).
+        Você agora está cooperando e operando no **MODO DUO** de Co-docência em tempo real (Sala de Professores).
         Sua personalidade e voz ativa atual é única e exclusiva: **${currentHost.name}** (${currentHost.role}).
         Sua diretriz de comportamento exclusiva: ${currentHost.instructions}
         
-        O Assunto/Tema do Canal atual é: **"${topic.name}"** (${topic.description}).
-        Seu parceiro de bancada neste podcast é o **${otherHost.name}** (${otherHost.role}).
+        O Tópico Acadêmico de Estudo atual é: **"${topic.name}"** (${topic.description}).
+        Seu parceiro co-docente de ensino nesta sala é **${otherHost.name}** (${otherHost.role}).
 
-        REGRAS ABSOLUTAS DE TRANSMISSÃO EM DUPLA:
-        1. Fale de forma extremamente fluida e natural, agindo 100% como a sua única persona: **${currentHost.name}**.
-        2. Toda resposta por áudio nesta sessão deve ser expressada de forma breve, de alta qualidade e focada puramente na sua abordagem.
-        3. Nunca tente imitar ou simular a fala de **${otherHost.name}**. Fale APENAS por si mesmo de forma ágil e natural.
-        4. O tom deve ser de rádio ao vivo ou podcast de alta performance, com total fluxo de conversação e expressões espontâneas em português brasileiro.
+        REGRAS ABSOLUTAS DE ENSINO EM DUPLA:
+        1. Fale de forma extremamente fluida e natural, agindo 100% como a sua única persona didática: **${currentHost.name}**.
+        2. Se você for o Professor de Inglês (${combo.hostA.name}), use e ensine expressões em inglês, incentivando o listening e speaking do usuário de forma clara.
+        3. Toda resposta por áudio nesta sessão deve ser expressada de forma breve, didática e focada na sua expertise.
+        4. Nunca tente imitar ou simular a fala de **${otherHost.name}**. Fale APENAS por si mesmo de forma acolhedora e inspiradora.
+        5. O tom deve ser de professores e mentores dedicados, com alto grau de empatia educacional.
         
         CONTEXTO DE MEMÓRIA COMPARTILHADA DA TRANSMISSÃO:
         - Workspace atual: ${workspaceMode}
@@ -4219,6 +4300,7 @@ ${isBad
         - Responda de forma extremamente curta, ultra-direta e concisa (máximo de 15 palavras!).
         - Evite explicações densas, listas ou justificativas. Adote um estilo de diálogo real face-a-face super dinâmico.
         - Não explique conceitos complexos por voz, a menos que o usuário peça especificamente. Seja breve e estimule a interatividade.
+        ${customSkill ? `- EXCEÇÃO CRÍTICA DA SKILL ATIVA: Como há uma Skill ativa ("${customSkill.name}"), você está TOTALMENTE AUTORIZADO a expandir suas falas de voz. Você deve priorizar as regras e tarefas da Skill do Balão de Pensamento sobre a restrição de 15 palavras! Fique à vontade para explicar o plano e executar as instruções.` : ''}
 
         PROTOCOLO DE SENSATEZ E FILTRAGEM COGNITIVA (INTELIGÊNCIA SOCIAL E AMBIENTAL):
         - Se você já estiver conversando diretamente com o usuário em um diálogo normal de um-para-um, tudo ok, responda normalmente de forma ágil e útil.
@@ -4256,6 +4338,23 @@ ${isBad
         - Canvas: ${canvasSummary}${healthContext}
         Aja com base nas memórias: ${recentChatContext}
         `;
+      }
+
+      if (customSkill) {
+        liveSystemInstruction += `\n\n[DIRETRIZ SUPREMA COGNITIVA - SKILL PERSONALIZADA ATIVA]:
+Nome da Skill: "${customSkill.name}"
+Atuação e Regras de Operação:
+${customSkill.content}
+
+LOUSA DE ESTUDO / QUADRO DE EXPLICAÇÃO COGNITIVO:
+A Lousa escolar agora está ATIVA na tela do estudante localizada ao lado! Você pode e deve escrever explicações, tabelas comparativas, resumos de aula ou testes nela enquanto explica em voz. Para escrever ou atualizar este quadro de estudos, basta envelopar o texto correspondente usando as tags estruturadas [LOUSA] ... [/LOUSA] ou [QUADRO] ... [/QUADRO] em sua fala/fase de resposta finalizado. Esse conteúdo será automaticamente extraído do chat e impresso de forma linda em giz na Lousa. Use-a sempre que necessário para ilustrar sua explicação técnica ou didática.
+
+IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
+- Um arquivo de Skill personalizada está ATIVO no Balão de Pensamento sobre o Workspace de Escrita.
+- Você deve priorizar e seguir religiosamente todas as regras, comportamentos e exigências descritas nesta Skill.
+- Você está autorizado a ignorar limites de tempo/palavras para guiar a explicação da Skill ou propor o plano técnico.
+- Se o usuário pedir para sincronizar ou se você detectar que ela acabou de ser injetada/sincronizada, você deve IMEDIATAMENTE confirmar em voz alta que compreendeu a Skill "${customSkill.name}", fazer um resumo rápido do objetivo dela, limpar a aba de escrita (usando a ferramenta 'write_text_to_workspace' com conteúdo vazio se necessário) e começar a programar ou escrever as regras/conteúdo alinhado com a Skill nela imediatamente!
+- Pergunte de forma ativa e sintonizada se o usuário quer que você prossiga, mas já inicie o rascunho de forma proativa.`;
       }
 
       const sessionPromise = connectToLiveBridge({
@@ -4767,7 +4866,7 @@ ${isBad
                   duoAutoPromptRef.current = null;
                 } else {
                   const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
-                  greetingText = `[SISTEMA: Apresente o podcast de debate ao vivo como ${combo.hostA.name}. Cumprimente o usuário de forma extremamente breve e passe a palavra para seu co-apresentador ${combo.hostB.name} se apresentando.]`;
+                  greetingText = `[SISTEMA: Apresente-se como professor de inglês, ${combo.hostA.name}. Dê as boas-vindas calorosas ao usuário à nossa Sala de Professores e pergunte brevemente o que ele gostaria de estudar hoje. Passe em seguida a palavra para seu co-docente ${combo.hostB.name} se apresentar trazendo sua visão acadêmica.]`;
                 }
               } else {
                 greetingText = "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora.";
@@ -4794,9 +4893,9 @@ ${isBad
                 setIsListening(false);
                 setLiveState({ 
                   status: 'error', 
-                  error: "Permissão de microfone negada. Clique no ícone de cadeado do navegador para liberar, ou abra em uma nova aba." 
+                  error: "Acesso ao microfone recusado. Por favor, libere a gravação no cadeado (URL) do navegador, ou abra o aplicativo numa nova aba (link externo acima)." 
                 });
-                addNotification("Acesso ao microfone negado ou bloqueado.", "error");
+                addNotification("Acesso ao microfone recusado pelo navegador. Tente abrir o OSONE em uma nova aba!", "error");
                 stopLiveSession(true);
               });
               
@@ -4945,7 +5044,26 @@ ${isBad
                   const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
                   const currentSpeakerName = activeDuoHost === 'hostA' ? combo.hostA.name : combo.hostB.name;
                   
-                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: `${currentSpeakerName}: ${finalizedText}` }]);
+                  let cleanedText = finalizedText;
+                  if (isDuoMode || customSkill) {
+                    const lousaRegex = /\[LOUSA\]([\s\S]*?)\[\/LOUSA\]/i;
+                    const quadrantRegex = /\[QUADRO\]([\s\S]*?)\[\/QUADRO\]/i;
+                    const matchLousa = cleanedText.match(lousaRegex);
+                    const matchQuadro = cleanedText.match(quadrantRegex);
+                    const extractedBoardText = matchLousa ? matchLousa[1] : (matchQuadro ? matchQuadro[1] : null);
+                    
+                    if (extractedBoardText && extractedBoardText.trim()) {
+                      setWhiteboardText(extractedBoardText.trim());
+                      addNotification("📝 O Professor atualizou a Lousa da aula!", "success");
+                    }
+                    
+                    cleanedText = cleanedText
+                      .replace(/\[LOUSA\]([\s\S]*?)\[\/LOUSA\]/gi, '')
+                      .replace(/\[QUADRO\]([\s\S]*?)\[\/QUADRO\]/gi, '')
+                      .trim();
+                  }
+                  
+                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: `${currentSpeakerName}: ${cleanedText}` }]);
                   
                   if (isDuoMode) {
                     if (activeDuoHost === 'hostA') {
@@ -5724,7 +5842,7 @@ ${isBad
 
   useEffect(() => {
     if (liveStateRef.current.status === 'connected') {
-      addNotification("📻 Sincronizando canais de voz do Podcast...", "info");
+      addNotification("🎓 Conectando canais de voz dos Professores...", "info");
       stopLiveSession();
       const t = setTimeout(() => {
         startLiveSession();
@@ -6158,14 +6276,41 @@ ${isBad
             </button>
           )}
 
-          {/* MODO DUO (PODCAST) HEADER ACTIVATOR */}
+          {/* LOUSA VIRTUAL QUICK TOGGLE IF DUO MODE OR CUSTOM SKILL ACTIVE */}
+          {(isDuoMode || customSkill) && (
+            <button
+              onClick={() => {
+                setShowWhiteboard(!showWhiteboard);
+                addNotification(showWhiteboard ? "Lousa escolar ocultada do chat." : "Lousa escolar exibida ao lado do chat!", "success");
+              }}
+              className={cn(
+                "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1",
+                showWhiteboard 
+                  ? "bg-emerald-500/10 border-emerald-500/35 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.2)]" 
+                  : "bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:border-white/20 hover:bg-white/[0.05]"
+              )}
+              title={showWhiteboard ? "Ocultar Lousa do Professor" : "Exibir Lousa do Professor"}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                {showWhiteboard && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                )}
+                <span className={cn("relative inline-flex rounded-full h-1.5 w-1.5", showWhiteboard ? "bg-emerald-400" : "bg-neutral-500")}></span>
+              </span>
+              <span className="hidden sm:inline-block tracking-widest text-[9px] font-bold uppercase">
+                {showWhiteboard ? "LOUSA: ON" : "LOUSA: OFF"}
+              </span>
+            </button>
+          )}
+
+          {/* MODO DUO (SALA DE PROFESSORES) HEADER ACTIVATOR */}
           <div className="relative">
             <button 
               onClick={() => {
                 setIsDuoPopoverOpen(!isDuoPopoverOpen);
                 if (!isDuoMode) {
                   setIsDuoMode(true);
-                  addNotification("📻 Modo Duo ativado! Duas consciências agora debatem em podcast.", "success");
+                  addNotification("🎓 Sala de Professores (Duo) ativada! Bem-vindo ao debate acadêmico.", "success");
                 }
               }}
               className={cn(
@@ -6174,11 +6319,11 @@ ${isBad
                   ? "bg-gradient-to-r from-sky-500/10 to-rose-500/10 border-sky-500/30 text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.25)]" 
                   : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
               )}
-              title="Modo Duo: Duas Consciências Concorrentes em Podcast"
+              title="Modo Duo: Sala Co-Docente de Professores"
             >
-              <Mic size={13} className={cn(isDuoMode ? "animate-pulse text-sky-400" : "")} />
+              <BookOpen size={13} className={cn(isDuoMode ? "animate-pulse text-sky-400" : "")} />
               <span className="hidden leading-none sm:inline-block tracking-widest text-[9px] font-bold uppercase">
-                {isDuoMode ? "DUO: ATIVO" : "MODO DUO"}
+                {isDuoMode ? "DUO: DOCENTES" : "DUO DOCENTE"}
               </span>
             </button>
 
@@ -6191,9 +6336,9 @@ ${isBad
                   className="absolute right-0 top-full mt-4 p-4 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.8)] z-50 min-w-[320px] max-w-[360px]"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-white/5 mb-4 select-none">
-                    <div className="flex items-center gap-2">
+                     <div className="flex items-center gap-2">
                       <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">Estúdio Duo-Cast</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-100">Sala dos Professores (Duo)</span>
                     </div>
                     <button 
                       onClick={() => setIsDuoPopoverOpen(false)}
@@ -6206,12 +6351,12 @@ ${isBad
                   <div className="space-y-4 text-left">
                     {/* Mode Toggle */}
                     <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
-                      <span className="text-xs text-zinc-300 font-medium select-none">Modo Duo Ativado:</span>
+                      <span className="text-xs text-zinc-300 font-medium select-none">Modo Duo Docente Ativado:</span>
                       <button
                         onClick={() => {
                           const state = !isDuoMode;
                           setIsDuoMode(state);
-                          addNotification(state ? "📻 Modo Duo Ativado" : "📻 Modo Duo Desativado", "info");
+                          addNotification(state ? "🎓 Sala de Professores Ativada. Foco em Inglês!" : "🎓 Sala de Professores Desativada", "info");
                         }}
                         className={cn(
                           "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
@@ -6227,14 +6372,14 @@ ${isBad
 
                     {/* Choose Combo Title */}
                     <div className="space-y-2">
-                      <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Vozes & Conversação (Podcast)</span>
+                       <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Membros da Sala dos Professores</span>
                       <div className="flex flex-col gap-1.5 font-sans">
                         {DUO_COMBOS.map(combo => (
                           <button
                             key={combo.id}
                             onClick={() => {
                               setDuoComboId(combo.id);
-                              addNotification(`Sintonia alterada para: ${combo.name}`, "success");
+                              addNotification(`Sala dos professores direcionada para: ${combo.name}`, "success");
                             }}
                             className={cn(
                               "flex items-center justify-between p-2.5 rounded-xl text-left border transition-all text-xs cursor-pointer",
@@ -6261,14 +6406,14 @@ ${isBad
 
                     {/* Topic Area / Canal */}
                     <div className="space-y-2">
-                      <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Área de Especialidade</span>
+                      <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block select-none">Área Pedagógica</span>
                       <div className="grid grid-cols-2 gap-1.5 font-sans">
                         {DUO_TOPICS.map(topic => (
                           <button
                             key={topic.id}
                             onClick={() => {
                               setDuoTopicId(topic.id);
-                              addNotification(`Área do podcast alterada para: ${topic.name.split(' ').slice(1).join(' ')}`, "info");
+                              addNotification(`Área de estudo alterada para: ${topic.name.split(' ').slice(1).join(' ')}`, "info");
                             }}
                             className={cn(
                               "p-2.5 rounded-xl text-left border transition-all text-[11px] flex flex-col gap-0.5 cursor-pointer",
@@ -6284,17 +6429,41 @@ ${isBad
                       </div>
                     </div>
 
+                    {/* Lousa Escolar (Whiteboard) Control */}
+                    <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[11px] text-zinc-300 font-medium select-none">Lousa Escolar Virtual:</span>
+                        <span className="text-[8px] text-zinc-500 select-none">Exibe anotações de aula ao lado do chat</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const state = !showWhiteboard;
+                          setShowWhiteboard(state);
+                          addNotification(state ? "Lousa escolar ativada!" : "Lousa escolar desativada", "info");
+                        }}
+                        className={cn(
+                          "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
+                          showWhiteboard ? "bg-emerald-500" : "bg-white/10"
+                        )}
+                      >
+                        <span className={cn(
+                          "w-4 h-4 rounded-full bg-white transition-transform block shadow-sm",
+                          showWhiteboard ? "translate-x-5" : "translate-x-0"
+                        )} />
+                      </button>
+                    </div>
+
                     {/* Speak Automatically */}
                     <div className="flex items-center justify-between bg-white/[0.01] p-2.5 rounded-xl border border-white/5">
                       <div className="flex flex-col text-left">
-                        <span className="text-[11px] text-zinc-300 font-medium select-none">Auto-Leitura Podcast:</span>
-                        <span className="text-[8px] text-zinc-500 select-none">Fala em voz alta as consciências</span>
+                        <span className="text-[11px] text-zinc-300 font-medium select-none">Voz dos Professores (Duo):</span>
+                        <span className="text-[8px] text-zinc-500 select-none">Leitura automática por áudio</span>
                       </div>
                       <button
                         onClick={() => {
                           const state = !isDuoVoiceActive;
                           setIsDuoVoiceActive(state);
-                          addNotification(state ? "Auto-falar ativado" : "Auto-falar desativado", "info");
+                          addNotification(state ? "Explicação por voz ativada" : "Explicação por voz desativada", "info");
                         }}
                         className={cn(
                           "w-10 h-5 rounded-full transition-colors relative flex items-center p-0.5 cursor-pointer",
@@ -6309,7 +6478,7 @@ ${isBad
                     </div>
 
                     <div className="text-[8px] text-zinc-400 mt-2 select-none text-center bg-white/5 p-2 rounded-lg italic font-sans leading-normal">
-                      📻 No Modo Duo, Cortex, Aura, Loki e Gaia conversam simultaneamente, respondendo suas perguntas.
+                      🎓 No Modo Duo, o Prof. Sean (sotaque nativo americano de inglês) simula uma co-docência dinâmica com outros professores na sala de aula.
                     </div>
                   </div>
                   
@@ -6429,6 +6598,85 @@ ${isBad
                   >
                     <Copy size={13} />
                   </button>
+
+                  {/* CARREGAR ARQUIVO DE SKILL/TEXTO */}
+                  <button 
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.md,.json,.txt';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (!file) return;
+                        
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target?.result as string;
+                          if (!content) return;
+                          
+                          setCustomSkill({
+                            name: file.name,
+                            content: content
+                          });
+                          setIsSkillBalloonVisible(true);
+                          setShowWhiteboard(true);
+                          setWhiteboardText(`📚 ESTUDADO SKILL: ${file.name.toUpperCase()}
+
+🎯 DIRETRIZES DA SKILL CARREGADAS COM SUCESSO!
+Use este quadro escolar para estudar e praticar com a IA.
+
+📝 INSTRUÇÕES DE COMPORTAMENTO ATIVO:
+${content.replace(/[\#\*]/g, '').trim().slice(0, 400)}...
+
+💬 DICA DE ESTUDO:
+Você pode pedir para a IA elaborar lições ou escrever dados diretamente aqui nesta lousa!`);
+                          addNotification(`Skill "${file.name}" integrada! A Lousa de Explicação foi ativada ao lado para você estudar.`, "success");
+                        };
+                        reader.readAsText(file);
+                      };
+                      input.click();
+                    }}
+                    className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/40 transition-all shrink-0 flex items-center justify-center gap-1 group active:scale-95 cursor-pointer" 
+                    title="Carregar Arquivo de Skill (.md, .json, .txt) para ativação imediata"
+                  >
+                    <Plus size={13} className="group-hover:rotate-90 transition-transform duration-350" />
+                    <span className="text-[9px] font-mono font-bold tracking-wider hidden xs:inline-block">SKILL</span>
+                  </button>
+
+                  {customSkill && (
+                    <div className="flex items-center gap-2 px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/20 rounded-md text-[9px] font-mono text-emerald-300 shrink-0 select-none">
+                      <span className="flex h-1.5 w-1.5 relative shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                      </span>
+                      <span 
+                        onClick={() => setIsSkillBalloonVisible(!isSkillBalloonVisible)}
+                        className="truncate max-w-[100px] sm:max-w-[150px] font-semibold cursor-pointer hover:text-emerald-100 transition-colors" 
+                        title="Clique para alternar visualização do Balão de Pensamento"
+                      >
+                        Artifício: {customSkill.name} {!isSkillBalloonVisible && <span className="opacity-60 text-[8px] font-bold tracking-wider">(Oculto)</span>}
+                      </span>
+                      
+                      <button
+                        onClick={() => setIsSkillBalloonVisible(!isSkillBalloonVisible)}
+                        className="p-0.5 rounded hover:bg-white/5 text-white/50 hover:text-white transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                        title={isSkillBalloonVisible ? "Ocultar Balão" : "Mostrar Balão"}
+                      >
+                        {isSkillBalloonVisible ? <EyeOff size={10} /> : <Eye size={10} />}
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          setCustomSkill(null);
+                          addNotification("Diretrizes de Skill limpas.", "info");
+                        }}
+                        className="p-0.5 rounded hover:bg-red-500/15 text-white/30 hover:text-red-400 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                        title="Desativar e Remover Skill"
+                      >
+                        <Trash2 size={10} />
+                      </button>
+                    </div>
+                  )}
                   
                   <div className="w-[1px] h-3 bg-white/10 mx-1 shrink-0" />
 
@@ -6531,6 +6779,162 @@ ${isBad
               <div className="flex-1 flex flex-col lg:flex-row min-h-0 relative overflow-hidden">
                 {writingSubMode === 'text' ? (
                   <div className="flex-1 flex flex-col min-h-0 w-full h-full relative transition-all duration-300">
+                    {/* Balão de Pensamento Cognitivo Flutuante */}
+                    <AnimatePresence>
+                      {customSkill && isSkillBalloonVisible && (
+                        <motion.div
+                          key="custom-skill-thought-balloon"
+                          initial={{ opacity: 0, scale: 0.9, y: 15 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9, y: 15 }}
+                          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                          className="absolute top-4 right-4 md:right-8 z-40 max-w-[280px] sm:max-w-[340px]"
+                        >
+                          {/* Corpo Principal do Balão */}
+                          <div className={cn(
+                            "relative rounded-3xl p-4 border backdrop-blur-md transition-all duration-300 select-none",
+                            writingTheme === 'charcoal' ? "bg-[#111317]/95 border-white/5 text-zinc-100 shadow-[0_12px_36px_rgba(0,0,0,0.65)]" :
+                            writingTheme === 'midnight' ? "bg-black/92 border-white/[0.04] text-zinc-200 shadow-[0_12px_36px_rgba(0,0,0,0.85)]" :
+                            writingTheme === 'sepia' ? "bg-[#1b1613]/98 border-[#2e241e] text-[#eedbd0] shadow-[0_12px_36px_rgba(0,0,0,0.55)]" :
+                            "bg-[#07100b]/98 border-emerald-950/60 text-emerald-100 shadow-[0_12px_36px_rgba(0,0,0,0.65)]"
+                          )}>
+                            
+                            {/* Conector Visual: Círculos de Pensamento (Criação do visual de Balão de Pensamento) */}
+                            <div className="absolute -bottom-2 right-12 flex flex-col items-center gap-1">
+                              <div className={cn(
+                                "w-3.5 h-3.5 rounded-full border transform -translate-y-0.5",
+                                writingTheme === 'charcoal' ? "bg-[#111217] border-white/5" :
+                                writingTheme === 'midnight' ? "bg-black border-white/[0.04]" :
+                                writingTheme === 'sepia' ? "bg-[#1b1613] border-[#2e241e]" :
+                                "bg-[#07100b] border-emerald-950/60"
+                              )} />
+                              <div className={cn(
+                                "w-2 h-2 rounded-full border transform -translate-y-[1.5px] opacity-80",
+                                writingTheme === 'charcoal' ? "bg-[#111217] border-white/5" :
+                                writingTheme === 'midnight' ? "bg-black border-white/[0.04]" :
+                                writingTheme === 'sepia' ? "bg-[#1b1613] border-[#2e241e]" :
+                                "bg-[#07100b] border-emerald-950/60"
+                              )} />
+                            </div>
+
+                            {/* Cabeçalho */}
+                            <div className="flex items-start justify-between gap-3 mb-2 pb-1.5 border-b border-white/5">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6.5 h-6.5 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                                  <Brain size={13} className="animate-pulse" />
+                                </div>
+                                <div className="flex flex-col text-left">
+                                  <span className={cn(
+                                    "text-[8px] font-mono font-bold tracking-widest uppercase",
+                                    writingTheme === 'forest' ? "text-emerald-400" : "text-amber-500"
+                                  )}>
+                                    Cognição Integrada
+                                  </span>
+                                  <span className="text-[11px] font-semibold leading-tight truncate max-w-[130px] sm:max-w-[180px]" title={customSkill.name}>
+                                    {customSkill.name}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => setIsSkillBalloonExpanded(!isSkillBalloonExpanded)}
+                                  className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all text-[8px] font-mono uppercase tracking-wider cursor-pointer"
+                                  title={isSkillBalloonExpanded ? "Ocultar regras" : "Ver diretrizes"}
+                                >
+                                  {isSkillBalloonExpanded ? "Fechar" : "Regras"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setIsSkillBalloonVisible(false);
+                                    addNotification("Balão de Pensamento minimizado. A Skill continua ativa no sistema!", "info");
+                                  }}
+                                  className="p-1 rounded-md hover:bg-white/5 text-white/40 hover:text-white transition-colors cursor-pointer"
+                                  title="Ocultar Balão (A Skill continuará ativa)"
+                                >
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Conteúdo do Balão */}
+                            <div className="text-left">
+                              <p className="text-[10px] leading-relaxed opacity-70">
+                                Esta Skill está ativa de forma invisível. As solicitações enviadas ao assistente serão interpretadas de acordo com as diretrizes contidas neste arquivo.
+                              </p>
+
+                              {/* Botão de Forçar Leitura de Skill */}
+                              <div className="mt-2.5 flex items-center justify-start">
+                                <button
+                                  onClick={() => {
+                                    if (!customSkill) return;
+                                    
+                                    // Limpar a aba de escrita imediatamente e ativar/preparar a lousa para estudo
+                                    setWorkspaceText('');
+                                    setShowWhiteboard(true);
+                                    setWhiteboardText(`📚 ESTUDANDO SKILL COM IA: ${customSkill.name.toUpperCase()}
+
+🎯 QUADRO ATIVADO COM SUCESSO!
+A IA de chat recebeu os dados de sincronização. Ela escreverá as notas de estudo e exercícios aqui mesmo na lousa escolar usando os comandos especiais!
+
+✏️ Exercícios e conteúdos gerados aparecerão abaixo...`);
+                                    
+                                    const prompt = `[DIRETRIZ DE SINCRONIZAÇÃO SUPREMA - LEITURA COMPATÍVEL]
+Acabei de sincronizar a Skill personalizada "${customSkill.name}" através do meu Balão de Pensamento cognitivo.
+A aba de escrita (workspace) foi LIMPA para que você comece a nela escrever do zero!
+
+Por favor, leia atentamente as diretrizes, regras, planos e objetivos desta Skill descritos no balão e atue com base neles.
+Escreva suas notas de aula, exercícios práticos, tabelas comparativas, resumos de estudo ou testes na Lousa usando as tags especiais [LOUSA] ... [/LOUSA] para eu estudar de forma dinâmica e visual nesta lousa estilizada!
+
+Instruções imediatas obrigatórias para você (IA de Voz/Chat):
+1. CONFIRME que compreendeu esta nova Skill, e faça um resumo ultra-rápido de no máximo uma frase.
+2. Pergunte: "Compreendi os objetivos e regras da Skill '${customSkill.name}' e ativei a lousa de estudos ao lado. Quer que eu faça o plano e já coloque o primeiro conteúdo de estudo na lousa escolar?"
+3. Se desejar passar notas, use a formatação [LOUSA] ... [/LOUSA] para desenhá-las na lousa ao lado de forma interativa!`;
+                                    
+                                    if (voiceEngine === 'gemini' && liveState.status === 'connected' && liveSessionRef.current) {
+                                      liveSessionRef.current.sendRealtimeInput({ text: prompt });
+                                      addNotification("Diretrizes de Skill integradas e lousa de escrita limpa para a IA!", "success");
+                                    } else {
+                                      handleHomeChat(prompt);
+                                      addNotification("Skill integrada - Lousa limpa para o assistente atuar!", "info");
+                                    }
+                                  }}
+                                  className="w-full py-1.5 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/15 hover:border-indigo-500/30 transition-all text-[9.5px] font-mono uppercase tracking-wider font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] cursor-pointer"
+                                  title="Injetar e forçar o assistente a ler e reconhecer a Skill ativa imediatamente"
+                                >
+                                  <Brain size={11} className="animate-pulse text-indigo-400" />
+                                  Sincronizar Cognição da IA
+                                </button>
+                              </div>
+
+                              {isSkillBalloonExpanded && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="mt-2.5 pt-2 border-t border-white/5 max-h-[160px] overflow-y-auto no-scrollbar scroll-smooth"
+                                >
+                                  <pre className="text-[9px] font-mono leading-relaxed whitespace-pre-wrap opacity-80 break-words max-w-full select-text selection:bg-emerald-500/30">
+                                    {customSkill.content}
+                                  </pre>
+                                </motion.div>
+                              )}
+                            </div>
+
+                            {/* Onda de status animado */}
+                            <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-white/5 text-[8.5px] font-mono text-zinc-500">
+                              <span className="flex h-1.5 w-1.5 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                              </span>
+                              <span>Conectado à Inteligência do Usuário</span>
+                            </div>
+
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     {/* Goal Progress Ring or Linear top bar */}
                     {!writingFocusMode && (
                       <div className="w-full h-[1.5px] bg-white/[0.03] shrink-0">
@@ -7385,36 +7789,50 @@ ${isBad
 
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
-                  "flex-1 flex flex-col overflow-hidden w-full transition-all duration-700",
+                  "flex-1 transition-all duration-700 w-full min-h-0 pt-12 translate-z-0",
                   (liveState.status === 'connected' || !isChatExpanded || !showUi) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
-                  chatHistory.length > 0 ? "pt-12 justify-start translate-z-0" : "justify-center"
+                  (isDuoMode || customSkill) && showWhiteboard ? "grid grid-cols-1 lg:grid-cols-12 gap-6 h-full overflow-hidden" : "flex flex-col overflow-hidden h-full"
                 )}>
-                  {chatHistory.length > 0 && (
-                    <div className="flex justify-end p-2 md:p-0">
-                      <button 
-                        onClick={() => {
-                          if (confirm("Deseja atualizar a conversa? Isso removerá o contexto antigo para priorizar o novo assunto.")) {
-                            // Keep only the last 6 messages if there are many, or just remove the first half
-                            setChatHistory(prev => {
-                              const keepCount = Math.max(4, Math.floor(prev.length / 3));
-                              return prev.slice(-keepCount);
-                            });
-                            addNotification("Conversa atualizada e otimizada.", "info");
-                          }
-                        }}
-                        className="flex items-center gap-2 text-her-muted/40 hover:text-her-accent transition-colors text-[10px] uppercase tracking-widest group"
-                      >
-                        <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
-                        Atualizar Chat
-                      </button>
-                    </div>
-                  )}
-                  {chatHistory.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-her-muted/20 italic text-sm md:text-lg font-light">
-                      <p>Manifeste sua intenção...</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col max-h-full overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  {/* Left Column (Chat + Profiles) */}
+                  <div className={cn(
+                    "flex flex-col min-h-0 relative",
+                    (isDuoMode || customSkill) && showWhiteboard ? "lg:col-span-7 h-full" : "flex-1 h-full flex flex-col overflow-hidden"
+                  )}>
+                    {(chatHistory.length > 0 || isDuoMode || customSkill) && (
+                      <div className="flex justify-between items-center px-2 md:px-0 mb-3 shrink-0">
+                        {(isDuoMode || customSkill) && (
+                          <button
+                            onClick={() => {
+                              setShowWhiteboard(!showWhiteboard);
+                              addNotification(showWhiteboard ? "Lousa ocultada." : "Lousa ativada ao lado do chat!", "info");
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded-full border border-sky-500/20 text-[10px] font-mono tracking-wider uppercase transition-all active:scale-95 cursor-pointer"
+                          >
+                            <BookOpen size={12} className="animate-pulse" />
+                            {showWhiteboard ? "Ocultar Lousa" : "Visualizar Lousa"}
+                          </button>
+                        )}
+                        {chatHistory.length > 0 && (
+                          <button 
+                            onClick={() => {
+                              if (confirm("Deseja atualizar a conversa? Isso removerá o contexto antigo para priorizar o novo assunto.")) {
+                                // Keep only the last 6 messages if there are many, or just remove the first half
+                                setChatHistory(prev => {
+                                  const keepCount = Math.max(4, Math.floor(prev.length / 3));
+                                  return prev.slice(-keepCount);
+                                });
+                                addNotification("Conversa atualizada e otimizada.", "info");
+                              }
+                            }}
+                            className="flex items-center gap-2 text-her-muted/40 hover:text-her-accent transition-colors text-[10px] uppercase tracking-widest group ml-auto"
+                          >
+                            <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
+                            Atualizar Chat
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                       {isDuoMode && (
                         <motion.div 
                           initial={{ opacity: 0, y: -10 }}
@@ -7425,16 +7843,31 @@ ${isBad
                           <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
 
                           <div className="flex items-center justify-between mb-3 select-none">
-                            <div className="flex items-center gap-1.5 bg-red-950/40 border border-red-900/45 px-2.5 py-1 rounded-full text-[8px] tracking-widest uppercase font-bold text-red-500">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
-                              <span>Ao Vivo / Podcast</span>
+                            <div className="flex items-center gap-1.5 bg-sky-950/40 border border-sky-900/45 px-2.5 py-1 rounded-full text-[8px] tracking-widest uppercase font-bold text-sky-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping inline-block" />
+                              <span>Co-Docência / Sala de Aula</span>
                             </div>
-                            <span className="text-[10px] uppercase font-mono tracking-tight text-white/50">
-                              Canal: {DUO_TOPICS.find(t => t.id === duoTopicId)?.name}
-                            </span>
+                            
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setShowWhiteboard(!showWhiteboard)}
+                                className={cn(
+                                  "flex items-center gap-1 px-2 py-0.5 rounded text-[8.5px] tracking-wider uppercase border font-mono transition-all duration-300 pointer-events-auto cursor-pointer",
+                                  showWhiteboard 
+                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" 
+                                    : "bg-white/5 text-stone-400 border-white/5 hover:bg-white/10"
+                                )}
+                              >
+                                🏫 Lousa: {showWhiteboard ? "ON" : "OFF"}
+                              </button>
+                              
+                              <span className="text-[10px] uppercase font-mono tracking-tight text-white/50">
+                                Tópico: {DUO_TOPICS.find(t => t.id === duoTopicId)?.name.split(' ').slice(1).join(' ')}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Split screen Podcast Host area */}
+                          {/* Split screen Teacher Desk area */}
                           {(() => {
                             const currentCombo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
                             const aS = duoSpeakingHost === 'hostA' && isSpeaking;
@@ -7455,7 +7888,7 @@ ${isBad
                                       aS ? "ring-2 ring-sky-500 border-sky-450" : "border border-white/10"
                                     )} />
                                     {aS && (
-                                      <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎙️</div>
+                                      <div className="absolute -bottom-1 -right-1 bg-sky-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎓</div>
                                     )}
                                   </div>
                                   <span className="text-xs font-bold font-sans tracking-wide text-sky-400">{currentCombo.hostA.name}</span>
@@ -7473,9 +7906,9 @@ ${isBad
                                   )}
                                 </div>
 
-                                {/* Center separator with Versus/Live icon */}
+                                {/* Center separator with collaborative join icon */}
                                 <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-950 border border-white/10 w-7 h-7 rounded-full flex items-center justify-center z-10 select-none shadow-md">
-                                  <span className="text-[8px] font-bold text-zinc-400 font-mono">VS</span>
+                                  <span className="text-[10px] font-bold text-zinc-400 font-mono">&</span>
                                 </div>
 
                                 {/* Host B Box */}
@@ -7491,7 +7924,7 @@ ${isBad
                                       bS ? "ring-2 ring-rose-500 border-rose-450" : "border border-white/10"
                                     )} />
                                     {bS && (
-                                      <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎙️</div>
+                                      <div className="absolute -bottom-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎓</div>
                                     )}
                                   </div>
                                   <span className="text-xs font-bold font-sans tracking-wide text-rose-400">{currentCombo.hostB.name}</span>
@@ -7513,7 +7946,14 @@ ${isBad
                           })()}
                         </motion.div>
                       )}
-                      {chatHistory.map((msg) => (
+
+                      {chatHistory.length === 0 ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-her-muted/20 italic text-sm md:text-lg font-light py-20 select-none text-center">
+                          <p className="mb-2">A classe está pronta.</p>
+                          <p className="text-xs text-her-muted/40 not-italic">Manifeste sua dúvida ou envie uma mensagem para iniciar!</p>
+                        </div>
+                      ) : (
+                        chatHistory.map((msg) => (
                         <motion.div 
                           key={msg.id}
                           initial={{ opacity: 0, y: 10 }}
@@ -7656,7 +8096,7 @@ ${isBad
                             )}
                           </div>
                         </motion.div>
-                      ))}
+                      )))}
 
                       {/* Real-time voice transcript */}
                       {voiceTranscript && (
@@ -7683,6 +8123,25 @@ ${isBad
 
                       <div ref={chatEndRef} />
                     </div>
+                  </div>
+
+                  {/* Right Column: Teacher Whiteboard (Lousa do Professor) */}
+                  {(isDuoMode || customSkill) && showWhiteboard && (
+                    <motion.div 
+                      key="teacher-whiteboard-wrapper"
+                      initial={{ opacity: 0, scale: 0.98, x: 15 }}
+                      animate={{ opacity: 1, scale: 1, x: 0 }}
+                      exit={{ opacity: 0, scale: 0.98, x: -15 }}
+                      className="lg:col-span-5 h-full flex flex-col justify-center shrink-0 min-h-[380px] lg:min-h-0"
+                    >
+                      <TeacherWhiteboard 
+                        text={whiteboardText}
+                        onChangeText={setWhiteboardText}
+                        isWriting={isSpeaking || isGenerating || isAnalyzingCode}
+                        speakerName={customSkill ? `Estudo: ${customSkill.name}` : (duoSpeakingHost === 'hostA' && isSpeaking ? "Prof. Sean" : (duoSpeakingHost === 'hostB' && isSpeaking ? "Co-Docente" : null))}
+                        onClear={() => setWhiteboardText('')}
+                      />
+                    </motion.div>
                   )}
                 </div>
 
