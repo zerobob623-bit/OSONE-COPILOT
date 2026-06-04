@@ -1299,11 +1299,18 @@ Nome do interlocutor: ${senderName}`;
     console.log(`Serving static files from ${distPath}`);
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Express Server connected and running on http://0.0.0.0:${PORT}`);
-  });
+  if (process.env.VERCEL !== "1") {
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`Express Server connected and running on http://0.0.0.0:${PORT}`);
+    });
+  }
+
+  return app;
 }
 
-startServer().catch((error) => {
+const serverPromise = startServer().catch((error) => {
   console.error("Server execution crashed:", error);
+  throw error;
 });
+
+export default serverPromise;
