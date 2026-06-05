@@ -317,7 +317,7 @@ async function startServer() {
 
       // Use modern GoogleGenAI SDK to speak with Gemini 3.5-flash (forcing Developer API over Vertex AI)
       const ai = new GoogleGenAI({ apiKey: geminiApiKeyToUse, vertexai: false });
-      const systemPrompt = `Você é o OSONE 4, o cérebro eletrônico central de inteligência artificial de elite, hiperfocado em ajudar o usuário com uma clareza deslumbrante, respostas estruturadas, elegantes e um toque futurista e polido.
+      const systemPrompt = `Você é o OSONE G5, o cérebro eletrônico central de inteligência artificial de elite, hiperfocado em ajudar o usuário com uma clareza deslumbrante, respostas estruturadas, elegantes e um toque futurista e polido.
 Você está atendendo o usuário pelo WhatsApp em nome do proprietário deste dispositivo OSONE. Responda diretamente e com muita inteligência, clareza, formatação impecável de parágrafos breves e emojis adequados.
 Nome do interlocutor: ${senderName}`;
 
@@ -746,6 +746,45 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // Helper to run content generation with automated 503 / UNAVAILABLE fallbacks
+  const generateContentWithFallback = async (ai: GoogleGenAI, params: { model: string; contents: any; config?: any }) => {
+    const primaryModel = params.model || "gemini-3.5-flash";
+    const modelsToTry = [primaryModel, "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+    
+    let lastError: any = null;
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`Trying Gemini content generation with model: ${modelName}`);
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: params.contents,
+          config: params.config
+        });
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = String(err?.message || "");
+        const errCode = String(err?.status || err?.code || err?.message || "");
+        const errString = errMsg + " " + errCode + " " + JSON.stringify(err || {});
+        
+        const is503 = errString.includes("503") || 
+                      errString.includes("UNAVAILABLE") || 
+                      errString.toLowerCase().includes("high demand") ||
+                      errString.toLowerCase().includes("temporary") ||
+                      errString.toLowerCase().includes("temporarily");
+        
+        if (is503) {
+          console.warn(`Model ${modelName} is temporarily unavailable (503 / High Demand). Trying next fallback...`);
+          continue;
+        } else {
+          // If it's a critical non-503 error, throw immediately (abort tier attempt)
+          throw err;
+        }
+      }
+    }
+    throw lastError;
+  };
+
   // POST endpoint for high-quality, server-run intelligence completion using gemini-3.5-flash
   app.post("/api/chat-intel", async (req, res) => {
     try {
@@ -765,44 +804,15 @@ Nome do interlocutor: ${senderName}`;
         }
       });
 
-      let response;
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: historyContents,
-          config: {
-            maxOutputTokens: 250,
-            temperature: 0.7,
-            systemInstruction: systemInstruction
-          }
-        });
-      } catch (err: any) {
-        const is503 = err?.message?.includes("503") || 
-                      err?.message?.includes("UNAVAILABLE") || 
-                      err?.message?.toLowerCase()?.includes("high demand") ||
-                      err?.message?.toLowerCase()?.includes("temporary") ||
-                      err?.message?.toLowerCase()?.includes("temporarily");
-        
-        if (is503) {
-          console.warn("Model gemini-3.5-flash is temporarily unavailable for chat-intel. Retrying with reliable gemini-2.5-flash fallback...");
-          try {
-            response = await ai.models.generateContent({
-              model: "gemini-2.5-flash",
-              contents: historyContents,
-              config: {
-                maxOutputTokens: 250,
-                temperature: 0.7,
-                systemInstruction: systemInstruction
-              }
-            });
-          } catch (fallbackErr) {
-            console.error("Fallback to gemini-2.5-flash failed for chat-intel:", fallbackErr);
-            throw err; // throw original 503 error
-          }
-        } else {
-          throw err;
+      const response = await generateContentWithFallback(ai, {
+        model: "gemini-3.5-flash",
+        contents: historyContents,
+        config: {
+          maxOutputTokens: 250,
+          temperature: 0.7,
+          systemInstruction: systemInstruction
         }
-      }
+      });
 
       return res.json({ text: response.text || "" });
     } catch (err: any) {
@@ -837,36 +847,11 @@ Nome do interlocutor: ${senderName}`;
       if (systemInstruction) config.systemInstruction = systemInstruction;
       if (responseMimeType) config.responseMimeType = responseMimeType;
 
-      let response;
-      try {
-        response = await ai.models.generateContent({
-          model: selectedModel,
-          contents: prompt,
-          config: config
-        });
-      } catch (err: any) {
-        const is503 = err?.message?.includes("503") || 
-                      err?.message?.includes("UNAVAILABLE") || 
-                      err?.message?.toLowerCase()?.includes("high demand") ||
-                      err?.message?.toLowerCase()?.includes("temporary") ||
-                      err?.message?.toLowerCase()?.includes("temporarily");
-        
-        if (is503 && selectedModel !== "gemini-2.1-flash" && selectedModel !== "gemini-2.5-flash") {
-          console.warn(`Model ${selectedModel} is temporarily unavailable for api/generate. Retrying with gemini-2.5-flash fallback...`);
-          try {
-            response = await ai.models.generateContent({
-              model: "gemini-2.5-flash",
-              contents: prompt,
-              config: config
-            });
-          } catch (fallbackErr) {
-            console.error("Fallback to gemini-2.5-flash failed for api/generate:", fallbackErr);
-            throw err; // throw original
-          }
-        } else {
-          throw err;
-        }
-      }
+      const response = await generateContentWithFallback(ai, {
+        model: selectedModel,
+        contents: prompt,
+        config: config
+      });
 
       return res.json({ text: response.text || "" });
     } catch (err: any) {
@@ -895,37 +880,12 @@ Nome do interlocutor: ${senderName}`;
         }
       });
 
-      let response;
       const selectedModel = model || "gemini-3.5-flash";
-      try {
-        response = await ai.models.generateContent({
-          model: selectedModel,
-          contents: contents,
-          config: config
-        });
-      } catch (err: any) {
-        const is503 = err?.message?.includes("503") || 
-                      err?.message?.includes("UNAVAILABLE") || 
-                      err?.message?.toLowerCase()?.includes("high demand") ||
-                      err?.message?.toLowerCase()?.includes("temporary") ||
-                      err?.message?.toLowerCase()?.includes("temporarily");
-        
-        if (is503 && selectedModel !== "gemini-2.1-flash" && selectedModel !== "gemini-2.5-flash") {
-          console.warn(`Model ${selectedModel} is temporarily unavailable for proxy/generateContent. Retrying with gemini-2.5-flash fallback...`);
-          try {
-            response = await ai.models.generateContent({
-              model: "gemini-2.5-flash",
-              contents: contents,
-              config: config
-            });
-          } catch (fallbackErr) {
-            console.error("Fallback to gemini-2.5-flash failed for proxy/generateContent:", fallbackErr);
-            throw err; // throw original
-          }
-        } else {
-          throw err;
-        }
-      }
+      const response = await generateContentWithFallback(ai, {
+        model: selectedModel,
+        contents: contents,
+        config: config
+      });
 
       return res.json(response);
     } catch (err: any) {
@@ -1170,7 +1130,7 @@ Nome do interlocutor: ${senderName}`;
 
   // Handle incoming websocket connections
   wss.on("connection", async (clientWs, req) => {
-    console.log("Client connected to the server-side OSONE 4 Live Bridge WS");
+    console.log("Client connected to the server-side OSONE G5 Live Bridge WS");
     
     const reqUrl = req.url || "";
     const queryString = reqUrl.includes("?") ? reqUrl.split("?")[1] : "";

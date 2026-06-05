@@ -1,6 +1,6 @@
 # SKELETON BRAIN — Estrutura Óssea de Planejamento IA
 
-Este é o protocolo universal que deve ser seguido antes de qualquer geração de código ou resposta complexa no OSONE 4.
+Este é o protocolo universal que deve ser seguido antes de qualquer geração de código ou resposta complexa no OSONE G5.
 
 ## FASE 00 — RECEPÇÃO DO SINAL `INPUT`
 - Extrair palavras exatas sem suposições.
@@ -31,7 +31,7 @@ Este é o protocolo universal que deve ser seguido antes de qualquer geração d
 - Comentar o "porquê", não o "o quê".
 - Revisar lógica e edge cases antes da entrega final.
 
-## DIRETRIZES DE ARQUIVOS NO OSONE 4
+## DIRETRIZES DE ARQUIVOS NO OSONE G5
 - **ARQUIVO ÚNICO**: O OSONE não possui um sistema de pastas/arquivos real. Você deve escrever apenas UM arquivo bruto, inteiro e completo diretamente na aba de ESCRITA.
 - **SEM GESTÃO DE PASTAS**: Não tente organizar subpastas. Foque em entregar o código ou texto completo em um único bloco no workspace de escrita.
 

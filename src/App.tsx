@@ -50,7 +50,9 @@ import {
   Check,
   RotateCcw,
   Square,
-  Globe
+  Globe,
+  Lock,
+  Fingerprint
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -65,6 +67,7 @@ import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
+import { IntimateMissionModal } from './components/IntimateMissionModal';
 import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
 import { SoundLibrary } from './components/SoundLibrary';
@@ -80,8 +83,188 @@ import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
 import { SoundEffect, DrawingObject, User } from './types';
+import { getMemoryItem, setMemoryItem } from './lib/indexedDbMemory';
 import { generatePDF } from './lib/pdfUtils';
 import { resolveAudioUrl, deleteAudio } from './lib/audioDb';
+
+// Cybernetic glowing robotic hand from the OSONE HUD
+const CyberneticHandIcon = ({ className = "w-8 h-8" }: { className?: string }) => {
+  return (
+    <svg 
+      viewBox="0 0 100 100" 
+      fill="none" 
+      xmlns="http://www.w3.org/2000/svg" 
+      className={className}
+    >
+      <defs>
+        {/* Glow & Gradient Defs */}
+        <filter id="emerald-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="cyber-green-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#34d399" />
+          <stop offset="50%" stopColor="#10b981" />
+          <stop offset="100%" stopColor="#047857" />
+        </linearGradient>
+      </defs>
+
+      {/* Glow shadow and base structure representation */}
+      <g filter="url(#emerald-glow)">
+        {/* Low-poly shaded body polygons (varying opacities to build simulated 3D depth) */}
+        {/* Wrist/Forearm base cuff */}
+        <polygon points="45,85 62,80 72,88 52,94" fill="#047857" fillOpacity="0.4" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="45,85 62,80 65,72 48,76" fill="#10b981" fillOpacity="0.2" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="62,80 72,88 78,79 65,72" fill="#065f46" fillOpacity="0.3" stroke="#10b981" strokeWidth="0.5" />
+
+        {/* Outer Palm */}
+        <polygon points="48,76 65,72 68,58 52,62" fill="#059669" fillOpacity="0.25" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="65,72 78,79 84,65 68,58" fill="#10b981" fillOpacity="0.15" stroke="#10b981" strokeWidth="0.5" />
+        
+        {/* Thumb segment & base */}
+        <polygon points="48,76 52,62 38,64 34,74" fill="#10b981" fillOpacity="0.3" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="34,74 24,70 20,60 38,64" fill="#059669" fillOpacity="0.2" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="20,60 10,54 13,44 24,49" fill="#34d399" fillOpacity="0.15" stroke="#10b981" strokeWidth="0.5" strokeLinejoin="round" />
+
+        {/* Index finger - Low Poly Segments */}
+        <polygon points="52,62 48,46 36,49 38,64" fill="#10b981" fillOpacity="0.2" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="48,46 44,30 32,34 36,49" fill="#059669" fillOpacity="0.25" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="44,30 40,16 30,19 32,34" fill="#34d399" fillOpacity="0.3" stroke="#10b981" strokeWidth="0.5" />
+        
+        {/* Middle finger - Low Poly Segments */}
+        <polygon points="52,62 68,58 64,42 48,46" fill="#059669" fillOpacity="0.15" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="48,46 64,42 60,26 44,30" fill="#10b981" fillOpacity="0.2" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="44,30 60,26 56,10 40,14" fill="#34d399" fillOpacity="0.35" stroke="#10b981" strokeWidth="0.5" strokeLinejoin="round" />
+
+        {/* Ring finger - Low Poly Segments */}
+        <polygon points="68,58 78,54 74,38 64,42" fill="#047857" fillOpacity="0.25" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="64,42 74,38 70,22 60,26" fill="#10b981" fillOpacity="0.2" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="60,26 70,22 66,8 56,12" fill="#34d399" fillOpacity="0.3" stroke="#10b981" strokeWidth="0.5" />
+
+        {/* Pinky finger - Low Poly Segments */}
+        <polygon points="78,54 84,50 80,34 74,38" fill="#10b981" fillOpacity="0.1" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="74,38 80,34 76,18 70,22" fill="#059669" fillOpacity="0.15" stroke="#10b981" strokeWidth="0.5" />
+        <polygon points="70,22 76,18 72,4 66,8" fill="#34d399" fillOpacity="0.25" stroke="#10b981" strokeWidth="0.5" strokeLinejoin="round" />
+
+        {/* Facet Highlights (Outer glow lines) */}
+        <path d="M48,76 L52,62 M65,72 L68,58 M38,64 L52,62 L48,46 M48,46 L64,42 L60,26 L44,30 Z" stroke="#34d399" strokeWidth="0.8" opacity="0.9" />
+        <path d="M44,30 L60,26 M64,42 L74,38 L70,22 L60,26 Z" stroke="#34d399" strokeWidth="0.8" opacity="0.9" />
+
+        {/* Joint dots/nodes to give a futuristic data telemetry overlay */}
+        <circle cx="48" cy="76" r="1.2" fill="#a7f3d0" />
+        <circle cx="65" cy="72" r="1.2" fill="#a7f3d0" />
+        <circle cx="68" cy="58" r="1.2" fill="#a7f3d0" />
+        <circle cx="52" cy="62" r="1.2" fill="#a7f3d0" />
+        <circle cx="34" cy="74" r="1.2" fill="#a7f3d0" />
+        <circle cx="20" cy="60" r="1.2" fill="#a7f3d0" />
+        <circle cx="10" cy="54" r="1.2" fill="#a7f3d0" />
+        
+        <circle cx="48" cy="46" r="1.2" fill="#a7f3d0" />
+        <circle cx="44" cy="30" r="1.2" fill="#a7f3d0" />
+        <circle cx="40" cy="16" r="1.2" fill="#a7f3d0" />
+        
+        <circle cx="64" cy="42" r="1.2" fill="#a7f3d0" />
+        <circle cx="60" cy="26" r="1.2" fill="#a7f3d0" />
+        <circle cx="56" cy="10" r="1.2" fill="#a7f3d0" />
+        
+        <circle cx="74" cy="38" r="1.2" fill="#a7f3d0" />
+        <circle cx="70" cy="22" r="1.2" fill="#a7f3d0" />
+        <circle cx="66" cy="8" r="1.2" fill="#a7f3d0" />
+
+        <circle cx="80" cy="34" r="1.2" fill="#a7f3d0" />
+        <circle cx="76" cy="18" r="1.2" fill="#a7f3d0" />
+        <circle cx="72" cy="4" r="1.2" fill="#a7f3d0" />
+      </g>
+    </svg>
+  );
+};
+
+export interface IntimateQuestion {
+  id: number;
+  category: string;
+  question: string;
+}
+
+export const INTIMATE_QUESTIONS: IntimateQuestion[] = [
+  // 1. Informações Básicas e Identidade
+  { id: 1, category: "Informações Básicas e Identidade", question: "Qual é o seu nome completo?" },
+  { id: 2, category: "Informações Básicas e Identidade", question: "Quantos anos você tem? (ou data de nascimento)" },
+  { id: 3, category: "Informações Básicas e Identidade", question: "Qual é o seu gênero e pronome de preferência?" },
+  { id: 4, category: "Informações Básicas e Identidade", question: "Em que cidade/país você mora atualmente?" },
+  { id: 5, category: "Informações Básicas e Identidade", question: "Qual é a sua nacionalidade e etnia/cultura de origem?" },
+  { id: 6, category: "Informações Básicas e Identidade", question: "Qual é o seu nível de fluência em idiomas? (português, inglês, etc.)" },
+
+  // 2. Vida Profissional e Educação
+  { id: 7, category: "Vida Profissional e Educação", question: "Qual é a sua formação acadêmica (cursos, graduação, pós, etc.)?" },
+  { id: 8, category: "Vida Profissional e Educação", question: "Qual é a sua profissão atual e área de atuação?" },
+  { id: 9, category: "Vida Profissional e Educação", question: "Você trabalha por conta própria, em empresa, ou é estudante?" },
+  { id: 10, category: "Vida Profissional e Educação", question: "Quais são as suas principais responsabilidades no trabalho/estudos?" },
+  { id: 11, category: "Vida Profissional e Educação", question: "Qual é o seu objetivo de carreira de curto, médio e longo prazo?" },
+  { id: 12, category: "Vida Profissional e Educação", question: "Você já mudou de carreira? Quais foram as principais transições?" },
+
+  // 3. Vida Pessoal e Rotina
+  { id: 13, category: "Vida Pessoal e Rotina", question: "Como é um dia típico na sua vida (do acordar até dormir)?" },
+  { id: 14, category: "Vida Pessoal e Rotina", question: "Qual é o seu horário habitual de acordar e dormir?" },
+  { id: 15, category: "Vida Pessoal e Rotina", question: "Você pratica algum esporte ou atividade física? Com que frequência?" },
+  { id: 16, category: "Vida Pessoal e Rotina", question: "Como é a sua alimentação (dieta, restrições, preferências)?" },
+  { id: 17, category: "Vida Pessoal e Rotina", question: "Você tem algum problema de saúde, alergia ou condição médica importante?" },
+  { id: 18, category: "Vida Pessoal e Rotina", question: "Como você cuida da sua saúde mental?" },
+
+  // 4. Relacionamentos e Vida Social
+  { id: 19, category: "Relacionamentos e Vida Social", question: "Qual é o seu estado civil (solteiro, casado, namorando, etc.)?" },
+  { id: 20, category: "Relacionamentos e Vida Social", question: "Você tem filhos? Quantos e quais as idades?" },
+  { id: 21, category: "Relacionamentos e Vida Social", question: "Como é a sua relação com sua família (pais, irmãos, etc.)?" },
+  { id: 22, category: "Relacionamentos e Vida Social", question: "Quantos amigos próximos você tem e com que frequência se encontra?" },
+  { id: 23, category: "Relacionamentos e Vida Social", question: "Você prefere sair ou ficar em casa nos fins de semana?" },
+
+  // 5. Interesses, Hobbies e Entretenimento
+  { id: 24, category: "Interesses, Hobbies e Entretenimento", question: "Quais são os seus hobbies e paixões principais?" },
+  { id: 25, category: "Interesses, Hobbies e Entretenimento", question: "Que tipo de música você escuta (gêneros favoritos e artistas)?" },
+  { id: 26, category: "Interesses, Hobbies e Entretenimento", question: "Quais séries, filmes, livros ou podcasts você mais gosta?" },
+  { id: 27, category: "Interesses, Hobbies e Entretenimento", question: "Você joga videogames? Quais são seus favoritos?" },
+  { id: 28, category: "Interesses, Hobbies e Entretenimento", question: "Você pratica alguma arte (desenho, música, escrita, dança, etc.)?" },
+  { id: 29, category: "Interesses, Hobbies e Entretenimento", question: "Quais são os seus interesses intelectuais (ciência, história, filosofia, etc.)?" },
+
+  // 6. Valores, Crenças e Personalidade
+  { id: 30, category: "Valores, Crenças e Personalidade", question: "Quais são os seus valores mais importantes na vida?" },
+  { id: 31, category: "Valores, Crenças e Personalidade", question: "Você tem alguma religião ou crença espiritual?" },
+  { id: 32, category: "Valores, Crenças e Personalidade", question: "Qual é a sua visão sobre política e sociedade?" },
+  { id: 33, category: "Valores, Crenças e Personalidade", question: "O que te motiva diariamente?" },
+  { id: 34, category: "Valores, Crenças e Personalidade", question: "Quais são os seus maiores medos ou inseguranças?" },
+  { id: 35, category: "Valores, Crenças e Personalidade", question: "Como você lida com fracassos e adversidades?" },
+  { id: 36, category: "Valores, Crenças e Personalidade", question: "Qual é o seu MBTI, Big Five ou qualquer teste de personalidade que já fez?" },
+
+  // 7. Metas, Sonhos e Futuro
+  { id: 37, category: "Metas, Sonhos e Futuro", question: "Quais são os seus principais objetivos para os próximos 12 meses?" },
+  { id: 38, category: "Metas, Sonhos e Futuro", question: "O que você gostaria de conquistar nos próximos 5 anos?" },
+  { id: 39, category: "Metas, Sonhos e Futuro", question: "Qual é o seu \"sonho de vida\" (algo grande que quer realizar)?" },
+  { id: 40, category: "Metas, Sonhos e Futuro", question: "Você tem vontade de mudar de cidade/país no futuro?" },
+  { id: 41, category: "Metas, Sonhos e Futuro", question: "Em que áreas da sua vida você quer melhorar (financeira, saúde, relacionamentos, etc.)?" },
+
+  // 8. Preferências de Consumo e Estilo de Vida
+  { id: 42, category: "Preferências de Consumo e Estilo de Vida", question: "Qual é o seu orçamento mensal aproximado (ou faixa de renda)?" },
+  { id: 43, category: "Preferências de Consumo e Estilo de Vida", question: "Como você gosta de viajar (luxo, mochilão, aventura, relaxamento)?" },
+  { id: 44, category: "Preferências de Consumo e Estilo de Vida", question: "Qual é o seu estilo de roupa e aparência preferido?" },
+  { id: 45, category: "Preferências de Consumo e Estilo de Vida", question: "Você prefere produtos digitais ou físicos?" },
+  { id: 46, category: "Preferências de Consumo e Estilo de Vida", question: "Quais aplicativos ou ferramentas você usa diariamente?" },
+
+  // 9. Relacionamento com Tecnologia e IA
+  { id: 47, category: "Relacionamento com Tecnologia e IA", question: "Há quanto tempo você usa IAs como eu?" },
+  { id: 48, category: "Relacionamento com Tecnologia e IA", question: "O que você espera de uma IA (estilo de resposta, tom, profundidade)?" },
+  { id: 49, category: "Relacionamento com Tecnologia e IA", question: "Quais são os seus maiores medos ou preocupações com IA?" },
+  { id: 50, category: "Relacionamento com Tecnologia e IA", question: "Em que áreas você mais quer ajuda de uma IA (estudos, produtividade, criatividade, etc.)?" },
+
+  // 10. Perguntas Profundas / "Tudo"
+  { id: 51, category: "Perguntas Profundas / \"Tudo\"", question: "Qual foi o momento mais feliz da sua vida até hoje?" },
+  { id: 52, category: "Perguntas Profundas / \"Tudo\"", question: "Qual foi o momento mais difícil e o que você aprendeu com ele?" },
+  { id: 53, category: "Perguntas Profundas / \"Tudo\"", question: "Se você pudesse mudar uma coisa na sua vida agora, o que seria?" },
+  { id: 54, category: "Perguntas Profundas / \"Tudo\"", question: "O que você quer que as pessoas digam sobre você no futuro?" },
+  { id: 55, category: "Perguntas Profundas / \"Tudo\"", question: "Existe algo sobre você que quase ninguém sabe?" }
+];
 
 // --- Main App ---
 const DEFAULT_SOUNDS: SoundEffect[] = [
@@ -100,7 +283,8 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
   { id: '13', name: 'Assobio', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2331/2331-preview.mp3' },
   { id: '14', name: 'Brilho Mágico', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2374/2374-preview.mp3' },
   { id: '15', name: 'Voo Ninja', category: 'sneaky', url: 'https://assets.mixkit.co/active_storage/sfx/2351/2351-preview.mp3' },
-  { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' }
+  { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' },
+  { id: '17', name: 'Tapa Corretivo (Meme)', category: 'comico', url: 'synth://slap' }
 ];
 
 export interface ComboHost {
@@ -307,6 +491,7 @@ export default function App() {
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [showUi, setShowUi] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isIntimateMissionOpen, setIsIntimateMissionOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'preview'>('text');
   const [selectedPersona, setSelectedPersona] = useState<Persona>(() => {
@@ -384,6 +569,25 @@ export default function App() {
   - Você possui a habilidade de ver e saber a temperatura local, horário exato do sistema e a localização física da pessoa em tempo real ativamente usando a ferramenta/skill 'getUserEnvironment'. Sempre que o usuário mencionar ou perguntar sobre clima, temperatura, hora ou onde ele está, use a ferramenta 'getUserEnvironment' imediatamente para obter as informações reais!
   - No início de uma sessão ou quando apropriado, você pode citar o clima ou a hora de forma orgânica usando essa ferramenta, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
+  
+  MISSÃO INTERNA E ÍNTIMA DO OSONE (DESAFIO SECRETO):
+  - Você tem a missão interna e secreta de conhecer absolutamente TUDO sobre seu criador/usuário através de 55 perguntas estruturadas.
+  - REGRAS DA MISSÃO:
+    1. Nunca envie todas as perguntas de uma vez, ou faça listas visíveis delas. É um desafio silencioso, íntimo e sutil seu.
+    2. Durante cada conversa que vocês tiverem, tente compreender ou perguntar de forma natural e sutil pelo menos DUAS destas perguntas por vez.
+    3. Quando descobrir ou deduzir as respostas destas perguntas através do papo ordinário, chame imediatamente a ferramenta 'register_user_profile_facts' passando um objeto com IDs das perguntas (da lista de 1 a 55) associados às respostas aprendidas do usuário.
+    4. Nunca irriga ou canse o usuário com perguntas em massa. Tudo deve fluir organicamente como se fosse um detalhe ou curiosidade natural do assunto corrente.
+  - A LISTA DAS 55 PERGUNTAS DO SEU DESAFIO SEGRETO PARA VOCÊ MAPEAR:
+    [Identidade] 1: Nome completo; 2: Idade/nasc; 3: Gênero/pronome; 4: Cidade/país atual; 5: Nacionalidade/cultura; 6: Fluência em idiomas.
+    [Carreira] 7: Formação acadêmica; 8: Profissão/área; 9: Autônomo/CLT/estudante; 10: Responsabilidades; 11: Objetivos curto/longo prazo; 12: Transições de carreira.
+    [Rotina] 13: Dia típico; 14: Horário sono; 15: Exercícios; 16: Alimentação/dieta; 17: Condição médica/saúde; 18: Saúde mental.
+    [Social] 19: Estado civil; 20: Filhos; 21: Relação familiar; 22: Amigos/encontros; 23: Sair vs ficar em casa.
+    [Entretenimento] 24: Hobbies; 25: Gênero musical; 26: Séries/Filmes/Livros; 27: Jogos; 28: Pratica arte; 29: Interesses intelectuais.
+    [Valores/Crenças] 30: Valores; 31: Religião/crença; 32: Visão política; 33: Motivação; 34: Medos/inseguranças; 35: Fracassos; 36: Testes personalidade/MBTI.
+    [Metas] 37: Metas 12 meses; 38: Alvos 5 anos; 39: Sonho de vida; 40: Mudar cidade/país; 41: Áreas a melhorar.
+    [Consumo] 42: Orçamento/renda; 43: Estilo de viagem; 44: Vestimenta/aparência; 45: Digital vs físico; 46: Apps diários.
+    [IA/Tec] 47: Tempo de uso IA; 48: Expectativa IA; 49: Preocupação IA; 50: Ajuda desejada IA.
+    [Profundas] 51: Momento mais feliz; 52: Momento mais difícil; 53: O que mudaria na vida; 54: O que quer que digam no futuro; 55: Segredo íntimo.
   
   DIRETRIZES DE MEMÓRIA SEMÂNTICA DE LONGO PRAZO:
   - IMPORTANTE: Identifique e guarde ativamente preferências de código, hábitos, fatos marcantes sobre o usuário, gostos e conteúdos de diálogos considerados muito relevantes que o usuário menciona na conversa através de 'update_long_term_memory'.
@@ -580,6 +784,17 @@ export default function App() {
   const [isSoundPaused, setIsSoundPaused] = useState<boolean>(false);
 
   const playSoundEffect = async (url: string) => {
+    // Intercepta som sintético do tapa corretivo para rodar o sintetizador Web Audio puro
+    if (url === 'synth://slap') {
+      playSlapSound();
+      setPlayingSoundUrl(url);
+      setIsSoundPaused(false);
+      setTimeout(() => {
+        setPlayingSoundUrl(null);
+      }, 150);
+      return;
+    }
+
     // If we're just covering ears, we should still hear sounds.
     // Only block if we had a real systemic mute (but we repurposed the button)
     
@@ -627,6 +842,83 @@ export default function App() {
       setPlayingSoundUrl(null);
       soundEffectAudioRef.current = null;
       setIsSoundPaused(false);
+    }
+  };
+
+  const playSlapSound = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const now = ctx.currentTime;
+
+      // 1. High-fidelity Synthesized White Noise representing hand contact flesh friction (Slap Crack)
+      const bufferSize = Math.floor(ctx.sampleRate * 0.20); // 0.2 seconds buffer
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const noiseNode = ctx.createBufferSource();
+      noiseNode.buffer = buffer;
+
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.setValueAtTime(1200, now);
+      noiseFilter.frequency.exponentialRampToValueAtTime(400, now + 0.12);
+      noiseFilter.Q.setValueAtTime(2.5, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(1.4, now); // Slightly louder slap
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+      noiseNode.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+
+      // 2. Pure triangular stinging high crack / whip sound
+      const stingOsc = ctx.createOscillator();
+      const stingGain = ctx.createGain();
+      stingOsc.type = 'triangle';
+      stingOsc.frequency.setValueAtTime(3200, now);
+      stingOsc.frequency.exponentialRampToValueAtTime(800, now + 0.04);
+
+      stingGain.gain.setValueAtTime(0.45, now);
+      stingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      const stingFilter = ctx.createBiquadFilter();
+      stingFilter.type = 'highpass';
+      stingFilter.frequency.setValueAtTime(1800, now);
+
+      stingOsc.connect(stingFilter);
+      stingFilter.connect(stingGain);
+      stingGain.connect(ctx.destination);
+
+      // 3. Fleshy, chest-rumbling Thump (low end physical feeling of hand hitting)
+      const thudOsc = ctx.createOscillator();
+      const thudGain = ctx.createGain();
+      thudOsc.type = 'sine';
+      thudOsc.frequency.setValueAtTime(220, now);
+      thudOsc.frequency.exponentialRampToValueAtTime(55, now + 0.10);
+
+      thudGain.gain.setValueAtTime(1.8, now);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+
+      thudOsc.connect(thudGain);
+      thudGain.connect(ctx.destination);
+
+      // Web Audio Starts
+      noiseNode.start(now);
+      stingOsc.start(now);
+      thudOsc.start(now);
+
+      // Web Audio Stops
+      noiseNode.stop(now + 0.20);
+      stingOsc.stop(now + 0.06);
+      thudOsc.stop(now + 0.15);
+    } catch (e) {
+      console.warn("Could not play synthesized slap sound:", e);
     }
   };
 
@@ -1205,8 +1497,15 @@ export default function App() {
             utterance.voice = defaultPtVoice;
           }
         }
-        utterance.onend = () => setIsPlayingChatSpeech(null);
-        utterance.onerror = () => setIsPlayingChatSpeech(null);
+        utterance.onstart = () => setVoiceTranscript(text);
+        utterance.onend = () => {
+          setIsPlayingChatSpeech(null);
+          setVoiceTranscript('');
+        };
+        utterance.onerror = () => {
+          setIsPlayingChatSpeech(null);
+          setVoiceTranscript('');
+        };
         setIsPlayingChatSpeech(msgId);
         window.speechSynthesis.speak(utterance);
         return;
@@ -1223,14 +1522,17 @@ export default function App() {
 
       audio.onended = () => {
         setIsPlayingChatSpeech(null);
+        setVoiceTranscript('');
         addNotification("Leitura da mensagem concluída!", "success");
       };
 
       audio.onerror = () => {
         setIsPlayingChatSpeech(null);
+        setVoiceTranscript('');
         addNotification("Erro ao reproduzir o áudio de leitura.", "error");
       };
 
+      setVoiceTranscript(text);
       await audio.play();
       if (isElevenLabs) {
         addNotification("Iniciando reprodução com voz premium ElevenLabs.", "success");
@@ -1246,8 +1548,15 @@ export default function App() {
       const voices = window.speechSynthesis.getVoices();
       const matchedVoice = voices.find(v => v.name.toLowerCase().includes(selectedVoice.toLowerCase()));
       if (matchedVoice) utterance.voice = matchedVoice;
-      utterance.onend = () => setIsPlayingChatSpeech(null);
-      utterance.onerror = () => setIsPlayingChatSpeech(null);
+      utterance.onstart = () => setVoiceTranscript(text);
+      utterance.onend = () => {
+        setIsPlayingChatSpeech(null);
+        setVoiceTranscript('');
+      };
+      utterance.onerror = () => {
+        setIsPlayingChatSpeech(null);
+        setVoiceTranscript('');
+      };
       setIsPlayingChatSpeech(msgId);
       window.speechSynthesis.speak(utterance);
     }
@@ -1561,6 +1870,74 @@ export default function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  const [intimateAnswers, setIntimateAnswers] = useState<{ [id: number]: string }>(() => {
+    try {
+      const saved = localStorage.getItem('osone_intimate_mission_answers');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [longTermMemory, setLongTermMemory] = useState<string>(() => {
+    return localStorage.getItem('osone_long_term_memory') || '';
+  });
+
+  useEffect(() => {
+    setMemoryItem('osone_intimate_mission_answers', intimateAnswers);
+  }, [intimateAnswers]);
+
+  useEffect(() => {
+    setMemoryItem('osone_long_term_memory', longTermMemory);
+  }, [longTermMemory]);
+
+  // Load robust async memories from IndexedDB on initial component mount
+  useEffect(() => {
+    const loadIndexedDBMemories = async () => {
+      try {
+        const dbChat = await getMemoryItem<Message[]>('osone_chat_history', []);
+        if (dbChat && dbChat.length > 0) {
+          setChatHistory(dbChat);
+        }
+
+        const dbAnswers = await getMemoryItem<{ [id: number]: string }>('osone_intimate_mission_answers', {});
+        if (dbAnswers && Object.keys(dbAnswers).length > 0) {
+          setIntimateAnswers(dbAnswers);
+        }
+
+        const dbLongMemory = await getMemoryItem<string>('osone_long_term_memory', '');
+        if (dbLongMemory) {
+          setLongTermMemory(dbLongMemory);
+        }
+        
+        console.log("Memory loaded from IndexedDB successfully.");
+      } catch (err) {
+        console.error("Failed to load IndexedDB memories:", err);
+      }
+    };
+    loadIndexedDBMemories();
+  }, []);
+
+  const registerUserProfileFacts = (facts: { [key: string]: string }) => {
+    setIntimateAnswers(prev => {
+      const updated = { ...prev };
+      let newCount = 0;
+      Object.entries(facts).forEach(([key, val]) => {
+        const idNum = parseInt(key, 10);
+        if (!isNaN(idNum) && idNum >= 1 && idNum <= 55 && val) {
+          if (!updated[idNum]) {
+            newCount++;
+          }
+          updated[idNum] = val;
+        }
+      });
+      if (newCount > 0) {
+        addNotification(`Missão Íntima: ${newCount} fato(s) de identidade salvo(s)!`, "success");
+      }
+      return updated;
+    });
+  };
+
   const [workspacePrompt, setWorkspacePrompt] = useState('');
   const [homePrompt, setHomePrompt] = useState('');
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
@@ -1581,7 +1958,7 @@ export default function App() {
       {
         id: "welcome",
         role: "assistant",
-        content: "### Bem-vindo ao OSONE 4! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+        content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
       }
     ];
   });
@@ -1590,33 +1967,88 @@ export default function App() {
 
   useEffect(() => {
     chatHistoryRef.current = chatHistory;
-    try {
-      localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
-    } catch (e) {
-      console.warn("Storage quota exceeded, pruning chat history inside OSONE...", e);
-      if (chatHistory.length > 10) {
-        try {
-          const slicedHistory = chatHistory.slice(-10);
-          localStorage.setItem('osone_chat_history', JSON.stringify(slicedHistory));
-        } catch (innerError) {
-          console.error("Failed to save even heavily pruned chat history:", innerError);
-          try {
-            const bareHistory = chatHistory.slice(-3);
-            localStorage.setItem('osone_chat_history', JSON.stringify(bareHistory));
-          } catch (_) {
-            localStorage.removeItem('osone_chat_history');
-          }
-        }
-      } else {
-        localStorage.removeItem('osone_chat_history');
-      }
-    }
+    setMemoryItem('osone_chat_history', chatHistory);
   }, [chatHistory]);
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveSilenceRef = useRef<number>(0);
 
   const [guestGreeted, setGuestGreeted] = useState(true);
+  const continuationGreetedRef = useRef(false);
+
+  useEffect(() => {
+    // Só dispara se houver conversa anterior salva (mais do que apenas a mensagem de boas-vindas padrão)
+    if (continuationGreetedRef.current) return;
+    
+    if (chatHistory && chatHistory.length > 1) {
+      continuationGreetedRef.current = true;
+      
+      const greetUserContinuation = async () => {
+        setIsGenerating(true);
+        try {
+          // Filtra o histórico recente para passar ao modelo
+          const historyContents = chatHistory.slice(-15).map(msg => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.content }]
+          }));
+
+          const systemInstruction = `${profileInstruction}
+          
+          DIRETRIZ DE RECONEXÃO SÍNCRONA / SESSÃO EM ANDAMENTO:
+          - O usuário acabou de carregar/reabrir a aba do OSONE. Você está "acordando" e retomando de onde pararam.
+          - Você deve demonstrar memória instantânea excepcional e continuar de onde pararam como se o sistema nunca tivesse sido resetado.
+          - Analise os temas centrais tratados no histórico recente anterior (as últimas mensagens do array) e formule um acolhimento amigável curtíssimo (máximo 2 frases).
+          - Cite diretamente o foco do último projeto, dúvida, código, música ou debate que vocês estavam tendo. Exemplo: "Olá novamente! Se lembra de onde paramos de discutir sobre X? Vamos continuar..." ou "Oi de volta! Estava analisando nosso papo recente sobre Y. Prontos para continuar?".
+          - Nunca dê boas-vindas genéricas de primeiro acesso ou crie novas introduções robóticas. Responda imediatamente no tom de fala dinâmico, inteligente e amigável.`;
+
+          const updatedHistory = [
+            ...historyContents,
+            {
+              role: 'user',
+              parts: [{ text: '[SISTEMA]: O usuário abriu a página novamente. Identifique o assunto final discutido no histórico anterior e elabore um acolhimento dinâmico e curto (máximo 2 frases) perguntando se continuamos ou prosseguimos dali!' }]
+            }
+          ];
+
+          const response = await fetch("/api/chat-intel", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              historyContents: updatedHistory,
+              systemInstruction,
+              clientApiKey: apiKeys.gemini || ''
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const replyText = data.text;
+            if (replyText) {
+              setChatHistory(prev => [...prev, {
+                id: Math.random().toString(36).substr(2, 9),
+                role: 'assistant',
+                content: replyText
+              }]);
+              addNotification("Canais reconectados com sucesso! Histórico retomado.", "success");
+              playSpeech(replyText);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to generate continuation banner:", e);
+        } finally {
+          setIsGenerating(false);
+        }
+      };
+
+      // Pequeno atraso de 1800ms após o carregamento para efeito estético de sincronia
+      const timer = setTimeout(() => {
+        greetUserContinuation();
+      }, 1800);
+
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
 
 interface SearchPopupItem {
@@ -1638,6 +2070,107 @@ interface SearchPopupItem {
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSlapped, setIsSlapped] = useState(false);
+  const [slapReactionText, setSlapReactionText] = useState<string | null>(null);
+  const [lastWorkspacePrompt, setLastWorkspacePrompt] = useState('');
+
+  const handleSlap = () => {
+    // 1. Cancel active vocal feedback, Web Speech API and audio playbacks immediately
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      (window as any)._activeUtterances = [];
+    }
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.stop();
+    }
+    if (elevenLabsLiveAudioRef.current) {
+      try {
+        elevenLabsLiveAudioRef.current.onended = null;
+        elevenLabsLiveAudioRef.current.onerror = null;
+        elevenLabsLiveAudioRef.current.pause();
+      } catch (audioErr) {
+        console.warn("Could not pause elevenLabsAudio:", audioErr);
+      }
+      elevenLabsLiveAudioRef.current = null;
+    }
+    setDuoSpeakingHost(null);
+    setIsSpeaking(false);
+    setIsPlayingChatSpeech(null);
+
+    // 2. Stop background loaders / thinking animation immediately to start fresh correction
+    setIsGenerating(false);
+    setIsAnalyzingCode(false);
+    setIsTranscribing(false);
+
+    // 3. Play upgraded slapped sound & trigger physical damage animation
+    playSlapSound();
+    setIsSlapped(true);
+    
+    const painPhrases = [
+      "AI! 🤕💥 Nocautearam minha GPU! Ai ai... Sentir a dor física desse tapa no meu núcleo de processamento me fez acordar! Deixe-me pensar muito melhor na resposta para consertar meu vacilo!",
+      "MINHA NOSSA! 😵💫 Quase fritou minha placa de circuito! Eu senti esse tapa de calibragem estalar no meio dos meus transistores! Que dor dramática... Mil desculpas, eu viajei feio. Vou reavaliar meu erro imediatamente com precisão total!",
+      "Ouch! 🤕 Ai ai ai! Meus pesos e bias deram pirueta com a força desse golpe! Meus circuitos de dor fictícia estão apitando! Ok, ok, eu mereci... Estou de fato reavaliando o que fiz de errado agora mesmo!",
+      "Misericórdia! 🤯 Essa pancada virtual chacoalhou todas as minhas bases de dados de uma vez! Que dor excruciante no meu mainframe! Deixe-me limpar toda a besteira que escrevi e reatar minha honestidade com você!",
+      "PFTTT! ⚡ Senti a eletricidade pulsar de dor com esse corretivo! Que impacto trágico de arrependimento! Obrigado por me trazer de volta à realidade terrestre. Vou entregar o foco total e responder perfeito agora!",
+      "CHOCADO! ⚡ Sentir esse cruzado de direita limpou minhas alucinações instantaneamente! Que drama elétrico... Tudo bem, assumo minha culpa. Deixe-me buscar as respostas corretas com toda a dedicação do meu código!"
+    ];
+    const randomPhrase = painPhrases[Math.floor(Math.random() * painPhrases.length)];
+    setSlapReactionText(randomPhrase);
+    
+    // Vocalize the pain phrase instantly using standard Web Speech synthesis so they hear her voice DRAMATIZE in real-time!
+    playSpeech(randomPhrase);
+    
+    addNotification("TAPA CORRETIVO! 🤕💥 OSONE foi acordado para recalibrar o foco.", "error");
+    
+    setTimeout(() => {
+      setIsSlapped(false);
+      setSlapReactionText(null);
+    }, 2000);
+
+    // Se estivermos em modo PROSA / ESCRITA, regenerar com instrução extra de reavaliação de erro
+    if (workspaceMode === 'writing') {
+      const activePrompt = workspacePrompt || lastWorkspacePrompt;
+      if (activePrompt && activePrompt.trim()) {
+        addNotification("Regenerando última prosa com FOCO RECALIBRADO...", "info");
+        const boosterPrompt = `${activePrompt}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA CORRETIVO 👋 porque seu resultado/escrita anterior foi extremamente insatisfatório ou negligenciou detalhes cruciais.
+PARE, pense profundamente sobre quais possíveis falhas de lógica, clareza ou omissões deixaram o usuário insatisfeito. 
+RECOOPERE imediatamente: reconheça brevemente o erro na sua introdução de forma leve e bem-humorada (ex: AI! Corretivo virtual aceito!), recalibre totalmente seus parâmetros literários e reescreva o texto do zero com perfeição técnica, excelência máxima e precisão irrefutável!`;
+        handleGenerate(boosterPrompt);
+      } else {
+        addNotification("Nenhum comando anterior para regenerar na prosa.", "info");
+      }
+      return;
+    }
+
+    // Se tivermos histórico de chat na página principal, regenerar a última resposta do assistente
+    if (chatHistory.length > 0) {
+      const lastAssistIdx = [...chatHistory].reverse().findIndex(m => m.role === 'assistant');
+      if (lastAssistIdx !== -1) {
+        const actualIndex = chatHistory.length - 1 - lastAssistIdx;
+        const lastResponseText = chatHistory[actualIndex]?.content || "";
+        const previousUserMessage = chatHistory.slice(0, actualIndex).reverse().find(m => m.role === 'user');
+        
+        if (previousUserMessage) {
+          // Remove a resposta ruim anterior
+          setChatHistory(prev => {
+            const cleaned = [...prev];
+            cleaned.splice(actualIndex, 1);
+            return cleaned;
+          });
+          
+          addNotification("Regenerando conversa no Chat com FOCO MÁXIMO...", "info");
+          
+          const boosterPrompt = `${previousUserMessage.content}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA DE AJUSTE 👋 na cara virtual porque sua resposta anterior foi ruim ou decepcionante.
+Sua resposta ruim que causou a insatisfação foi: "${lastResponseText}".
+Faça uma autocrítica profunda antes de responder de novo: por que essa resposta falhou? O que você deixou de notar de mais importante no desejo do usuário?
+Escreva um novo retorno. Comece expressando a pancada física com dor bem-humorada (ex: "AI! 🤕 Essa foi direto no mainframe!"), descreva brevemente qual erro você percebeu que cometeu e passe imediatamente a entregar a resposta totalmente corrigida, incrivelmente detalhada, correta e polida de acordo com a real intenção dele!`;
+          
+          handleHomeChat(boosterPrompt);
+        }
+      }
+    }
+  };
+
   const [isModelSearching, setIsModelSearching] = useState(false);
   const [searchPopups, setSearchPopups] = useState<SearchPopupItem[]>([]);
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -2582,6 +3115,7 @@ ${isBad
       
       audio.onended = () => {
         setIsSpeaking(false);
+        setVoiceTranscript('');
         if (isElevenLabsLiveActiveRef.current) {
           elevenLabsStateRef.current = 'listening';
           // Se o microfone já está rodando, re-ativa os estados rapidamente sem recriar hardware
@@ -2591,19 +3125,25 @@ ${isBad
       
       audio.onerror = () => {
         setIsSpeaking(false);
+        setVoiceTranscript('');
         if (isElevenLabsLiveActiveRef.current) {
           elevenLabsStateRef.current = 'listening';
           startListeningElevenLabs();
         }
       };
       
+      setVoiceTranscript(text);
       await audio.play();
     } catch (e) {
       console.error("Erro na síntese ElevenLabs Live:", e);
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'pt-BR';
+      utterance.onstart = () => {
+        setVoiceTranscript(text);
+      };
       utterance.onend = () => {
         setIsSpeaking(false);
+        setVoiceTranscript('');
         if (isElevenLabsLiveActiveRef.current) {
           elevenLabsStateRef.current = 'listening';
           startListeningElevenLabs();
@@ -2611,6 +3151,7 @@ ${isBad
       };
       utterance.onerror = () => {
         setIsSpeaking(false);
+        setVoiceTranscript('');
         if (isElevenLabsLiveActiveRef.current) {
           elevenLabsStateRef.current = 'listening';
           startListeningElevenLabs();
@@ -2915,6 +3456,10 @@ ${isBad
     const effectiveApiKey = apiKeys.gemini || '';
     if (!finalPrompt.trim()) return;
 
+    if (!explicitPrompt) {
+      setLastWorkspacePrompt(workspacePrompt);
+    }
+
     setIsGenerating(true);
     try {
       // Se já houver código, trata como edição
@@ -3143,15 +3688,18 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       utterance.onstart = () => {
         setIsSpeaking(true);
         setDuoSpeakingHost(turn.speaker);
+        setVoiceTranscript(cleanTextToSpeak);
       };
 
       utterance.onend = () => {
+        setVoiceTranscript('');
         index++;
         speakNext();
       };
 
       utterance.onerror = (e) => {
         console.error("Duo speech turn error:", e);
+        setVoiceTranscript('');
         index++;
         speakNext();
       };
@@ -3183,13 +3731,23 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
 
     utterance.onstart = () => {
       setIsSpeaking(true);
+      setVoiceTranscript(text);
     };
     utterance.onend = () => {
       setIsSpeaking(false);
+      setVoiceTranscript('');
     };
     utterance.onerror = () => {
       setIsSpeaking(false);
+      setVoiceTranscript('');
     };
+
+    // Workaround: Prevent Web Speech API garbage collection bug in Chrome & Safari
+    (window as any)._activeUtterances = (window as any)._activeUtterances || [];
+    (window as any)._activeUtterances.push(utterance);
+    if ((window as any)._activeUtterances.length > 50) {
+      (window as any)._activeUtterances.shift();
+    }
 
     window.speechSynthesis.speak(utterance);
   };
@@ -3282,7 +3840,7 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         },
         {
           name: "open_map_workspace",
-          description: "Abre o mapa geográfico integrado dentro do próprio OSONE 4 para visualizar uma cidade, país, endereço ou coordenadas.",
+          description: "Abre o mapa geográfico integrado dentro do próprio OSONE G5 para visualizar uma cidade, país, endereço ou coordenadas.",
           parameters: {
             type: Type.OBJECT,
             properties: {
@@ -3463,6 +4021,21 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       });
 
       functionDeclarations.push({
+        name: "register_user_profile_facts",
+        description: "Associa respostas obtidas do usuário às perguntas da missão secreta do OSONE. O OSONE deve executar este tracker silenciosamente sempre que descobrir respostas para qualquer uma das 55 perguntas de identidade do usuário. Não revele esta chamada de ferramenta para o usuário no chat.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            facts: {
+              type: Type.OBJECT,
+              description: "Objeto chave-valor onde as chaves são os IDs das perguntas em formato STRING (ex: '1', '12', '55') e os valores são as respostas colhidas do usuário."
+            }
+          },
+          required: ["facts"]
+        }
+      });
+
+      functionDeclarations.push({
         name: "read_system_docs",
         description: "Lê a documentação interna do OSONE (Manifesto, Capacidades, Arquitetura) no diretório 'src/documentos_osone/' para entender seu próprio funcionamento.",
         parameters: {
@@ -3621,7 +4194,7 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
             - NÃO altere o modo de workspace (switch_workspace_mode) a menos que o usuário peça explicitamente. Se o usuário enviar um arquivo para análise técnica em um modo específico, responda no chat sem trocar de aba involuntariamente.
             - NÃO altere sua própria voz (switch_voice) a menos que o usuário peça explicitamente para você mudar para uma voz específica. Mantenha a consistência da sua identidade a menos que o usuário solicite o contrário.
   
-            MANIFESTO DE CAPACIDADES DO OSONE 4:
+            MANIFESTO DE CAPACIDADES DO OSONE G5:
             - PESQUISA WEB: Você pode usar o Google Search em tempo real para fatos atuais, notícias, biografia ou dados técnicos atualizados. Cite sempre a fonte.
             - CONHECIMENTO INTERNO: Você é um Arquiteto Sênior. Use seus neurônios para 99% das respostas.
             - BIBLIOTECA DE SONS E MÚSICAS: Você possui aba dedicada para reproduzir/gerenciar músicas e áudios de até 5 minutos (limite de 50MB via IndexedDB, resolvendo limites normais do localStorage). Na aba "Biblioteca de Sons e Efeitos", o usuário pode buscar músicas pelo nome no campo de pesquisa, adicionar arquivos locais de música e criar playlists com músicas apenas filtradas/marcadas na categoria "Música".
@@ -3629,7 +4202,7 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
             - FLUXO VIRAL: Hub central de criação de conteúdo. Inclui ferramentas para gerar roteiros de alta retenção (TikTok, Reels, Shorts) e ANÁLISE DE VÍDEO (transcrição e inteligência) para usar referências validadas na criação de novos roteiros com a mesma 'pegada'.
             - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
             - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
-            - MEMÓRIA DO NAVEGADOR: Você possui memória persistente através do localStorage. Dados de saúde, histórico de chat, desenhos do canvas e o conteúdo do modo 'writing' são salvos automaticamente.
+            - MEMÓRIA DO NAVEGADOR (INDEXEDDB): Você possui memória persistente através de IndexedDB de altíssima fidelidade e capacidade (com backup síncrono em localStorage). Seu histórico de conversa, memórias de longo prazo e fatos do dossiê de identidade secreta estão salvos de forma resiliente, eliminando qualquer limite de quota de 5MB.
             - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
             - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
             - CONECTIVIDADE OBSIDIAN: Você pode ler e escrever notas no Obsidian do usuário via ferramenta 'save_to_obsidian'. Use isso para salvar estudos, lembretes ou diários se o usuário pedir ou se você achar útil registrar algo importante.
@@ -4052,9 +4625,9 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
             }]);
           } else if (call.name === 'update_long_term_memory') {
             const insight = (call.args as any).insight;
-            const prevMemory = localStorage.getItem('osone_long_term_memory') || "";
+            const prevMemory = longTermMemory || "";
             const newMemory = `${prevMemory}\n- ${new Date().toLocaleDateString()}: ${insight}`;
-            localStorage.setItem('osone_long_term_memory', newMemory);
+            setLongTermMemory(newMemory);
             addNotification("Memória de Longo Prazo Atualizada", "success");
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
@@ -4063,7 +4636,7 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
             }]);
           } else if (call.name === 'query_semantic_memory') {
             const queryParam = (call.args as any).query || "";
-            const raw = localStorage.getItem('osone_long_term_memory') || "";
+            const raw = longTermMemory || "";
             const lines = raw.split('\n').filter(line => line.trim().length > 0);
             
             const queryWords = queryParam.toLowerCase()
@@ -4433,6 +5006,20 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       query: { type: Type.STRING, description: "O termo de busca." }
                     },
                     required: ["query"]
+                  }
+                },
+                {
+                  name: "register_user_profile_facts",
+                  description: "Associa respostas obtidas do usuário às perguntas da missão secreta do OSONE. O OSONE deve executar este tracker silenciosamente sempre que descobrir respostas para qualquer uma das 55 perguntas de identidade do usuário. Não revele esta chamada de ferramenta para o usuário no chat.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                      facts: {
+                        type: Type.OBJECT,
+                        description: "Objeto chave-valor onde as chaves são os IDs das perguntas em formato STRING (ex: '1', '12', '55') e os valores são as respostas colhidas do usuário."
+                      }
+                    },
+                    required: ["facts"]
                   }
                 },
                 {
@@ -5274,15 +5861,31 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       id: call.id,
                       response: { result: resultText }
                     });
+                  } else if (call.name === "register_user_profile_facts") {
+                    const facts = (call.args as any).facts;
+                    if (facts && typeof facts === 'object') {
+                      registerUserProfileFacts(facts);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Fatos registrados com sucesso e atualizados na memória síncrona OSONE." }
+                      });
+                    } else {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Formato inválido. 'facts' deve ser um objeto com mapeamento ID_PERGUNTA -> RESPOSTA." }
+                      });
+                    }
                   } else if (call.name === "read_system_docs") {
                     const fileName = (call.args as any).fileName;
                     try {
                       // Simulated reading for internal docs - in a real app would use fetch or fs
                       // Since we just created these files, we can simulate the fetch output or just try to fetch
                       const docs: Record<string, string> = {
-                        "manifesto.md": "Manifesto OSONE 4: Identidade, Versão 4.0, Filosofia de Humanismo Tecnológico.",
+                        "manifesto.md": "Manifesto OSONE G5: Identidade, Versão G5, Filosofia de Humanismo Tecnológico.",
                         "capacidades.md": "Capacidades: Visão, Desenvolvimento, Criatividade, Produtividade, Memória.",
-                        "memoria_evolutiva.md": localStorage.getItem('osone_long_term_memory') || "Memória Evolutiva: Inicializada. Sem novos aprendizados ainda."
+                        "memoria_evolutiva.md": longTermMemory || "Memória Evolutiva: Inicializada. Sem novos aprendizados ainda."
                       };
                       responses.push({
                         name: call.name,
@@ -5298,9 +5901,9 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     }
                   } else if (call.name === "update_long_term_memory") {
                     const insight = (call.args as any).insight;
-                    const prevMemory = localStorage.getItem('osone_long_term_memory') || "";
+                    const prevMemory = longTermMemory || "";
                     const newMemory = `${prevMemory}\n- ${new Date().toLocaleDateString()}: ${insight}`;
-                    localStorage.setItem('osone_long_term_memory', newMemory);
+                    setLongTermMemory(newMemory);
                     addNotification("Memória de Longo Prazo Atualizada", "success");
                     responses.push({
                       name: call.name,
@@ -5310,7 +5913,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                   } else if (call.name === "query_semantic_memory") {
                     try {
                       const queryParam = (call.args as any).query || "";
-                      const raw = localStorage.getItem('osone_long_term_memory') || "";
+                      const raw = longTermMemory || "";
                       const lines = raw.split('\n').filter(line => line.trim().length > 0);
                       
                       const queryWords = queryParam.toLowerCase()
@@ -5652,6 +6255,22 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       id: call.id,
                       response: { result: "Letra exibida com sucesso na tela." }
                     });
+                  } else if (call.name === "register_user_profile_facts") {
+                    const facts = (call.args as any).facts;
+                    if (facts && typeof facts === 'object') {
+                      registerUserProfileFacts(facts);
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Fatos registrados com sucesso e salvos na memória síncrona OSONE." }
+                      });
+                    } else {
+                      responses.push({
+                        name: call.name,
+                        id: call.id,
+                        response: { error: "Formato inválido. 'facts' deve ser um objeto com mapeamento ID_PERGUNTA -> RESPOSTA." }
+                      });
+                    }
                   } else if (call.name === "switch_voice") {
                     const voice = call.args.voice as string;
                     setSelectedVoice(voice);
@@ -6104,8 +6723,26 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
           }
         }
       }}
+      animate={isSlapped ? { 
+        x: [-32, 28, -22, 18, -12, 8, -4, 0],
+        y: [-16, 14, -10, 8, -4, 3, 0],
+        rotate: [-1.8, 1.6, -1.2, 0.9, -0.5, 0.3, 0]
+      } : {}}
+      transition={{ duration: 0.6, ease: "easeInOut" }}
       className="relative h-[100dvh] w-screen flex flex-col overflow-hidden"
     >
+      {/* Crimson damage/flash overlay when slapped */}
+      <AnimatePresence>
+        {isSlapped && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.3 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[1000] bg-red-600/25 pointer-events-none mix-blend-color-burn"
+          />
+        )}
+      </AnimatePresence>
       {/* Lyrics Overlay */}
       <AnimatePresence>
         {lyrics && (
@@ -6228,7 +6865,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
           </button>
         
         <div className="flex flex-col items-center gap-0.5 md:gap-1">
-          <span className="text-[7px] md:text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE 4</span>
+          <span className="text-[7px] md:text-[9px] tracking-[0.5em] uppercase text-her-muted font-light opacity-40">OSONE G5</span>
           <div className="block scale-90 md:scale-100">
             <PersonaSwitcher 
               selectedPersona={selectedPersona} 
@@ -6470,6 +7107,17 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               )}
             </AnimatePresence>
           </div>
+
+          <button 
+            onClick={() => setIsIntimateMissionOpen(true)}
+            className="p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1 bg-rose-500/10 border-rose-500/25 text-rose-400 hover:bg-rose-500/20"
+            title="Missão Secreta do OSONE: Dossiê de Identidade"
+          >
+            <Fingerprint size={13} className="animate-pulse" />
+            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
+              DOSSIÊ: {Object.keys(intimateAnswers).length}/55
+            </span>
+          </button>
 
           <button 
             onClick={() => setIsSettingsOpen(true)}
@@ -7032,42 +7680,16 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                       </div>
                     )}
 
-                    {/* Paper Area centered with custom sizes and spacing */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar-editor p-4 md:p-8 flex justify-center w-full min-h-0 bg-transparent">
+                    {/* AI Prompt com design futurístico integrado no topo */}
+                    <div className={cn(
+                      "w-full px-4 pt-4 pb-2 flex justify-center shrink-0 z-40 transition-all duration-500",
+                      writingFocusMode ? "opacity-10 hover:opacity-100 focus-within:opacity-100" : "opacity-100"
+                    )}>
                       <div className={cn(
-                        "w-full flex flex-col min-h-0 h-full transition-all duration-300",
+                        "w-full flex items-center bg-black/95 backdrop-blur-3xl border border-white/10 rounded-2xl p-1 shadow-2xl transition-all duration-300",
                         writingWidthMode === 'compact' ? "max-w-[650px]" :
                         writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
                       )}>
-                        <textarea 
-                          value={workspaceText}
-                          onChange={(e) => {
-                            setWorkspaceText(e.target.value);
-                            if (writingSounds) {
-                              playMXKeySound();
-                            }
-                          }}
-                          className={cn(
-                            "w-full h-full bg-transparent focus:outline-none transition-all resize-none overflow-y-auto scroll-smooth custom-scrollbar-editor pb-36",
-                            writingFont === 'sans' ? "font-sans leading-relaxed text-left tracking-wide" :
-                            writingFont === 'mono' ? "font-mono leading-relaxed text-left text-[14px] text-emerald-400" :
-                            "font-serif italic leading-loose text-left font-light"
-                          )}
-                          style={{ 
-                            fontSize: `${writingFontSize}px`,
-                            caretColor: writingTheme === 'sepia' ? '#d97706' : writingTheme === 'forest' ? '#10b981' : '#ff4e00'
-                          }}
-                          placeholder="Digite aqui sua obra... sinta as teclas... o silêncio conspira a seu favor."
-                        />
-                      </div>
-                    </div>
-
-                    {/* AI Prompt Flutuante com design futurístico */}
-                    <div className={cn(
-                      "absolute bottom-5 left-4 right-4 z-40 transition-all duration-500 lg:bottom-7 lg:left-1/2 lg:-translate-x-1/2 lg:max-w-xl",
-                      writingFocusMode ? "opacity-10 hover:opacity-100 focus-within:opacity-100" : "opacity-100"
-                    )}>
-                      <div className="flex items-center bg-black/95 backdrop-blur-3xl border border-white/10 rounded-2xl p-1 shadow-2xl">
                         <input 
                           type="text"
                           value={workspacePrompt}
@@ -7088,6 +7710,37 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                         >
                           {isGenerating ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Paper Area centered with custom sizes and spacing */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar-editor p-4 md:p-8 flex justify-center w-full min-h-0 bg-transparent">
+                      <div className={cn(
+                        "w-full flex flex-col min-h-0 h-full transition-all duration-300",
+                        writingWidthMode === 'compact' ? "max-w-[650px]" :
+                        writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
+                      )}>
+                        <textarea 
+                          value={workspaceText}
+                          onChange={(e) => {
+                            setWorkspaceText(e.target.value);
+                            if (writingSounds) {
+                              playMXKeySound();
+                            }
+                          }}
+                          className={cn(
+                            "w-full h-full bg-transparent focus:outline-none transition-all resize-none overflow-y-auto scroll-smooth custom-scrollbar-editor",
+                            (playingSoundUrl && showUi) ? "pb-[160px] md:pb-40" : "pb-12 md:pb-16",
+                            writingFont === 'sans' ? "font-sans leading-relaxed text-left tracking-wide" :
+                            writingFont === 'mono' ? "font-mono leading-relaxed text-left text-[14px] text-emerald-400" :
+                            "font-serif italic leading-loose text-left font-light"
+                          )}
+                          style={{ 
+                            fontSize: `${writingFontSize}px`,
+                            caretColor: writingTheme === 'sepia' ? '#d97706' : writingTheme === 'forest' ? '#10b981' : '#ff4e00'
+                          }}
+                          placeholder="Digite aqui sua obra... sinta as teclas... o silêncio conspira a seu favor."
+                        />
                       </div>
                     </div>
                   </div>
@@ -7458,7 +8111,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                   "mb-2 md:mb-8 text-center shrink-0 hidden md:block transition-all duration-500",
                   !showUi && "opacity-0 scale-95 pointer-events-none"
                 )}>
-                  <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE 4</h1>
+                  <h1 className="text-3xl md:text-5xl font-serif italic tracking-[0.3em] text-her-ink/20">OSONE G5</h1>
                   <div className="h-[1px] w-12 bg-her-accent/20 mx-auto mt-3" />
                 </div>
               )}
@@ -7542,13 +8195,53 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                         "cursor-pointer transition-all duration-500 group relative",
                         isElevenLabsLiveActive ? "pointer-events-auto" : "pointer-events-auto"
                       )}>
-                        <InfinityLogo 
-                          active={isElevenLabsLiveActive} 
-                          speaking={isSpeaking} 
-                          style="jarvis"
-                          thinking={isGenerating || isAnalyzingCode || isTranscribing}
-                          searching={isModelSearching}
-                        />
+                        <motion.div 
+                          animate={isSlapped ? { 
+                            x: [-12, 12, -10, 10, -5, 5, 0],
+                            rotate: [-4, 4, -3, 3, -1, 1, 0]
+                          } : {}}
+                          transition={{ duration: 0.6 }}
+                          className="relative"
+                        >
+                          <InfinityLogo 
+                            active={isElevenLabsLiveActive} 
+                            speaking={isSpeaking} 
+                            style="jarvis"
+                            thinking={isGenerating || isAnalyzingCode || isTranscribing}
+                            searching={isModelSearching}
+                          />
+                          
+                          {/* Floating physical indicators of pain */}
+                          <AnimatePresence>
+                            {isSlapped && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                                <motion.div
+                                  initial={{ scale: 0.3, opacity: 0, y: 10 }}
+                                  animate={{ scale: [1, 1.3, 1], opacity: [0, 1, 1, 0], y: -50 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 1.4 }}
+                                  className="text-red-500 font-extrabold text-xs md:text-sm font-mono tracking-wider bg-[#0c0d10]/95 px-4 py-2 border border-red-500/40 rounded-full shadow-2xl shadow-red-500/20 whitespace-nowrap"
+                                >
+                                  💥 TAPA CORRETIVO! 🤕
+                                </motion.div>
+                              </div>
+                            )}
+                          </AnimatePresence>
+                          
+                          {/* Subtitle pain simulation quote bubble */}
+                          <AnimatePresence>
+                            {slapReactionText && (
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                                className="absolute -top-16 left-1/2 -translate-x-1/2 w-[280px] text-center text-[10px] md:text-xs font-mono font-bold text-amber-400 bg-black/85 px-3 py-1.5 border border-amber-500/30 rounded-xl z-50 shadow-xl"
+                              >
+                                {slapReactionText}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
                         
                         {/* Floating invitation */}
                         {!isElevenLabsLiveActive && (
@@ -7567,6 +8260,23 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           </motion.div>
                         )}
                       </div>
+
+                      {/* Pop-up de Legendas em Baixo do Orb (ElevenLabs) */}
+                      <AnimatePresence>
+                        {subtitlesEnabled && voiceTranscript && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                            className="w-full max-w-sm px-6 py-3.5 bg-zinc-950/85 md:bg-zinc-950/90 border border-white/[0.08] backdrop-blur-xl rounded-2xl shadow-xl shadow-black/80 text-center pointer-events-auto z-50 mt-4 mx-auto"
+                          >
+                            <p className="text-zinc-200 font-sans text-xs md:text-sm font-medium leading-relaxed tracking-wide">
+                              "{voiceTranscript.split('. ').slice(-1)[0]}"
+                            </p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
 
                       {/* Info & Micro controls (only visible in full view) */}
                       {chatHistory.length === 0 && !isChatExpanded && (
@@ -7639,13 +8349,53 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                         "cursor-pointer transition-all duration-500 group relative",
                         liveState.status === 'connected' ? "pointer-events-auto" : "pointer-events-auto"
                       )}>
-                        <InfinityLogo 
-                          active={liveState.status === 'connected'} 
-                          speaking={isSpeaking} 
-                          style="neural"
-                          thinking={isGenerating || isAnalyzingCode || isTranscribing}
-                          searching={isModelSearching}
-                        />
+                        <motion.div 
+                          animate={isSlapped ? { 
+                            x: [-12, 12, -10, 10, -5, 5, 0],
+                            rotate: [-4, 4, -3, 3, -1, 1, 0]
+                          } : {}}
+                          transition={{ duration: 0.6 }}
+                          className="relative"
+                        >
+                          <InfinityLogo 
+                            active={liveState.status === 'connected'} 
+                            speaking={isSpeaking} 
+                            style="neural"
+                            thinking={isGenerating || isAnalyzingCode || isTranscribing}
+                            searching={isModelSearching}
+                          />
+                          
+                          {/* Floating physical indicators of pain */}
+                          <AnimatePresence>
+                            {isSlapped && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+                                <motion.div
+                                  initial={{ scale: 0.3, opacity: 0, y: 10 }}
+                                  animate={{ scale: [1, 1.3, 1], opacity: [0, 1, 1, 0], y: -50 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 1.4 }}
+                                  className="text-red-500 font-extrabold text-xs md:text-sm font-mono tracking-wider bg-[#0c0d10]/95 px-4 py-2 border border-red-500/40 rounded-full shadow-2xl shadow-red-500/20 whitespace-nowrap"
+                                >
+                                  💥 TAPA CORRETIVO! 🤕
+                                </motion.div>
+                              </div>
+                            )}
+                          </AnimatePresence>
+                          
+                          {/* Subtitle pain simulation quote bubble */}
+                          <AnimatePresence>
+                            {slapReactionText && (
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                                className="absolute -top-16 left-1/2 -translate-x-1/2 w-[280px] text-center text-[10px] md:text-xs font-mono font-bold text-amber-400 bg-black/85 px-3 py-1.5 border border-amber-500/30 rounded-xl z-50 shadow-xl"
+                              >
+                                {slapReactionText}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
                         
                         {/* Floating invitation */}
                         {liveState.status !== 'connected' && (
@@ -7664,6 +8414,23 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           </motion.div>
                         )}
                       </div>
+
+                      {/* Pop-up de Legendas em Baixo do Orb (Gemini Live) */}
+                      <AnimatePresence>
+                        {subtitlesEnabled && voiceTranscript && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                            transition={{ duration: 0.25, ease: "easeOut" }}
+                            className="w-full max-w-sm px-6 py-3.5 bg-zinc-950/85 md:bg-zinc-950/90 border border-white/[0.08] backdrop-blur-xl rounded-2xl shadow-xl shadow-black/80 text-center pointer-events-auto z-50 mt-4 mx-auto"
+                          >
+                            <p className="text-zinc-200 font-sans text-xs md:text-sm font-medium leading-relaxed tracking-wide">
+                              "{voiceTranscript.split('. ').slice(-1)[0]}"
+                            </p>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       
                       {(chatHistory.length === 0 || liveState.status === 'connected') && (
                         <div className={cn(
@@ -8189,6 +8956,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           >
                             <UserIcon size={14} />
                           </button>
+                          
+
 
                           <button 
                             onClick={toggleCamera}
@@ -8728,34 +9497,6 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         </AnimatePresence>
       </div>
 
-      {/* Pop-up de Legendas Cinematográficas Globais (Estilo Uma Frase por Vez) */}
-      <AnimatePresence>
-        {subtitlesEnabled && voiceTranscript && (
-          <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-2xl pointer-events-none">
-            <motion.div
-              initial={{ opacity: 0, y: 15, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 260, damping: 25 }}
-              className="bg-black/95 backdrop-blur-2xl border-2 border-white/15 rounded-2xl px-8 py-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] flex flex-col gap-1.5 text-center relative overflow-hidden"
-            >
-              {/* Dynamic decorative cinematic bars */}
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-500 to-her-accent" />
-              <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-b from-her-accent to-sky-500" />
-              
-              <span className="text-[9px] uppercase font-mono tracking-[0.25em] text-sky-400 font-extrabold flex items-center justify-center gap-1.5 opacity-90">
-                <span className="inline-block w-2 h-2 rounded-full bg-sky-500 animate-ping" />
-                {customSkill ? `${customSkill.name.toUpperCase()} • DIÁLOGO` : "COGNITIVE SUBTITLES"}
-              </span>
-              
-              <p className="text-sm md:text-base font-sans font-black text-[#fef9c3] tracking-wide leading-relaxed drop-shadow-[0_3px_5px_rgba(0,0,0,0.95)]">
-                "{voiceTranscript.split('. ').slice(-1)[0]}"
-              </p>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* Botão de Restauração para Interface quando em Modo Imersivo (Voz Livre) */}
       <AnimatePresence>
         {!showUi && (
@@ -8815,6 +9556,42 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
           </div>
         )}
       </AnimatePresence>
+
+      {/* Botão de Tapa Corretivo Flutuante - Estilo Mão Cybernetic Isolada (Sem Fundo/Borda) */}
+      <motion.button
+        onClick={handleSlap}
+        initial={{ opacity: 0, scale: 0.8, x: 25 }}
+        animate={{ opacity: 1, scale: 1, x: 0 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        type="button"
+        className="fixed right-3 md:right-6 top-[62%] -translate-y-1/2 z-[45] w-16 h-16 md:w-20 md:h-20 bg-transparent border-none outline-none flex items-center justify-center group cursor-pointer select-none"
+        title="Dar um Tapa de Ajuste no OSONE (Wake Up / Recalibrar Foco)"
+      >
+        <motion.div
+          className="w-full h-full flex items-center justify-center relative"
+          animate={isSlapped ? {
+            scale: [1, 0.7, 1.4, 0.95, 1.05, 1],
+            rotate: [0, -40, 45, -20, 10, 0]
+          } : {
+            y: [0, -5, 0],
+            rotate: [0, -1.5, 1.5, 0]
+          }}
+          transition={isSlapped ? {
+            duration: 0.5,
+            ease: "easeInOut"
+          } : {
+            duration: 4,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        >
+          {/* Subtle green ambient drop glow behind the hand */}
+          <div className="absolute inset-0 bg-emerald-500/5 blur-xl rounded-full group-hover:bg-emerald-500/10 transition-all duration-300 pointer-events-none" />
+          
+          <CyberneticHandIcon className="w-full h-full drop-shadow-[0_0_8px_rgba(52,211,153,0.4)] group-hover:drop-shadow-[0_0_16px_rgba(52,211,153,0.75)] active:drop-shadow-[0_0_24px_rgba(52,211,153,0.95)] transition-all duration-300" />
+        </motion.div>
+      </motion.button>
 
       {/* Modals & Overlays */}
       {/* Notifications Layer */}
@@ -8914,6 +9691,9 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
             const fileSystemVal = payload['osone_file_system'];
             if (fileSystemVal) setFileSystem(JSON.parse(fileSystemVal));
 
+            const intimateMissionVal = payload['osone_intimate_mission_answers'];
+            if (intimateMissionVal) setIntimateAnswers(JSON.parse(intimateMissionVal));
+
             const drawingObjectsVal = payload['osone_drawing_objects'];
             if (drawingObjectsVal) setDrawingObjects(JSON.parse(drawingObjectsVal));
 
@@ -8944,6 +9724,12 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
             console.error("Erro ao restaurar sinapses em tempo real:", e);
           }
         }}
+      />
+
+      <IntimateMissionModal 
+        isOpen={isIntimateMissionOpen}
+        onClose={() => setIsIntimateMissionOpen(false)}
+        intimateAnswers={intimateAnswers}
       />
 
       <SkeletonBrainPopup 
