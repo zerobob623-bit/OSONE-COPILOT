@@ -2028,7 +2028,7 @@ export default function App() {
         setIsGenerating(true);
         try {
           // Filtra o histórico recente para passar ao modelo
-          const historyContents = chatHistory.slice(-15).map(msg => ({
+          const historyContents = chatHistory.slice(-100).map(msg => ({
             role: msg.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: msg.content }]
           }));
@@ -3327,7 +3327,7 @@ ${isBad
     setIsGenerating(true);
     
     // Captura histórico ANTES de adicionar nova mensagem (evita duplicação)
-    const historyContents = chatHistoryRef.current.slice(-15).map(msg => ({
+    const historyContents = chatHistoryRef.current.slice(-100).map(msg => ({
       role: msg.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: msg.content }]
     }));
@@ -4885,7 +4885,7 @@ ${localDocumentsContext}`;
         }
       });
 
-      const recentChatContext = chatHistory.slice(-15).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
+      const recentChatContext = chatHistory.slice(-100).map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`).join('\n');
       const canvasSummary = drawingObjects.length > 0 
         ? `Canvas state: ` + drawingObjects.slice(-10).map(obj => `${obj.type} at [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ')
         : "Canvas is empty.";
@@ -5597,15 +5597,32 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             sessionPromise.then(async (session) => {
               // 1. Detect user transcription for voice command pause/play control
               let userTranscriptText = "";
+              let isFinalUserTranscript = false;
               const rawServerContent = message.serverContent as any;
               if (rawServerContent?.clientContent?.parts) {
                 userTranscriptText = rawServerContent.clientContent.parts
                   .map((p: any) => p.text || "")
                   .join(" ");
+                isFinalUserTranscript = true;
               } else if (rawServerContent?.interimContent?.parts) {
                 userTranscriptText = rawServerContent.interimContent.parts
                   .map((p: any) => p.text || "")
                   .join(" ");
+              }
+
+              if (isFinalUserTranscript && userTranscriptText.trim()) {
+                const cleanText = userTranscriptText.trim();
+                setChatHistory(prev => {
+                  const lastMsg = prev[prev.length - 1];
+                  if (lastMsg && lastMsg.role === 'user' && lastMsg.content === cleanText) {
+                    return prev;
+                  }
+                  return [...prev, {
+                    id: Math.random().toString(36).substr(2, 9),
+                    role: 'user',
+                    content: cleanText
+                  }];
+                });
               }
 
               if (userTranscriptText) {
@@ -8538,11 +8555,6 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
                           !showUi && "opacity-0 pointer-events-none scale-95"
                         )}>
-                          {/* Mini logo showing we are on Gemini Live page */}
-                          <div className="flex items-center gap-1.5 p-1 px-3.5 bg-white/[0.02] border border-white/[0.05] rounded-full mt-2 mb-2 pointer-events-auto z-50 animate-in fade-in duration-300">
-                            <span className="text-[9px] uppercase tracking-wider text-her-accent font-bold">Gemini Live Neural 📻</span>
-                          </div>
-
                           <div className="flex items-center gap-2">
                             <div className={cn(
                               "w-1.5 h-1.5 rounded-full transition-all duration-500",
