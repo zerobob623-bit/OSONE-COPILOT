@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass, Database } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -128,6 +128,17 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <MessageSquare size={18} />
                   <span>WhatsApp Evolution</span>
+                </button>
+
+                <button 
+                  onClick={() => { setMode('rag'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'rag' ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.15)]" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Database size={18} className="text-cyan-400" />
+                  <span>RAG • Conector PC</span>
                 </button>
               </div>
             </div>

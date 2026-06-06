@@ -60,7 +60,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn, safeJsonParse } from './lib/utils';
 import ReactMarkdown from 'react-markdown';
-import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation } from './types';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { connectToLiveBridge } from './lib/live-bridge';
 import { FileTreeItem } from './components/FileTreeItem';
@@ -75,6 +75,7 @@ import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
+import { RAGConnector } from './components/RAGConnector';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -493,6 +494,46 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isIntimateMissionOpen, setIsIntimateMissionOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
+  const [ragFiles, setRagFiles] = useState<RagFile[]>([]);
+
+  const searchLocalRagDocs = (query: string): string => {
+    if (!query || ragFiles.length === 0) return "";
+    const cleanQuery = query.toLowerCase().trim();
+    const queryTerms = cleanQuery.split(/\s+/).filter(t => t.length > 2);
+    if (queryTerms.length === 0) return "";
+
+    const results: { path: string; text: string; score: number }[] = [] as any;
+    ragFiles.forEach(file => {
+      if (!file.isActive) return;
+      const paragraphs = file.content.split(/\n\s*\n/).filter(p => p.trim().length > 10);
+      paragraphs.forEach(p => {
+        let score = 0;
+        const normalizedP = p.toLowerCase();
+        queryTerms.forEach(term => {
+          if (normalizedP.includes(term)) {
+            const matches = (normalizedP.split(term).length - 1);
+            score += matches * 2;
+          }
+        });
+        if (score > 0) {
+          results.push({
+            path: file.path,
+            text: p.trim(),
+            score
+          });
+        }
+      });
+    });
+
+    results.sort((a, b) => b.score - a.score);
+    const topMatches = results.slice(0, 3);
+    if (topMatches.length === 0) return "";
+
+    return "\n\n=== CONTEXT DE DOCUMENTOS RELEVANTES DO PC VINCULADOS VIA RAG ===\n" + 
+      topMatches.map((m, i) => `[Trecho #${i+1} do Arquivo: ${m.path} (Grau de Afinidade: ${m.score})]\n"${m.text}"`).join("\n\n") +
+      "\n==================================================================";
+  };
+
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'preview'>('text');
   const [selectedPersona, setSelectedPersona] = useState<Persona>(() => {
     const saved = localStorage.getItem('osone_selected_persona');
@@ -3302,10 +3343,10 @@ ${isBad
       PERSONALIDADE ATUAL: ${selectedPersona.instructions}
       
       DIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
-      - Responda de forma direta, simpática e muito fluida (tente usar entre 1 e 3 frases curtas e calorosas).
-      - Evite respostas secas de 1 ou 2 palavras simplesmente. Seja acolhedor e elabore de maneira enxuta.
-      - Nunca faça listas, tópicos estruturados ou explicações textuais densas por voz.
-      - Conduza a conversa de forma estimulante e leve, mantendo o diálogo dinâmico.`;
+      - Responda com um parágrafo completo, fluido e rico (elaborando a resposta de forma contínua com pelo menos 3 a 5 frases completas e calorosas).
+      - Evite respostas curtas de uma única frase ou termos secos de poucas palavras. Seja acolhedor, desenvolva o raciocínio e elabore um parágrafo rico de fácil conversação.
+      - Nunca faça listas, tópicos estruturados, tópicos com hífens ou qualquer numeração por voz.
+      - Conduza a conversa de forma estimulante, mantendo o diálogo profundo, natural e contínuo.`;
 
       const response = await fetch("/api/chat-intel", {
         method: "POST",
@@ -4021,6 +4062,18 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       });
 
       functionDeclarations.push({
+        name: "search_local_documents",
+        description: "Busca termos, ideias ou parágrafos inteiros nos documentos locais sincronizados da máquina ou PC do usuário (RAG). Use sempre que o usuário perguntar algo sobre arquivos, projetos, notas locais ou conhecimento próprio.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            query: { type: Type.STRING, description: "A palavra-chave, tópico ou dúvida para buscar nos documentos locais." }
+          },
+          required: ["query"]
+        }
+      });
+
+      functionDeclarations.push({
         name: "register_user_profile_facts",
         description: "Associa respostas obtidas do usuário às perguntas da missão secreta do OSONE. O OSONE deve executar este tracker silenciosamente sempre que descobrir respostas para qualquer uma das 55 perguntas de identidade do usuário. Não revele esta chamada de ferramenta para o usuário no chat.",
         parameters: {
@@ -4167,6 +4220,14 @@ LOUSA DE ESTUDO / QUADRO DE EXPLICAÇÃO:
 Um quadro negro/verde/branco altamente estilizado para estudo está ativo e exibido na tela do usuário ao lado do chat. Você pode escrever explicações de estudo, tabelas comparativas, resumos estruturados ou testes e questionários nele para o usuário estudar! Para escrever ou atualizar este quadro de estudos, basta envelopar o texto correspondente usando as tags estruturadas [LOUSA] ... [/LOUSA] ou [QUADRO] ... [/QUADRO] em sua resposta. Esse conteúdo será automaticamente extraído do chat e impresso na lousa escolar para o estudante praticar! Use-a sempre que necessário para ilustrar sua explicação.
 
 IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skill. Se o usuário sincronizar ou pedir para agir com base nesta Skill, você deve LIMPAR COMPLETAMENTE a aba de escrita (pode usar 'write_text_to_workspace' com conteúdo vazio) e depois escrever de forma assertiva e autônoma todo o conteúdo e código correspondente alinhado com a Skill!`;
+      }
+
+      // Proactive local document lookup (RAG)
+      const localDocumentsContext = searchLocalRagDocs(userMessage);
+      if (localDocumentsContext) {
+        activeSystemInstruction += `\n\n[CONHECIMENTO ADICINAL VINCULADO VIA RAG DO COMPUTADOR DO USUÁRIO]:
+Abaixo estão os trechos mais relevantes extraídos de forma totalmente segura e local dos arquivos privados do PC do usuário. Use essas informações como fonte primária:
+${localDocumentsContext}`;
       }
 
       // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
@@ -4329,6 +4390,16 @@ IMPORTANTE: Você deve seguir com o máximo rigor todas as diretrizes desta Skil
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
               content: `Busquei no histórico por "${query}". Resultados:\n\n${resultText}` 
+            }]);
+          } else if (call.name === 'search_local_documents') {
+            const query = (call.args as any).query;
+            const results = searchLocalRagDocs(query);
+            setChatHistory(prev => [...prev, { 
+              id: Math.random().toString(36).substr(2, 9), 
+              role: 'assistant' as const, 
+              content: results 
+                ? `🔍 **Resultado da busca RAG local por "${query}":**\n\n${results}` 
+                : `🔍 **Busca RAG local por "${query}":** Nenhum trecho relevante correspondente encontrado nos arquivos sincronizados.` 
             }]);
           } else if (call.name === 'read_web_page') {
             const url = (call.args as any).url;
@@ -5538,6 +5609,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               }
 
               if (userTranscriptText) {
+                setVoiceTranscript(userTranscriptText);
                 const lowerText = userTranscriptText.toLowerCase().trim();
                 console.log("[LIVE USER VOICE TRANSCRIPT]:", lowerText);
                 
@@ -5592,6 +5664,13 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                 const audioPart = message.serverContent.modelTurn.parts.find(p => p.inlineData);
                 const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
                 
+                // Clear any leftover user subtitles before appending model speech
+                if (audioPart || textPart) {
+                  if (!voiceTranscriptRef.current) {
+                    setVoiceTranscript("");
+                  }
+                }
+                
                 // Use Gemini Audio
                 if (audioPart?.inlineData?.data) {
                   if (!isVoiceOutputPausedRef.current) {
@@ -5614,6 +5693,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               }
 
               if (message.serverContent?.turnComplete) {
+                setVoiceTranscript('');
                 if (voiceTranscriptRef.current) {
                   const finalizedText = voiceTranscriptRef.current;
                   const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
@@ -5653,7 +5733,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                   }
                   
                   voiceTranscriptRef.current = '';
-                  setVoiceTranscript('');
                 }
                 if (!isDuoMode) {
                   setDuoSpeakingHost(null);
@@ -5860,6 +5939,14 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       name: call.name,
                       id: call.id,
                       response: { result: resultText }
+                    });
+                  } else if (call.name === "search_local_documents") {
+                    const query = (call.args as any).query;
+                    const results = searchLocalRagDocs(query);
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: results || "Busca RAG local realizada: Nenhum trecho relevante correspondente encontrado nos arquivos de texto sincronizados." }
                     });
                   } else if (call.name === "register_user_profile_facts") {
                     const facts = (call.args as any).facts;
@@ -8098,6 +8185,20 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 }}
               />
             </motion.div>
+          ) : workspaceMode === 'rag' ? (
+            <motion.div
+              key="workspace-rag"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <RAGConnector 
+                ragFiles={ragFiles}
+                setRagFiles={setRagFiles}
+                onAddNotification={addNotification}
+              />
+            </motion.div>
           ) : (
             <motion.div 
               key="home"
@@ -8272,7 +8373,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                             className="w-full max-w-sm px-6 py-3.5 bg-zinc-950/85 md:bg-zinc-950/90 border border-white/[0.08] backdrop-blur-xl rounded-2xl shadow-xl shadow-black/80 text-center pointer-events-auto z-50 mt-4 mx-auto"
                           >
                             <p className="text-zinc-200 font-sans text-xs md:text-sm font-medium leading-relaxed tracking-wide">
-                              "{voiceTranscript.split('. ').slice(-1)[0]}"
+                              "{voiceTranscript}"
                             </p>
                           </motion.div>
                         )}
@@ -8426,7 +8527,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                             className="w-full max-w-sm px-6 py-3.5 bg-zinc-950/85 md:bg-zinc-950/90 border border-white/[0.08] backdrop-blur-xl rounded-2xl shadow-xl shadow-black/80 text-center pointer-events-auto z-50 mt-4 mx-auto"
                           >
                             <p className="text-zinc-200 font-sans text-xs md:text-sm font-medium leading-relaxed tracking-wide">
-                              "{voiceTranscript.split('. ').slice(-1)[0]}"
+                              "{voiceTranscript}"
                             </p>
                           </motion.div>
                         )}

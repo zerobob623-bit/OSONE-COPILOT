@@ -33,7 +33,17 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp' | 'map';
+export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp' | 'map' | 'rag';
+
+export interface RagFile {
+  id: string;
+  name: string;
+  path: string;
+  content: string;
+  size: number;
+  type: string;
+  isActive: boolean;
+}
 
 export interface DrawingObject {
   id: string;
