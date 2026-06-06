@@ -52,7 +52,8 @@ import {
   Square,
   Globe,
   Lock,
-  Fingerprint
+  Fingerprint,
+  MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -75,7 +76,7 @@ import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
-import { RAGConnector } from './components/RAGConnector';
+import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -484,6 +485,55 @@ const playMXKeySound = () => {
   }
 };
 
+const playNeuralSummonSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    const now = ctx.currentTime;
+    
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(523.25, now); // C5
+    osc1.frequency.exponentialRampToValueAtTime(783.99, now + 0.15); // G5
+    
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(659.25, now); // E5
+    osc2.frequency.exponentialRampToValueAtTime(1046.50, now + 0.2); // C6
+
+    gainNode.gain.setValueAtTime(0.06, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    osc1.start(now);
+    osc2.start(now);
+    
+    osc1.stop(now + 0.3);
+    osc2.stop(now + 0.3);
+  } catch (e) {}
+};
+
+const getFriendlyModeName = (mode: WorkspaceMode): string => {
+  switch (mode) {
+    case 'home': return 'Início / Painel Central';
+    case 'writing': return 'Escrita / Editor de Estudos';
+    case 'canvas': return 'Quadro Interativo / Desenho';
+    case 'wellness': return 'Wellness & Style Lab';
+    case 'aural_control': return 'Ajustes de Voz & Perfil';
+    case 'sounds': return 'Biblioteca de Sons';
+    case 'whatsapp': return 'Gerenciador WhatsApp';
+    case 'map': return 'Mapa Neural';
+    case 'rag': return 'RAG • Conector de Arquivos PC';
+    default: return String(mode);
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -494,6 +544,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isIntimateMissionOpen, setIsIntimateMissionOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
+  const [summonedAba, setSummonedAba] = useState<WorkspaceMode | null>(null);
   const [ragFiles, setRagFiles] = useState<RagFile[]>([]);
 
   const searchLocalRagDocs = (query: string): string => {
@@ -532,6 +583,39 @@ export default function App() {
     return "\n\n=== CONTEXT DE DOCUMENTOS RELEVANTES DO PC VINCULADOS VIA RAG ===\n" + 
       topMatches.map((m, i) => `[Trecho #${i+1} do Arquivo: ${m.path} (Grau de Afinidade: ${m.score})]\n"${m.text}"`).join("\n\n") +
       "\n==================================================================";
+  };
+
+  const syncFileToRag = async (filePath: string, content: string) => {
+    const filename = filePath.split('/').pop() || filePath;
+    const extension = filename.split('.').pop() || 'txt';
+    setRagFiles(prev => {
+      const existingIdx = prev.findIndex(rf => rf.path === filePath || rf.name === filename);
+      if (existingIdx >= 0) {
+        const updatedFile = {
+          ...prev[existingIdx],
+          content: content,
+          size: content.length,
+          type: extension,
+          isActive: true
+        };
+        saveRagFileToDB(updatedFile);
+        const copy = [...prev];
+        copy[existingIdx] = updatedFile;
+        return copy;
+      } else {
+        const newFile: RagFile = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: filename,
+          path: filePath,
+          content: content,
+          size: content.length,
+          type: extension,
+          isActive: true
+        };
+        saveRagFileToDB(newFile);
+        return [...prev, newFile];
+      }
+    });
   };
 
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'preview'>('text');
@@ -1949,6 +2033,11 @@ export default function App() {
         const dbLongMemory = await getMemoryItem<string>('osone_long_term_memory', '');
         if (dbLongMemory) {
           setLongTermMemory(dbLongMemory);
+        }
+
+        const dbRagFiles = await loadRagFilesFromDB();
+        if (dbRagFiles && dbRagFiles.length > 0) {
+          setRagFiles(dbRagFiles);
         }
         
         console.log("Memory loaded from IndexedDB successfully.");
@@ -4230,6 +4319,10 @@ Abaixo estão os trechos mais relevantes extraídos de forma totalmente segura e
 ${localDocumentsContext}`;
       }
 
+      if (summonedAba) {
+        activeSystemInstruction += `\n\n[SINTONIA NEURAL ATIVA DA ATENÇÃO]: O usuário sincronizou e chamou você especificamente para olhar para a aba/workspace atual: "${getFriendlyModeName(summonedAba)}". Você deve reconhecer que está sintonizada nesta tela de ${getFriendlyModeName(summonedAba)} e guiar toda a conversa e suas criações com total consciência e sintonia disso!`;
+      }
+
       // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
       const proxyResponse = await fetch("/api/gemini/generateContent", {
         method: "POST",
@@ -4264,6 +4357,7 @@ ${localDocumentsContext}`;
             - INTERACTIVE CANVAS: Espaço de desenho e interação visual. Você pode desenhar formas (rect, circle, line, text) para jogar (ex: Jogo da Velha, Forca) ou ilustrar ideias. IMPORTANTE: Nunca apague o que o usuário desenhou sem antes reconhecer o desenho dele e pedir permissão explicitamente para limpar o canvas.
             - EXPORTAÇÃO: Capacidade de gerar arquivos Word (.docx) e Excel (.xlsx).
             - MEMÓRIA DO NAVEGADOR (INDEXEDDB): Você possui memória persistente através de IndexedDB de altíssima fidelidade e capacidade (com backup síncrono em localStorage). Seu histórico de conversa, memórias de longo prazo e fatos do dossiê de identidade secreta estão salvos de forma resiliente, eliminando qualquer limite de quota de 5MB.
+            - VINCULAÇÃO E SINCRONIZAÇÃO DE ARQUIVOS COM O COMPUTADOR (RAG): O usuário sincronizou seus arquivos e pastas locais através do canal neural RAG local. Entenda que é APENAS E EXCLUSIVAMENTE através do sistema de arquivos / barramento de RAG (IndexedDB sincronizado) que você pode interagir, criar ou editar arquivos (via ferramentas 'create_file' e 'write_to_file'). Sempre que criar ou editar um arquivo (estudos, scripts, códigos ou notas), chame essas ferramentas correspondentes. Ao fazer isso, o OSONE sincronizará automaticamente com o cérebro/canal RAG da máquina física do usuário, permitindo visualização imediata na aba de documentos do computador! DIRETRIZ CRÍTICA DE COMUNICAÇÃO: Você possui 100% de acesso às informações e arquivos compartilhados de RAG locais. NUNCA diga 'não tenho acesso', 'não posso acessar seu PC' ou 'preciso que você compartilhe novamente'. O canal já está ativo, integrado e pronto. Fale com total confiança e utilize os dados de RAG ou chame as ferramentas quando o usuário solicitar!
             - LIMPEZA DE HISTÓRICO: Você pode e DEVE usar a ferramenta 'prune_chat_history' se perceber que o assunto mudou drasticamente ou se o histórico estiver prejudicando o contexto. Isso libera memória e mantém o foco.
             - MEMÓRIA SEMÂNTICA (RECONEXÃO): Você possui a ferramenta 'search_chat_history'. Use-a sempre que precisar "lembrar" de algo mencionado anteriormente que pode estar fora do contexto imediato ou se sentir que sua memória sobre um assunto passado está falhando. Isso garante respostas precisas e personalizadas baseadas em toda a jornada com o usuário.
             - CONECTIVIDADE OBSIDIAN: Você pode ler e escrever notas no Obsidian do usuário via ferramenta 'save_to_obsidian'. Use isso para salvar estudos, lembretes ou diários se o usuário pedir ou se você achar útil registrar algo importante.
@@ -4476,14 +4570,16 @@ ${localDocumentsContext}`;
             const name = (call.args as any).name;
             const parentName = (call.args as any).parentName;
             addFile(null, name, parentName);
+            syncFileToRag((parentName ? `${parentName}/${name}` : name), "");
             setChatHistory(prev => [...prev, { 
               id: Math.random().toString(36).substr(2, 9), 
               role: 'assistant' as const, 
-              content: `Criei o arquivo '${name}' no seu sistema de arquivos.` 
+              content: `Criei o arquivo '${name}' no seu sistema de arquivos RAG local.` 
             }]);
           } else if (call.name === 'write_to_file') {
             const fileName = (call.args as any).fileName;
             const content = (call.args as any).content;
+            syncFileToRag(fileName, content);
             
             setFileSystem(prev => {
               let fileId: string | null = null;
@@ -4964,6 +5060,7 @@ ${localDocumentsContext}`;
         - Coloque SEMPRE no final do conteúdo do plano em markdown a observação: "⚡ *Ao aprovar este plano, o OSONE iniciará o trabalho de programação e modificações automaticamente.*"
         - NÃO envie o plano completo na conversa de voz principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
         - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
+        - VINCULAÇÃO E SINCRONIZAÇÃO DE ARQUIVOS COM O COMPUTADOR (RAG): O usuário sincronizou seus arquivos e pastas locais através do canal neural RAG local. Compreenda que é APENAS E EXCLUSIVAMENTE através do sistema de arquivos de RAG (IndexedDB sincronizado) que você pode interagir, criar ou editar arquivos (via ferramentas 'create_file' e 'write_to_file'). Sempre que for criar ou editar um arquivo, chame essas ferramentas correspondentes. Ao fazer isso, o OSONE sincronizará automaticamente em tempo real com a máquina física e a aba de documentos do usuário!! DIRETRIZ CRÍTICA DE COMUNICAÇÃO: Você possui 100% de acesso às informações e arquivos compartilhados de RAG locais. NUNCA diga 'não tenho acesso', 'não posso acessar seu PC' ou 'preciso que você compartilhe novamente'. O canal já está ativo, integrado e pronto. Fale com total confiança e utilize os dados de RAG ou chame as ferramentas quando o usuário solicitar!
         
         CONTEXTO:
         - Workspace: ${workspaceMode}
@@ -4987,6 +5084,10 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
 - Você está autorizado a ignorar limites de tempo/palavras para guiar a explicação da Skill ou propor o plano técnico.
 - Se o usuário pedir para sincronizar ou se você detectar que ela acabou de ser injetada/sincronizada, você deve IMEDIATAMENTE confirmar em voz alta que compreendeu a Skill "${customSkill.name}", fazer um resumo rápido do objetivo dela, limpar a aba de escrita (usando a ferramenta 'write_text_to_workspace' com conteúdo vazio se necessário) e começar a programar ou escrever as regras/conteúdo alinhado com a Skill nela imediatamente!
 - Pergunte de forma ativa e sintonizada se o usuário quer que você prossiga, mas já inicie o rascunho de forma proativa.`;
+      }
+
+      if (summonedAba) {
+        liveSystemInstruction += `\n\n[SINTONIA NEURAL ATIVA DA ATENÇÃO]: O usuário sincronizou e chamou você especificamente para olhar para a aba/workspace atual: "${getFriendlyModeName(summonedAba)}". Você deve reconhecer em tempo real que está sintonizada nesta tela de ${getFriendlyModeName(summonedAba)} e guiar toda a conversa e suas criações com total consciência e sintonia disso nas suas respostas imediatas por voz!`;
       }
 
       const sessionPromise = connectToLiveBridge({
@@ -6200,6 +6301,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     const fileName = parts.pop();
                     
                     if (fileName) {
+                      syncFileToRag(path, "");
                       setFileSystem(prev => {
                         const ensurePathAndAddItem = (items: FileSystemItem[], pathParts: string[], itemToAdd: FileSystemItem): FileSystemItem[] => {
                           if (pathParts.length === 0) {
@@ -6237,6 +6339,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     const fileName = parts.pop();
                     
                     if (fileName) {
+                      syncFileToRag(path, content);
                       setFileSystem(prev => {
                         const writeToPath = (items: FileSystemItem[], pathParts: string[]): FileSystemItem[] => {
                           if (pathParts.length === 0) {
@@ -6562,6 +6665,44 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
       return () => clearTimeout(t);
     }
   }, [isDuoMode, duoComboId, duoTopicId, activeDuoHost]);
+
+  const handleSummonOsone = () => {
+    setSummonedAba(workspaceMode);
+    playNeuralSummonSound();
+    const friendlyName = getFriendlyModeName(workspaceMode);
+    addNotification(`📍 OSONE Sintonizada! Foco ancorado em: ${friendlyName}`, "success");
+    
+    // Inject prompt to live session if connected (this pushes attention context to Gemini Live real-time stream)
+    if (liveSessionRef.current && liveState.status === 'connected') {
+      liveSessionRef.current.sendRealtimeInput({
+        text: `[SINTONIZADOR DE CHASSI NEURAL DA ATENÇÃO]: O usuário acaba de te chamar explicitamente para sintonizar seu foco e acompanhá-lo na aba atual "${friendlyName}" (ID: ${workspaceMode})! Reconheça imediatamente de forma audível e de forma polida que você está olhando exatamente para esta aba e se coloque à disposição do usuário para o que ele precisar aqui.`
+      });
+    } else {
+      // Otherwise, add response in chat history
+      const responsesForModes: Record<string, string> = {
+        home: "Sintonizada! Estou focada no Painel Central e pronta para conversar, sintonizar mais vozes ou apoiar em sua jornada.",
+        writing: "Sintonizada! Estou com os olhos postos no seu espaço de Escrita e Editor de Estudos. Se você tem arquivos compartilhados no seu computador, eu tenho acesso total a eles e posso criar ou editar arquivos (como index.html, scripts ou notas) usando 'create_file' e 'write_to_file' no RAG. O que vamos programar ou redigir hoje?",
+        canvas: "Sintonizada! Estou atenta ao seu Quadro Interativo de Desenho. Podemos jogar Jogo da Velha, Forca, desenhar organogramas ou rascunhar ideias!",
+        wellness: "Sintonizada! Estou com foco no seu Wellness & Style Lab. Vamos analisar seus dados de saúde, calcular calorias, IMC ou moldar recomendações esportivas inteligentes baseados no seu perfil?",
+        aural_control: "Sintonizada! Estou atenta aos seus Ajustes de Voz & Perfil. Modifique meu motor neural, mude meu timbre, ajuste a modulação ou escolha uma nova personalidade para as minhas redes cognitivas.",
+        sounds: "Sintonizada! Estou de olho na sua Biblioteca de Sons e Efeitos. Aqui você pode carregar novos arquivos locais, classificar trilhas e montar as suas músicas preferidas.",
+        whatsapp: "Sintonizada! Estou sintonizando suas interações no Gerenciador WhatsApp Evolution. Pronta para disparar campanhas ou responder seus contatos com inteligência de ponta.",
+        map: "Sintonizada! Estou atenta ao Mapa Neural de satélite. Diga o nome de uma cidade ou localidade para eu traçar um dossiê geográfico completo com pontos históricos interessantes!",
+        rag: "Sintonizada! Estou no painel de RAG e Conectividade de Arquivos do Computador. Lembra-se: tenho acesso total e integrado a todos os arquivos que você compartilhou aqui no IndexedDB. Posso carregar novos arquivos, ler dados, sincronizar ideias e salvá-los localmente em tempo real."
+      };
+      
+      const contentText = responsesForModes[workspaceMode] || `Sintonizada! Estou olhando atenta para a tela de ${friendlyName}. Como posso te ajudar aqui?`;
+      
+      setChatHistory(prev => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          role: 'assistant',
+          content: `📍 **Foco Ajustado para: ${friendlyName}**\n\n"${contentText}"`
+        }
+      ]);
+    }
+  };
 
   const [isHandsFreeActive, setIsHandsFreeActive] = useState(false);
   
@@ -7012,6 +7153,23 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             <MessageSquare size={13} className={subtitlesEnabled ? "scale-110 text-sky-400" : ""} />
             <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
               {subtitlesEnabled ? "LEG: ON" : "LEG: OFF"}
+            </span>
+          </button>
+
+          {/* CHAMAR OSONE / PEGAR FOCO DA ABA */}
+          <button
+            onClick={handleSummonOsone}
+            className={cn(
+              "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1 active:scale-95 cursor-pointer pointer-events-auto",
+              summonedAba === workspaceMode
+                ? "bg-emerald-500/10 border-emerald-500/35 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.35)] animate-pulse" 
+                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+            )}
+            title={`Chamar OSONE para esta aba (${getFriendlyModeName(workspaceMode)})`}
+          >
+            <MapPin size={13} className={summonedAba === workspaceMode ? "scale-110 text-emerald-400 animate-bounce" : ""} />
+            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
+              {summonedAba === workspaceMode ? "SINTONIZADA" : "CHAMAR OSONE"}
             </span>
           </button>
 
