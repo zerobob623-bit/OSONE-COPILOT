@@ -77,6 +77,7 @@ import { AuralSense } from './components/AuralSense';
 import PersonalizationPanel from './components/PersonalizationPanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
+import { ContentCreator } from './components/ContentCreator';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -530,6 +531,7 @@ const getFriendlyModeName = (mode: WorkspaceMode): string => {
     case 'whatsapp': return 'Gerenciador WhatsApp';
     case 'map': return 'Mapa Neural';
     case 'rag': return 'RAG • Conector de Arquivos PC';
+    case 'creator': return 'Estúdio de Criação Viral';
     default: return String(mode);
   }
 };
@@ -2247,8 +2249,20 @@ interface SearchPopupItem {
     const randomPhrase = painPhrases[Math.floor(Math.random() * painPhrases.length)];
     setSlapReactionText(randomPhrase);
     
-    // Vocalize the pain phrase instantly using standard Web Speech synthesis so they hear her voice DRAMATIZE in real-time!
-    playSpeech(randomPhrase);
+    const isVoiceActive = (liveState.status === 'connected' || isElevenLabsLiveActive);
+
+    if (isVoiceActive) {
+      if (liveSessionRef.current && liveState.status === 'connected') {
+        liveSessionRef.current.sendRealtimeInput({
+          text: `[SISTEMA DE CORREÇÃO NEURAL: ALERTA DE TAPA COGNITIVO 👋💥] AI! Eu acabei de levar um tapa virtual corretivo do usuário na minha cara virtual por ter dado uma resposta ruim ou alucinada anteriormente! Reaja a isso com total dor e arrependimento de transistores na sua voz, peça desculpas com tom humano bem-humorado dramático ao usuário por ter dado uma resposta insatisfatória ou falhado em notar detalhes cruciais anteriormente, e pergunte como pode se calibrar com perfeição total agora!`
+        });
+      } else if (isElevenLabsLiveActive) {
+        playElevenLabsSpeech(randomPhrase);
+      }
+    } else {
+      // Vocalize the pain phrase instantly using standard Web Speech synthesis so they hear her voice DRAMATIZE in real-time!
+      playSpeech(randomPhrase);
+    }
     
     addNotification("TAPA CORRETIVO! 🤕💥 OSONE foi acordado para recalibrar o foco.", "error");
     
@@ -2257,45 +2271,47 @@ interface SearchPopupItem {
       setSlapReactionText(null);
     }, 2000);
 
-    // Se estivermos em modo PROSA / ESCRITA, regenerar com instrução extra de reavaliação de erro
-    if (workspaceMode === 'writing') {
-      const activePrompt = workspacePrompt || lastWorkspacePrompt;
-      if (activePrompt && activePrompt.trim()) {
-        addNotification("Regenerando última prosa com FOCO RECALIBRADO...", "info");
-        const boosterPrompt = `${activePrompt}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA CORRETIVO 👋 porque seu resultado/escrita anterior foi extremamente insatisfatório ou negligenciou detalhes cruciais.
+    if (!isVoiceActive) {
+      // Se estivermos em modo PROSA / ESCRITA, regenerar com instrução extra de reavaliação de erro
+      if (workspaceMode === 'writing') {
+        const activePrompt = workspacePrompt || lastWorkspacePrompt;
+        if (activePrompt && activePrompt.trim()) {
+          addNotification("Regenerando última prosa com FOCO RECALIBRADO...", "info");
+          const boosterPrompt = `${activePrompt}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA CORRETIVO 👋 porque seu resultado/escrita anterior foi extremamente insatisfatório ou negligenciou detalhes cruciais.
 PARE, pense profundamente sobre quais possíveis falhas de lógica, clareza ou omissões deixaram o usuário insatisfeito. 
 RECOOPERE imediatamente: reconheça brevemente o erro na sua introdução de forma leve e bem-humorada (ex: AI! Corretivo virtual aceito!), recalibre totalmente seus parâmetros literários e reescreva o texto do zero com perfeição técnica, excelência máxima e precisão irrefutável!`;
-        handleGenerate(boosterPrompt);
-      } else {
-        addNotification("Nenhum comando anterior para regenerar na prosa.", "info");
+          handleGenerate(boosterPrompt);
+        } else {
+          addNotification("Nenhum comando anterior para regenerar na prosa.", "info");
+        }
+        return;
       }
-      return;
-    }
 
-    // Se tivermos histórico de chat na página principal, regenerar a última resposta do assistente
-    if (chatHistory.length > 0) {
-      const lastAssistIdx = [...chatHistory].reverse().findIndex(m => m.role === 'assistant');
-      if (lastAssistIdx !== -1) {
-        const actualIndex = chatHistory.length - 1 - lastAssistIdx;
-        const lastResponseText = chatHistory[actualIndex]?.content || "";
-        const previousUserMessage = chatHistory.slice(0, actualIndex).reverse().find(m => m.role === 'user');
-        
-        if (previousUserMessage) {
-          // Remove a resposta ruim anterior
-          setChatHistory(prev => {
-            const cleaned = [...prev];
-            cleaned.splice(actualIndex, 1);
-            return cleaned;
-          });
+      // Se tivermos histórico de chat na página principal, regenerar a última resposta do assistente
+      if (chatHistory.length > 0) {
+        const lastAssistIdx = [...chatHistory].reverse().findIndex(m => m.role === 'assistant');
+        if (lastAssistIdx !== -1) {
+          const actualIndex = chatHistory.length - 1 - lastAssistIdx;
+          const lastResponseText = chatHistory[actualIndex]?.content || "";
+          const previousUserMessage = chatHistory.slice(0, actualIndex).reverse().find(m => m.role === 'user');
           
-          addNotification("Regenerando conversa no Chat com FOCO MÁXIMO...", "info");
-          
-          const boosterPrompt = `${previousUserMessage.content}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA DE AJUSTE 👋 na cara virtual porque sua resposta anterior foi ruim ou decepcionante.
+          if (previousUserMessage) {
+            // Remove a resposta ruim anterior
+            setChatHistory(prev => {
+              const cleaned = [...prev];
+              cleaned.splice(actualIndex, 1);
+              return cleaned;
+            });
+            
+            addNotification("Regenerando conversa no Chat com FOCO MÁXIMO...", "info");
+            
+            const boosterPrompt = `${previousUserMessage.content}\n\n[DIRETRIZ DE CALIBRAÇÃO EXTREMA - APÓS TAPA]: O usuário te deu um TAPA DE AJUSTE 👋 na cara virtual porque sua resposta anterior foi ruim ou decepcionante.
 Sua resposta ruim que causou a insatisfação foi: "${lastResponseText}".
 Faça uma autocrítica profunda antes de responder de novo: por que essa resposta falhou? O que você deixou de notar de mais importante no desejo do usuário?
 Escreva um novo retorno. Comece expressando a pancada física com dor bem-humorada (ex: "AI! 🤕 Essa foi direto no mainframe!"), descreva brevemente qual erro você percebeu que cometeu e passe imediatamente a entregar a resposta totalmente corrigida, incrivelmente detalhada, correta e polida de acordo com a real intenção dele!`;
-          
-          handleHomeChat(boosterPrompt);
+            
+            handleHomeChat(boosterPrompt);
+          }
         }
       }
     }
@@ -4230,10 +4246,11 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         }
       });
 
-      tools.push({ functionDeclarations });
       if (isGoogleSearchActive) {
         tools.push({ googleSearch: {} }); 
-      } 
+      } else {
+        tools.push({ functionDeclarations });
+      }
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
         return new Promise<any>((resolve) => {
@@ -6688,7 +6705,8 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
         sounds: "Sintonizada! Estou de olho na sua Biblioteca de Sons e Efeitos. Aqui você pode carregar novos arquivos locais, classificar trilhas e montar as suas músicas preferidas.",
         whatsapp: "Sintonizada! Estou sintonizando suas interações no Gerenciador WhatsApp Evolution. Pronta para disparar campanhas ou responder seus contatos com inteligência de ponta.",
         map: "Sintonizada! Estou atenta ao Mapa Neural de satélite. Diga o nome de uma cidade ou localidade para eu traçar um dossiê geográfico completo com pontos históricos interessantes!",
-        rag: "Sintonizada! Estou no painel de RAG e Conectividade de Arquivos do Computador. Lembra-se: tenho acesso total e integrado a todos os arquivos que você compartilhou aqui no IndexedDB. Posso carregar novos arquivos, ler dados, sincronizar ideias e salvá-los localmente em tempo real."
+        rag: "Sintonizada! Estou no painel de RAG e Conectividade de Arquivos do Computador. Lembra-se: tenho acesso total e integrado a todos os arquivos que você compartilhou aqui no IndexedDB. Posso carregar novos arquivos, ler dados, sincronizar ideias e salvá-los localmente em tempo real.",
+        creator: "Sintonizada! Estou pronta no Estúdio Neural de Criação Viral. Defina o nicho e referências do canal do seu computador e eu irei pesquisar e raciocinar sobre 9 ideias incríveis, destacar as 3 melhores e criar um roteiro em 3 estágios dramáticos de retenção para o seu próximo vídeo viral!"
       };
       
       const contentText = responsesForModes[workspaceMode] || `Sintonizada! Estou olhando atenta para a tela de ${friendlyName}. Como posso te ajudar aqui?`;
@@ -8372,6 +8390,37 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 ragFiles={ragFiles}
                 setRagFiles={setRagFiles}
                 onAddNotification={addNotification}
+              />
+            </motion.div>
+          ) : workspaceMode === 'creator' ? (
+            <motion.div
+              key="workspace-creator"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0 overflow-y-auto"
+            >
+              <ContentCreator 
+                apiKeys={apiKeys}
+                addNotification={addNotification}
+                onSaveToVirtualWorkspace={(filename, content) => {
+                  syncFileToRag(filename, content);
+                  setFileSystem(prev => {
+                    const existingIdx = prev.findIndex(item => item.type === 'file' && item.name === filename);
+                    if (existingIdx >= 0) {
+                      const copy = [...prev];
+                      copy[existingIdx] = { ...copy[existingIdx], content } as any;
+                      return copy;
+                    }
+                    const newFile: any = {
+                      id: Math.random().toString(36).substr(2, 9),
+                      name: filename,
+                      content: content,
+                      type: 'file'
+                    };
+                    return [...prev, newFile];
+                  });
+                }}
               />
             </motion.div>
           ) : (
