@@ -49,6 +49,7 @@ import {
   BookOpen,
   Check,
   RotateCcw,
+  Undo,
   Square,
   Globe,
   Lock,
@@ -1547,9 +1548,72 @@ export default function App() {
     }
   };
 
-  const [workspaceText, setWorkspaceText] = useState(() => {
+  const [workspaceText, setWorkspaceTextState] = useState(() => {
     return localStorage.getItem('osone_workspace_text') || '';
   });
+
+  const [workspaceHistory, setWorkspaceHistory] = useState<string[]>([]);
+  const [lastHistorySaveTime, setLastHistorySaveTime] = useState<number>(0);
+
+  const pushToHistory = (oldValue: string) => {
+    setWorkspaceHistory(prev => {
+      if (prev.length > 0 && prev[prev.length - 1] === oldValue) {
+        return prev;
+      }
+      const newHistory = [...prev, oldValue];
+      if (newHistory.length > 50) {
+        newHistory.shift();
+      }
+      return newHistory;
+    });
+  };
+
+  const setWorkspaceText = (newValueOrFunc: string | ((prev: string) => string)) => {
+    setWorkspaceTextState((currentValue) => {
+      const resolvedValue = typeof newValueOrFunc === 'function' ? newValueOrFunc(currentValue) : newValueOrFunc;
+      
+      if (resolvedValue !== currentValue) {
+        const now = Date.now();
+        const isProgrammatic = Math.abs(resolvedValue.length - currentValue.length) > 8;
+        const timeElapsed = now - lastHistorySaveTime;
+        const isTimePass = timeElapsed > 1200;
+        
+        if (isProgrammatic || isTimePass || currentValue.endsWith(' ') || currentValue.endsWith('\n') || resolvedValue === '') {
+          pushToHistory(currentValue);
+          setLastHistorySaveTime(now);
+        }
+      }
+      return resolvedValue;
+    });
+  };
+
+  const handleUndoWorkspaceText = () => {
+    if (workspaceHistory.length === 0) {
+      addNotification("Nada para desfazer!", "info");
+      return;
+    }
+    const previous = workspaceHistory[workspaceHistory.length - 1];
+    setWorkspaceHistory(prev => prev.slice(0, -1));
+    setWorkspaceTextState(previous);
+    addNotification("Desfeito! Estado anterior recuperado. ↩️", "success");
+  };
+
+  // Keyboard shortcut Ctrl+Z / Cmd+Z handler
+  useEffect(() => {
+    const handleGlobalUndoKey = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isUndoKey = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey;
+      
+      if (isUndoKey && workspaceMode === 'writing') {
+        if (workspaceHistory.length > 0) {
+          e.preventDefault();
+          handleUndoWorkspaceText();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalUndoKey);
+    return () => window.removeEventListener('keydown', handleGlobalUndoKey);
+  }, [workspaceHistory, workspaceMode]);
   
   useEffect(() => {
     localStorage.setItem('osone_workspace_text', workspaceText);
@@ -7725,6 +7789,24 @@ Você pode pedir para a IA elaborar lições ou escrever dados diretamente aqui 
                     <div className="md:hidden flex items-center gap-2 text-[8px] font-mono opacity-40">
                       <span>{workspaceText.trim() === '' ? 0 : workspaceText.trim().split(/\s+/).length}p</span>
                     </div>
+                  )}
+
+                  {/* Desfazer (Ctrl+Z) Button */}
+                  {writingSubMode === 'text' && (
+                    <button
+                      onClick={handleUndoWorkspaceText}
+                      disabled={workspaceHistory.length === 0}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all border shrink-0 flex items-center justify-center gap-1.5 text-[10px] font-mono",
+                        workspaceHistory.length > 0
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 active:scale-95 cursor-pointer"
+                          : "border-white/5 text-white/10 cursor-not-allowed opacity-55"
+                      )}
+                      title={workspaceHistory.length > 0 ? "Desfazer alteração (Ctrl+Z)" : "Nada para desfazer"}
+                    >
+                      <Undo size={13} className={workspaceHistory.length > 0 ? "text-amber-400 animate-pulse" : ""} />
+                      <span className="hidden sm:inline-block">Desfazer</span>
+                    </button>
                   )}
 
                   {/* Focus Mode selection */}
