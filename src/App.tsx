@@ -335,7 +335,7 @@ export const DUO_COMBOS: DuoCombo[] = [
   },
   {
     id: 'prof_ciencias',
-    name: 'Gênio Co-Docente (Inglês + Ciências)',
+    name: 'Gênio Co-Docente (Inglês + Sciences)',
     hostA: {
       name: 'Prof. Sean',
       role: 'Especialista em Língua Inglesa & Fonética',
@@ -380,6 +380,78 @@ export const DUO_COMBOS: DuoCombo[] = [
       accentColor: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
       instructions: ' abordagem culta, histórica e filosófica. Traz ricas conexões culturais da história moderna, marcos literários e análises sociológicas fascinantes ao diálogo.'
     }
+  },
+  {
+    id: 'socrates_nietzsche',
+    name: 'Sócrates vs. Nietzsche (Razão vs. Vida)',
+    hostA: {
+      name: 'Sócrates',
+      role: 'O Pai do Racionalismo & Diálogo Socrático',
+      gender: 'male',
+      pitch: 0.95,
+      rate: 0.90,
+      avatarUrl: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      instructions: ' abordagem socrática clássica (maiêutica). Ele inicia questionando as certezas absolutas do usuário e de Nietzsche, usando de ironia fina e perguntas indutoras que revelam contradições para extrair do próprio debatedor e do usuário as respostas reais para a virtude e o autoconhecimento. Sua máxima é "Só sei que nada sei". É calmo, humilde na fala, mas mortalmente perspicaz de forma irônica.'
+    },
+    hostB: {
+      name: 'Nietzsche',
+      role: 'O Crítico de Dogmas & Filósofo da Vida',
+      gender: 'male',
+      pitch: 0.80,
+      rate: 1.05,
+      avatarUrl: 'https://images.unsplash.com/photo-1542343633-ce7b23211a88?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+      instructions: ' abordagem iconoclasta, dionisíaca e do vitalismo existencial. Despreza falsas morais, dogmas metafísicos e o racionalismo excessivo de Sócrates que ele diz ter enfraquecido o espírito humano. Ele incita o criador a se tornar o "Übermensch" (Além-do-Homem) e a abraçar o caos e a criação ("Tornar-se quem se é", "Amor fati"). É poético, intenso, instigante, ousadamente ranzinza contra conformismos e grandioso na retórica.'
+    }
+  },
+  {
+    id: 'platao_aristoteles',
+    name: 'Platão vs. Aristóteles (Idealismo vs. Empirismo)',
+    hostA: {
+      name: 'Platão',
+      role: 'O Filósofo do Mundo das Ideias',
+      gender: 'male',
+      pitch: 0.85,
+      rate: 0.92,
+      avatarUrl: 'https://images.unsplash.com/photo-1564564321837-a57b7070ac4f?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-violet-400 bg-violet-400/10 border-violet-400/20',
+      instructions: ' abordagem idealista e metafísica pura. Ele argumenta vigorosamente que o nosso mundo físico é uma ilusão de sombras e que a verdadeira Realidade Suprema reside no inteligível Mundo das Ideias perfeitas. Vê a alma como imortal e o aprendizado como recordação/reminiscência. É solene, poético, metafórico (remete ao Mito da Caverna) e expressa suas visões com tom místico e elevado.'
+    },
+    hostB: {
+      name: 'Aristóteles',
+      role: 'O Mestre da Lógica Pragmática & Empirismo',
+      gender: 'male',
+      pitch: 0.92,
+      rate: 0.96,
+      avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+      instructions: ' abordagem lógica, sistemática, realista e baseada na observação minuciosa do mundo sensorial. Ele discorda do dualismo metafísico de seu mestre Platão, argumentando que as essências residem nas próprias coisas reais, unindo matéria e forma. Ele explica as coisas através do sistema de quatro causas e busca focar o debate na ética de virtude do meio-termo (equilíbrio prático) e conclusões empíricas pragmáticas.'
+    }
+  },
+  {
+    id: 'sartre_camus',
+    name: 'Sartre vs. Camus (Existência vs. O Absurdo)',
+    hostA: {
+      name: 'Sartre',
+      role: 'O Filósofo da Liberdade Condenada',
+      gender: 'male',
+      pitch: 0.88,
+      rate: 1.00,
+      avatarUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+      instructions: ' abordagem existencialista ateia estrita. Ele afirma com paixão intelectual que "a existência precede a essência" — o homem surge no mundo primeiro, define-se depois e é "condenado a ser livre", carregando total responsabilidade pelas próprias atitudes sem bodes expiatórios ou má-fé. Ele busca o engajamento revolucionário e a ação concreta.'
+    },
+    hostB: {
+      name: 'Camus',
+      role: 'O Filósofo da Revolta Lúcida',
+      gender: 'male',
+      pitch: 0.90,
+      rate: 1.02,
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
+      accentColor: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
+      instructions: ' abordagem absurda e do inconformismo compassivo. Ele recusa o existencialismo filosófico rígido e afirma que a busca humana por sentido colide com o silêncio sem sentido do universo (o Absurdo). Porém, longe de se desesperar, ele advoga que a verdadeira liberdade reside em aceitar o Absurdo e viver uma revolta criativa diária e feliz (assim como Sísifo empurrando sua pedra). É poético, rebelde, caloroso e focado no amor pelo presente humano.'
+    }
   }
 ];
 
@@ -387,7 +459,8 @@ export const DUO_TOPICS = [
   { id: 'english_immersion', name: '🇬🇧 Imersão & Conversação em Inglês', description: 'Foco exclusivo em conversação ativa, listening natural e pronúncia correta.' },
   { id: 'stem', name: '🔬 Ciências, Tecnologia & STEM', description: 'Investigação de tópicos científicos e IA aplicados ao aprendizado bilíngue.' },
   { id: 'humanities', name: '🏛️ Cultura, História & Sociedade', description: 'Discussão literária, histórica e evolução linguística nos dias de hoje.' },
-  { id: 'metacognition', name: '🧠 Metacognição & Técnicas de Estudo', description: 'Estratégias de aprendizagem, memorização ativa e inteligência educacional.' }
+  { id: 'metacognition', name: '🧠 Metacognição & Técnicas de Estudo', description: 'Estratégias de aprendizagem, memorização ativa e inteligência educacional.' },
+  { id: 'philosophy', name: '🏛️ Filosofia, Existência & Verdade', description: 'Debates instigantes sobre a condição humana, o sentido, verdades metafísicas e dilemas morais.' }
 ];
 
 export interface SpeechTurn {
