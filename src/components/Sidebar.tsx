@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass, Database, Video } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass, Database, Video, Radio } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -150,6 +150,17 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <Video size={18} className="text-orange-400" />
                   <span>Criador Viral</span>
+                </button>
+
+                <button 
+                  onClick={() => { setMode('tiktok'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'tiktok' ? "bg-rose-500/10 text-rose-400 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.15)]" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Radio size={18} className="text-rose-400 scale-105" />
+                  <span>TikTok Live Co-piloto</span>
                 </button>
               </div>
             </div>

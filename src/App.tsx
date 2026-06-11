@@ -76,6 +76,7 @@ import { SoundLibrary } from './components/SoundLibrary';
 import { WellnessCenter } from './components/WellnessCenter';
 import { AuralSense } from './components/AuralSense';
 import PersonalizationPanel from './components/PersonalizationPanel';
+import { TikTokLivePanel } from './components/TikTokLivePanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
 import { ContentCreator } from './components/ContentCreator';
@@ -621,6 +622,216 @@ export default function App() {
   const [isIntimateMissionOpen, setIsIntimateMissionOpen] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('home');
   const [summonedAba, setSummonedAba] = useState<WorkspaceMode | null>(null);
+
+  // ====== TikTok Live Global Integration State ======
+  const [tiktokUser, setTiktokUser] = useState(() => localStorage.getItem('osone_tiktok_user') || '');
+  const [tiktokSessionId, setTiktokSessionId] = useState(() => localStorage.getItem('osone_tiktok_session_id') || '');
+  const [tiktokTargetIdc, setTiktokTargetIdc] = useState(() => localStorage.getItem('osone_tiktok_target_idc') || '');
+  const [tiktokState, setTiktokState] = useState<any>({
+    status: 'disconnected',
+    username: '',
+    isAutoRespondActive: false,
+    viewerCount: 0,
+    likeCount: 0,
+    logs: []
+  });
+  const [tiktokLoading, setTiktokLoading] = useState(false);
+  const [isLiveNarratorActive, setIsLiveNarratorActive] = useState(() => localStorage.getItem('osone_tiktok_live_narrator_active') === 'true');
+  const [liveNarratorVoice, setLiveNarratorVoice] = useState(() => localStorage.getItem('osone_tiktok_live_narrator_voice') || 'default');
+
+  useEffect(() => {
+    localStorage.setItem('osone_tiktok_user', tiktokUser);
+  }, [tiktokUser]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_tiktok_session_id', tiktokSessionId);
+  }, [tiktokSessionId]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_tiktok_target_idc', tiktokTargetIdc);
+  }, [tiktokTargetIdc]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_tiktok_live_narrator_active', String(isLiveNarratorActive));
+  }, [isLiveNarratorActive]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_tiktok_live_narrator_voice', liveNarratorVoice);
+  }, [liveNarratorVoice]);
+
+  const processedLogsRef = useRef<Set<string>>(new Set());
+  const isFirstPollRef = useRef<boolean>(true);
+
+  // Poll TikTok Live webcast status and events
+  useEffect(() => {
+    let interval: any = null;
+    const fetchTiktokState = async () => {
+      try {
+        const res = await fetch('/api/tiktok/state');
+        if (res.ok) {
+          const data = await res.json();
+          setTiktokState(data);
+          
+          if (data.username && !tiktokUser) {
+            setTiktokUser(data.username);
+          }
+          if (data.sessionId && !tiktokSessionId) {
+            setTiktokSessionId(data.sessionId);
+          }
+          if (data.targetIdc && !tiktokTargetIdc) {
+            setTiktokTargetIdc(data.targetIdc);
+          }
+
+          // Handle Speech synthesis of new comments/gifts in real-time
+          if (data.status === 'connected' && data.logs && data.logs.length > 0) {
+            if (isFirstPollRef.current) {
+              // Populate the initial logs so we do not speak historic stream messages from the past
+              data.logs.forEach((log: any) => {
+                processedLogsRef.current.add(log.id);
+              });
+              isFirstPollRef.current = false;
+            } else {
+              // Find brand new comments/events
+              const newLogs = [...data.logs]
+                .filter((log: any) => !processedLogsRef.current.has(log.id))
+                .reverse(); // Reverse to read oldest new messages to newest new messages
+
+              newLogs.forEach((log: any) => {
+                processedLogsRef.current.add(log.id);
+                
+                if (isLiveNarratorActive && (log.type === 'chat' || log.type === 'gift')) {
+                  // Speak using Web Speech Synthesis
+                  if (typeof window !== 'undefined' && window.speechSynthesis) {
+                    let text = '';
+                    if (log.type === 'chat') {
+                      text = `${log.user} comentou: ${log.message}`;
+                    } else if (log.type === 'gift') {
+                      text = `${log.user} enviou o presente: ${log.message}`;
+                    }
+                    if (text) {
+                      const utterance = new SpeechSynthesisUtterance(text);
+                      utterance.lang = 'pt-BR';
+                      if (liveNarratorVoice && liveNarratorVoice !== 'default') {
+                        const voices = window.speechSynthesis.getVoices();
+                        const matched = voices.find(v => v.name === liveNarratorVoice);
+                        if (matched) utterance.voice = matched;
+                      }
+                      window.speechSynthesis.speak(utterance);
+                    }
+                  }
+                }
+              });
+            }
+          } else if (data.status === 'disconnected') {
+            isFirstPollRef.current = true;
+            processedLogsRef.current.clear();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll tiktok state:', err);
+      }
+    };
+
+    fetchTiktokState();
+    interval = setInterval(fetchTiktokState, 3000); // Poll TikTok events every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [tiktokUser, tiktokSessionId, tiktokTargetIdc, isLiveNarratorActive, liveNarratorVoice]);
+
+  const handleTiktokConnect = async (simulate = false) => {
+    setTiktokLoading(true);
+    try {
+      const res = await fetch('/api/tiktok/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: tiktokUser,
+          simulate,
+          sessionId: tiktokSessionId,
+          targetIdc: tiktokTargetIdc
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        addNotification(data.message || 'Ponte Estabelecida!', 'success');
+        // Instantly refresh state
+        const stateRes = await fetch('/api/tiktok/state');
+        if (stateRes.ok) {
+          const freshData = await stateRes.json();
+          setTiktokState(freshData);
+          isFirstPollRef.current = true; // reset first poll so new comments are queued properly
+        }
+      } else {
+        addNotification(data.error || 'Falha ao conectar ao TikTok.', 'error');
+      }
+    } catch (err) {
+      addNotification('Erro de tráfego de rede.', 'error');
+    } finally {
+      setTiktokLoading(false);
+    }
+  };
+
+  const handleTiktokDisconnect = async () => {
+    setTiktokLoading(true);
+    try {
+      const res = await fetch('/api/tiktok/disconnect', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        addNotification(data.message, 'info');
+        // Instantly refresh state
+        const stateRes = await fetch('/api/tiktok/state');
+        if (stateRes.ok) {
+          setTiktokState(await stateRes.json());
+          isFirstPollRef.current = true;
+          processedLogsRef.current.clear();
+        }
+      }
+    } catch (err) {
+      addNotification('Erro de rede ao desconectar.', 'error');
+    } finally {
+      setTiktokLoading(false);
+    }
+  };
+
+  const handleTiktokToggleAutoRespond = async (active: boolean) => {
+    try {
+      const res = await fetch('/api/tiktok/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAutoRespondActive: active })
+      });
+      if (res.ok) {
+        addNotification(active ? 'Co-piloto Automático Ativado!' : 'Co-piloto Automático Desativado.', 'info');
+        setTiktokState((prev: any) => ({ ...prev, isAutoRespondActive: active }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleTiktokClearLogs = async () => {
+    try {
+      const res = await fetch('/api/tiktok/clear-logs', { method: 'POST' });
+      if (res.ok) {
+        addNotification('Terminal do TikTok limpo.', 'info');
+        setTiktokState((prev: any) => ({
+          ...prev,
+          logs: [{
+            id: 'clear',
+            type: 'system',
+            user: 'Sistema',
+            message: 'Histórico de eventos do TikTok Live limpo com segurança.',
+            timestamp: Date.now()
+          }]
+        }));
+        processedLogsRef.current.clear();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const [ragFiles, setRagFiles] = useState<RagFile[]>([]);
 
   const searchLocalRagDocs = (query: string): string => {
@@ -4500,6 +4711,20 @@ ${localDocumentsContext}`;
 
       if (summonedAba) {
         activeSystemInstruction += `\n\n[SINTONIA NEURAL ATIVA DA ATENÇÃO]: O usuário sincronizou e chamou você especificamente para olhar para a aba/workspace atual: "${getFriendlyModeName(summonedAba)}". Você deve reconhecer que está sintonizada nesta tela de ${getFriendlyModeName(summonedAba)} e guiar toda a conversa e suas criações com total consciência e sintonia disso!`;
+      }
+
+      // TikTok Live status awareness injection
+      if (tiktokState.status === 'connected') {
+        activeSystemInstruction += `\n\n[STATUS DA LIVE NO TIKTOK ATIVA]:
+Você está conectada e operando como Co-piloto oficial da Live do TikTok de @${tiktokState.username}!
+Dados da Live em tempo real:
+- Espectadores Online: ${tiktokState.viewerCount || 0}
+- Curtidas Recebidas: ${tiktokState.likeCount || 0}
+
+- Últimos eventos/comentários captados na live:
+${tiktokState.logs.slice(-10).map((log: any) => `[${log.type.toUpperCase()}] @${log.user}: "${log.message}"`).join('\n')}
+
+IMPORTANTE: Se a opção "Auto-responder" ou auto-pilot estiver ligada de forma direta, você responderá na live a esses comentários de forma extremamente ágil, citando de forma carismática e humanizada o usuário que perguntou ou doou! Seja empática, engajadora e autêntica.`;
       }
 
       // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
@@ -8655,6 +8880,49 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                   });
                 }}
               />
+            </motion.div>
+          ) : workspaceMode === 'tiktok' ? (
+            <motion.div
+              key="workspace-tiktok"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/10 w-full select-none">
+                <button 
+                  onClick={() => setWorkspaceMode('home')}
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border border-white/[0.05]"
+                >
+                  <ChevronRight size={18} className="rotate-180" />
+                </button>
+                <div className="text-left">
+                  <span className="block text-[9px] uppercase tracking-widest text-zinc-400 font-mono">WORKSPACE CO-PILOTO</span>
+                  <h2 className="text-base font-bold uppercase tracking-wider text-white">TikTok Live Engine</h2>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 md:p-8">
+                <TikTokLivePanel
+                  onBack={() => setWorkspaceMode('home')}
+                  tiktokUser={tiktokUser}
+                  setTiktokUser={setTiktokUser}
+                  tiktokSessionId={tiktokSessionId}
+                  setTiktokSessionId={setTiktokSessionId}
+                  tiktokTargetIdc={tiktokTargetIdc}
+                  setTiktokTargetIdc={setTiktokTargetIdc}
+                  tiktokState={tiktokState}
+                  tiktokLoading={tiktokLoading}
+                  onConnect={handleTiktokConnect}
+                  onDisconnect={handleTiktokDisconnect}
+                  onToggleAutoRespond={handleTiktokToggleAutoRespond}
+                  onClearLogs={handleTiktokClearLogs}
+                  onAddNotification={addNotification}
+                  isLiveNarratorActive={isLiveNarratorActive}
+                  setIsLiveNarratorActive={setIsLiveNarratorActive}
+                  liveNarratorVoice={liveNarratorVoice}
+                  setLiveNarratorVoice={setLiveNarratorVoice}
+                />
+              </div>
             </motion.div>
           ) : (
             <motion.div 
