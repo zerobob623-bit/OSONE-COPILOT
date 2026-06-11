@@ -7212,12 +7212,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
         rotate: [-1.8, 1.6, -1.2, 0.9, -0.5, 0.3, 0]
       } : {}}
       transition={{ duration: 0.6, ease: "easeInOut" }}
-      className={cn(
-        "relative w-full flex flex-col",
-        (workspaceMode === 'writing' || workspaceMode === 'canvas' || workspaceMode === 'aural_control')
-          ? "h-[100dvh] overflow-hidden"
-          : "min-h-[100dvh] overflow-y-auto overflow-x-hidden scroll-smooth"
-      )}
+      className="relative w-full h-[100dvh] overflow-hidden flex flex-col"
     >
       {/* Crimson damage/flash overlay when slapped */}
       <AnimatePresence>
@@ -7657,12 +7652,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
       </header>
       
       {/* Main Content Area */}
-      <main className={cn(
-        "main-content flex-1 relative z-20 flex flex-col w-full min-h-0 md:pb-0",
-        (workspaceMode === 'aural_control' || workspaceMode === 'writing' || workspaceMode === 'canvas') 
-          ? "h-full overflow-hidden p-0 pb-[80px] md:pb-0" 
-          : "pb-[100px] md:pb-0 overflow-visible"
-      )}>
+      <main className="main-content flex-1 relative z-20 flex flex-col w-full min-h-0 overflow-hidden p-0 pb-0 md:pb-0">
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
             <motion.div 
@@ -8672,7 +8662,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center w-full min-h-full relative"
+              className="flex flex-col items-center w-full h-full relative overflow-hidden"
             >
               {chatHistory.length === 0 && (
                 <div className={cn(
@@ -8740,7 +8730,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                       ? "relative flex-1 scale-100 md:scale-105" // Center scale
                       : (chatHistory.length > 0 || isChatExpanded)
                         ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
-                        : "absolute inset-0 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-none"
+                        : "relative flex-1 flex flex-col items-center justify-center transform scale-95 md:scale-110 origin-center pointer-events-auto py-4"
                   )}
                 >
                   {voicePageIndex === 1 ? (
@@ -9430,7 +9420,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
 
                 {/* Chat Input Area */}
                 <div className={cn(
-                  "shrink-0 pt-0 w-full pb-20 md:pb-0 transition-all duration-500",
+                  "shrink-0 pt-0 w-full pb-0 md:pb-0 transition-all duration-500",
                   !showUi && "opacity-0 pointer-events-none translate-y-4"
                 )}>
                   <div className={cn(
@@ -9693,8 +9683,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
 
       {/* Mobile Bottom Navigation */}
       <nav className={cn(
-        "fixed bottom-0 left-0 right-0 z-[60] bg-[#050505]/90 backdrop-blur-3xl border-t border-white/[0.05] flex md:hidden items-center justify-around px-4 py-4 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-500",
-        !showUi && "opacity-0 pointer-events-none translate-y-4"
+         "shrink-0 bg-[#050505]/90 backdrop-blur-3xl border-t border-white/[0.05] flex md:hidden items-center justify-around px-4 py-3 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 w-full z-[60]",
+        !showUi && "hidden"
       )}>
         {[
           { id: 'home', icon: Volume2, label: 'Início' },
