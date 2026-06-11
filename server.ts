@@ -77,6 +77,7 @@ async function startServer() {
   let tiktokViewerCount = 0;
   let tiktokLikeCount = 0;
   let tiktokSessionId = "";
+  let tiktokTargetIdc = "";
 
   interface TikTokLog {
     id: string;
@@ -210,7 +211,7 @@ Comentário de @${user}: "${text}"`;
     }, 6000);
   }
 
-  async function connectToTikTokLive(username: string, sessionId?: string) {
+  async function connectToTikTokLive(username: string, sessionId?: string, targetIdc?: string) {
     try {
       await disconnectFromTikTokLive();
       currentTikTokUser = username;
@@ -253,6 +254,15 @@ Comentário de @${user}: "${text}"`;
           message: "Autenticação Ativa: Conectando com Session ID credenciado para evitar shadow-blocks.",
           timestamp: Date.now()
         });
+
+        if (targetIdc && targetIdc.trim()) {
+          const idcValue = targetIdc.trim();
+          configOpts.requestOptions.headers["Cookie"] = `tt-target-idc=${idcValue}; tt-idc-switch=1`;
+          configOpts.requestOptions.headers["cookie"] = `tt-target-idc=${idcValue}; tt-idc-switch=1`;
+          // Also try adding directly in case WebcastPushConnection parses it
+          configOpts.targetIdc = idcValue;
+          configOpts.target_idc = idcValue;
+        }
       }
 
       const connection = new WebcastPushConnection(username, configOpts);
@@ -332,7 +342,7 @@ Comentário de @${user}: "${text}"`;
           });
           setTimeout(() => {
             if (currentTikTokUser === username) {
-              connectToTikTokLive(username, sessionId).catch(() => {});
+               connectToTikTokLive(username, sessionId, tiktokTargetIdc).catch(() => {});
             }
           }, 10000);
         } else {
@@ -1351,16 +1361,21 @@ Nome do interlocutor: ${senderName}`;
       viewerCount: tiktokViewerCount,
       likeCount: tiktokLikeCount,
       sessionId: tiktokSessionId,
+      targetIdc: tiktokTargetIdc,
       logs: tiktokEventLogs
     });
   });
 
   app.post("/api/tiktok/connect", async (req, res) => {
     try {
-      const { username, simulate, sessionId } = req.body;
+      const { username, simulate, sessionId, targetIdc } = req.body;
       
       if (sessionId !== undefined) {
         tiktokSessionId = String(sessionId).trim();
+      }
+
+      if (targetIdc !== undefined) {
+        tiktokTargetIdc = String(targetIdc).trim();
       }
 
       if (simulate) {
@@ -1375,7 +1390,7 @@ Nome do interlocutor: ${senderName}`;
       const cleanUser = username.trim().replace(/^@/, "");
       
       // Async trigger connection so we don't hold the HTTP request indefinitely
-      connectToTikTokLive(cleanUser, tiktokSessionId).catch(e => {
+      connectToTikTokLive(cleanUser, tiktokSessionId, tiktokTargetIdc).catch(e => {
         console.error("Delayed connection failed:", e);
       });
 

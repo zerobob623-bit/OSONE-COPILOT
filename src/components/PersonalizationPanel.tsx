@@ -93,6 +93,7 @@ export default function PersonalizationPanel({
   // ====== TikTok Live Integration State ======
   const [tiktokUser, setTiktokUser] = useState('');
   const [tiktokSessionId, setTiktokSessionId] = useState('');
+  const [tiktokTargetIdc, setTiktokTargetIdc] = useState('');
   const [tiktokState, setTiktokState] = useState<any>({
     status: 'disconnected',
     username: '',
@@ -118,6 +119,9 @@ export default function PersonalizationPanel({
           if (data.sessionId && !tiktokSessionId) {
             setTiktokSessionId(data.sessionId);
           }
+          if (data.targetIdc && !tiktokTargetIdc) {
+            setTiktokTargetIdc(data.targetIdc);
+          }
         }
       } catch (err) {
         console.error('Failed to poll tiktok state:', err);
@@ -139,7 +143,8 @@ export default function PersonalizationPanel({
         body: JSON.stringify({
           username: tiktokUser,
           simulate,
-          sessionId: tiktokSessionId
+          sessionId: tiktokSessionId,
+          targetIdc: tiktokTargetIdc
         })
       });
 
@@ -1274,7 +1279,7 @@ export default function PersonalizationPanel({
                     <div className="space-y-1.5">
                       <label className="flex items-center justify-between text-[8.5px] text-zinc-400 font-mono tracking-wider uppercase font-bold">
                         <span>SESSION ID (OPCIONAL)</span>
-                        <span className="text-[7.5px] text-rose-400/80 lowercase italic normal-case font-sans">burlar rate limit</span>
+                        <span className="text-[7.5px] text-rose-400/80 lowercase italic normal-case font-sans">evitar blocks</span>
                       </label>
                       <input 
                         type="password"
@@ -1283,6 +1288,21 @@ export default function PersonalizationPanel({
                         placeholder="sessionid cookie value"
                         disabled={tiktokState.status !== 'disconnected'}
                         className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-3.5 py-3 focus:outline-none focus:border-rose-500/20 text-xs text-white font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="flex items-center justify-between text-[8.5px] text-zinc-400 font-mono tracking-wider uppercase font-bold">
+                        <span>TARGET IDC (OPCIONAL)</span>
+                        <span className="text-[7.5px] text-zinc-500 font-normal normal-case font-sans">se usar sessionid</span>
+                      </label>
+                      <input 
+                        type="text"
+                        value={tiktokTargetIdc}
+                        onChange={(e) => setTiktokTargetIdc(e.target.value)}
+                        placeholder="Ex: useast2a, row, alisg"
+                        disabled={tiktokState.status !== 'disconnected'}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-3.5 py-3 focus:outline-none focus:border-rose-500/20 text-xs text-white font-mono placeholder:text-zinc-600"
                       />
                     </div>
 
