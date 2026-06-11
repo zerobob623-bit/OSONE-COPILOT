@@ -2210,6 +2210,7 @@ export default function App() {
 
   const [workspacePrompt, setWorkspacePrompt] = useState('');
   const [homePrompt, setHomePrompt] = useState('');
+  const [floatingCastMember, setFloatingCastMember] = useState<any | null>(null);
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [chatHistory, setChatHistory] = useState<Message[]>(() => {
     try {
@@ -4043,6 +4044,29 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
     }
 
     const userMessage = directMessage || homePrompt.trim();
+
+    // Check if user is asking for images/photos of a cast member
+    try {
+      const savedCast = localStorage.getItem('osone_cast_albums');
+      if (savedCast) {
+        const castMembers = JSON.parse(savedCast);
+        if (Array.isArray(castMembers)) {
+          const msgLower = userMessage.toLowerCase();
+          const matchedMember = castMembers.find(m => {
+            const nameLower = m.name.toLowerCase();
+            return msgLower.includes(nameLower);
+          });
+          
+          if (matchedMember && matchedMember.items && matchedMember.items.length > 0) {
+            setFloatingCastMember(matchedMember);
+            addNotification(`Carregando álbum flutuante de ${matchedMember.name}!`, "success");
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error triggering floating cast member:", e);
+    }
+
     const currentFiles = [...attachedFiles]; // Capture files before clearing state
     if (!directMessage) {
       setHomePrompt('');
@@ -6319,46 +6343,104 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     playSearchNetworkSound();
                     setIsModelSearching(true);
                     try {
-                      // Use secure server proxy to completely solve browser CORS blocks in Chrome/iframes
-                      const proxyResponse = await fetch("/api/gemini/generateContent", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          clientApiKey: apiKey,
-                          model: apiKeys.geminiModel || "gemini-3.5-flash",
-                          contents: [{ role: 'user', parts: [{ text: query }] }],
-                          config: {
-                            tools: [{ googleSearch: {} }]
-                          }
-                        })
-                      });
-                      if (!proxyResponse.ok) {
-                        const errorData = await proxyResponse.json();
-                        throw new Error(errorData.error || "Erro na pesquisa via proxy");
-                      }
-                      const searchResult = await proxyResponse.json();
-                      const responseText = searchResult.text;
-                      const grounding = searchResult.candidates?.[0]?.groundingMetadata;
-                      
-                      if (grounding) {
-                        processGroundingToPopups(grounding, query);
-                      } else {
-                        const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-                        addSearchPopup({
-                          query: query,
-                          title: `Resultados em tempo real de "${query}"`,
-                          snippet: responseText || "Pesquisa concluída sem conteúdo específico retornado.",
-                          imageUrl: getSimulatedSearchImage(query, query, googleSearchUrl),
-                          url: googleSearchUrl,
-                          faviconUrl: "https://www.google.com/favicon.ico",
-                          classification: 'neutral'
+                      let searchResultText = "";
+                      let customSearchSuccess = false;
+
+                      // Try running Google Custom Search first (either with user keys or local server env fallback)
+                      try {
+                        const customSearchRes = await fetch("/api/search/custom", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            query: query,
+                            key: apiKeys.googleCustomSearchApiKey,
+                            cx: apiKeys.googleCustomSearchCx
+                          })
                         });
+
+                        if (customSearchRes.ok) {
+                          const data = await customSearchRes.json();
+                          const items = data.items || [];
+                          if (items.length > 0) {
+                            customSearchSuccess = true;
+                            const formattedResults = items.map((item: any, idx: number) => {
+                              return `${idx + 1}. [${item.title}](${item.link})\n${item.snippet || ""}`;
+                            }).join("\n\n");
+                            searchResultText = `Resultados da Pesquisa Customizada do Google para "${query}":\n\n${formattedResults}`;
+
+                            // Create gorgeous custom search cards from real results!
+                            items.slice(0, 3).forEach((item: any) => {
+                              let imgUrl = undefined;
+                              if (item.pagemap?.cse_image?.[0]?.src) {
+                                imgUrl = item.pagemap.cse_image[0].src;
+                              } else if (item.pagemap?.cse_thumbnail?.[0]?.src) {
+                                imgUrl = item.pagemap.cse_thumbnail[0].src;
+                              }
+
+                              let host = "google.com";
+                              try { host = new URL(item.link).hostname; } catch (e) {}
+
+                              addSearchPopup({
+                                query: query,
+                                title: item.title,
+                                snippet: item.snippet || "Metadados de pesquisa carregados em tempo real.",
+                                url: item.link,
+                                imageUrl: imgUrl || getSimulatedSearchImage(query, item.title, item.link),
+                                faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${host}`,
+                                classification: 'neutral'
+                              });
+                            });
+                          }
+                        } else {
+                          const errJson = await customSearchRes.json().catch(() => ({}));
+                          console.warn("Custom Search API endpoint error, falling back:", errJson.error);
+                        }
+                      } catch (errCustom) {
+                        console.warn("Faced exception querying custom search endpoint, falling back:", errCustom);
+                      }
+
+                      // Fallback to default Gemini Search Grounding if Custom Search was not configured or succeeded
+                      if (!customSearchSuccess) {
+                        const proxyResponse = await fetch("/api/gemini/generateContent", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            clientApiKey: apiKey,
+                            model: apiKeys.geminiModel || "gemini-3.5-flash",
+                            contents: [{ role: 'user', parts: [{ text: query }] }],
+                            config: {
+                              tools: [{ googleSearch: {} }]
+                            }
+                          })
+                        });
+                        if (!proxyResponse.ok) {
+                          const errorData = await proxyResponse.json();
+                          throw new Error(errorData.error || "Erro na pesquisa via proxy");
+                        }
+                        const searchResult = await proxyResponse.json();
+                        searchResultText = searchResult.text;
+                        const grounding = searchResult.candidates?.[0]?.groundingMetadata;
+                        
+                        if (grounding) {
+                          processGroundingToPopups(grounding, query);
+                        } else {
+                          const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                          addSearchPopup({
+                            query: query,
+                            title: `Resultados em tempo real de "${query}"`,
+                            snippet: searchResultText || "Pesquisa concluída sem conteúdo específico retornado.",
+                            imageUrl: getSimulatedSearchImage(query, query, googleSearchUrl),
+                            url: googleSearchUrl,
+                            faviconUrl: "https://www.google.com/favicon.ico",
+                            classification: 'neutral'
+                          });
+                        }
                       }
                       
                       responses.push({
                         name: call.name,
                         id: call.id,
-                        response: { result: responseText }
+                        response: { result: searchResultText }
                       });
                     } catch (err: any) {
                       responses.push({
@@ -7130,7 +7212,12 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
         rotate: [-1.8, 1.6, -1.2, 0.9, -0.5, 0.3, 0]
       } : {}}
       transition={{ duration: 0.6, ease: "easeInOut" }}
-      className="relative h-[100dvh] w-screen flex flex-col overflow-hidden"
+      className={cn(
+        "relative w-full flex flex-col",
+        (workspaceMode === 'writing' || workspaceMode === 'canvas' || workspaceMode === 'aural_control')
+          ? "h-[100dvh] overflow-hidden"
+          : "min-h-[100dvh] overflow-y-auto overflow-x-hidden scroll-smooth"
+      )}
     >
       {/* Crimson damage/flash overlay when slapped */}
       <AnimatePresence>
@@ -7574,7 +7661,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
         "main-content flex-1 relative z-20 flex flex-col w-full min-h-0 md:pb-0",
         (workspaceMode === 'aural_control' || workspaceMode === 'writing' || workspaceMode === 'canvas') 
           ? "h-full overflow-hidden p-0 pb-[80px] md:pb-0" 
-          : "overflow-y-auto pb-[100px] md:pb-0"
+          : "pb-[100px] md:pb-0 overflow-visible"
       )}>
         <AnimatePresence mode="wait">
           {workspaceMode === 'writing' ? (
@@ -8585,7 +8672,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center w-full h-full relative"
+              className="flex flex-col items-center w-full min-h-full relative"
             >
               {chatHistory.length === 0 && (
                 <div className={cn(
@@ -10363,6 +10450,109 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
               </div>
             </motion.div>
           )
+        )}
+      </AnimatePresence>
+
+      {/* Floating album pop-up */}
+      <AnimatePresence>
+        {floatingCastMember && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+            onClick={() => setFloatingCastMember(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 30 }}
+              transition={{ type: "spring", damping: 25, stiffness: 180 }}
+              className="bg-[#0b0c0f]/95 border border-white/10 rounded-[2.5rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.8)] w-full max-w-4xl p-6 md:p-8 relative overflow-hidden text-zinc-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Background glows */}
+              <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#db2777]/10 blur-[100px] rounded-full animate-pulse" />
+              <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-purple-500/10 blur-[100px] rounded-full animate-pulse" />
+
+              {/* Close Button */}
+              <button
+                onClick={() => setFloatingCastMember(null)}
+                className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all cursor-pointer hover:rotate-90 z-20"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="relative z-10">
+                {/* Header */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#db2777]/20 border border-[#db2777]/30 flex items-center justify-center font-serif italic text-[#f472b6] text-xs font-bold shadow-inner">
+                      {floatingCastMember.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-serif italic text-white flex items-center gap-2">
+                        <span>Álbum de {floatingCastMember.name}</span>
+                        <span className="text-[10px] uppercase font-mono tracking-widest bg-[#db2777]/10 text-[#f472b6] px-2 py-0.5 rounded-full border border-[#db2777]/20">Elenco</span>
+                      </h3>
+                      <p className="text-[9px] text-zinc-400 uppercase tracking-widest font-sans mt-0.5">Visão flutuante instantânea do OSONE G5</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid of Images (Shows up to 3) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  {floatingCastMember.items.slice(0, 3).map((item: any, idx: number) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, scale: 0.9, y: 15 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="group relative rounded-2xl overflow-hidden aspect-square md:aspect-[3/4] bg-zinc-950 border border-white/5 shadow-lg hover:border-[#db2777]/40 transition-all flex flex-col justify-end"
+                    >
+                      <div className="w-full h-full relative overflow-hidden flex items-center justify-center bg-black/45">
+                        {item.type === 'video' ? (
+                          <video src={item.url} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline autoPlay />
+                        ) : (
+                          <img
+                            src={item.url}
+                            alt={item.name || `Foto de ${floatingCastMember.name}`}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          />
+                        )}
+                      </div>
+                      
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+
+                      {item.name ? (
+                        <div className="absolute bottom-0 left-0 right-0 p-4 pt-10 bg-gradient-to-t from-black/90 to-transparent">
+                          <p className="text-xs font-serif italic text-white/90 truncate">{item.name}</p>
+                          <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-400">{item.type}</span>
+                        </div>
+                      ) : (
+                        <div className="absolute bottom-0 left-0 right-0 p-4 pt-10 bg-gradient-to-t from-black/90 to-transparent">
+                          <p className="text-xs font-serif italic text-white/90 truncate">Mídia {idx + 1}</p>
+                          <span className="text-[8px] font-mono uppercase tracking-widest text-zinc-400">{item.type}</span>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Footer status / feedback */}
+                <div className="flex items-center justify-between mt-4 text-[10px] text-zinc-500 font-sans border-t border-white/5 pt-4">
+                  <span className="capitalize">{floatingCastMember.name} possui {floatingCastMember.items.length} itens salvos no álbum</span>
+                  <button
+                    onClick={() => setFloatingCastMember(null)}
+                    className="text-[#db2777] hover:text-[#f472b6] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Fechar Álbum
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>

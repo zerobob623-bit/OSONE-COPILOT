@@ -2,11 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Music, Plus, Trash2, Play, Volume2, X, Search, Upload, Link, Square, Edit2, Sparkles, 
-  Wand2, Music2, Brain, Pause, SkipForward, SkipBack, ListPlus, FolderPlus, Compass, Disc, Heart 
+  Wand2, Music2, Brain, Pause, SkipForward, SkipBack, ListPlus, FolderPlus, Compass, Disc, Heart,
+  Image, Video, Camera, Film, UserPlus, ChevronRight 
 } from 'lucide-react';
 import { cn, safeJsonParse } from '../lib/utils';
 import { SoundEffect } from '../types';
 import { saveAudio } from '../lib/audioDb';
+
+export interface GalleryItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string;
+  name?: string;
+}
+
+export interface CastMember {
+  id: string;
+  name: string;
+  items: GalleryItem[];
+}
 
 interface SoundLibraryProps {
   sounds: SoundEffect[];
@@ -51,7 +65,136 @@ export const SoundLibrary = ({
 }: SoundLibraryProps) => {
   const [filter, setFilter] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [currentTab, setCurrentTab] = useState<'sounds' | 'music_playlists'>('sounds');
+  const [currentTab, setCurrentTab] = useState<'sounds' | 'music_playlists' | 'gallery'>('sounds');
+  
+  // Cast members state for Elenco/Gallery
+  const [castMembers, setCastMembers] = useState<CastMember[]>(() => {
+    try {
+      const saved = localStorage.getItem('osone_cast_albums');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error("Erro ao carregar osone_cast_albums:", e);
+    }
+    // Default elenco
+    return [
+      {
+        id: 'elenco-1',
+        name: 'Juliana',
+        items: [
+          { id: 'item-juliana-1', type: 'image', url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=600&auto=format&fit=crop&q=80', name: 'Juliana Sorrindo' },
+          { id: 'item-juliana-2', type: 'image', url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=600&auto=format&fit=crop&q=80', name: 'Juliana Perfil' },
+          { id: 'item-juliana-3', type: 'image', url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=600&auto=format&fit=crop&q=80', name: 'Juliana Casual' }
+        ]
+      },
+      {
+        id: 'elenco-2',
+        name: 'Henrique',
+        items: [
+          { id: 'item-henrique-1', type: 'image', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80', name: 'Henrique Retrato' },
+          { id: 'item-henrique-2', type: 'image', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80', name: 'Henrique Sorridente' }
+        ]
+      }
+    ];
+  });
+
+  const saveCastMembers = (updated: CastMember[]) => {
+    setCastMembers(updated);
+    localStorage.setItem('osone_cast_albums', JSON.stringify(updated));
+    // Trigger window event so other components receive updates instantly if needed
+    window.dispatchEvent(new Event('osone_cast_albums_updated'));
+  };
+
+  const [selectedCastId, setSelectedCastId] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('osone_cast_albums');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0].id;
+      }
+    } catch {}
+    return 'elenco-1';
+  });
+
+  const [newCastName, setNewCastName] = useState('');
+  const [isAddingCast, setIsAddingCast] = useState(false);
+  const [isAddMediaOpen, setIsAddMediaOpen] = useState(false);
+  
+  const [newMediaDetails, setNewMediaDetails] = useState<{ name: string; type: 'image' | 'video'; url: string }>({
+    name: '',
+    type: 'image',
+    url: ''
+  });
+  const [mediaUploadType, setMediaUploadType] = useState<'url' | 'file'>('url');
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+
+  const handleCreateCastMember = () => {
+    if (!newCastName.trim()) return;
+    const isDuplicate = castMembers.some(m => m.name.toLowerCase() === newCastName.trim().toLowerCase());
+    if (isDuplicate) {
+      alert("Já existe alguém no elenco cadastrado sob este nome!");
+      return;
+    }
+    const created: CastMember = {
+      id: 'member-' + Math.random().toString(36).substr(2, 9),
+      name: newCastName.trim(),
+      items: []
+    };
+    const updated = [...castMembers, created];
+    saveCastMembers(updated);
+    setNewCastName('');
+    setIsAddingCast(false);
+    setSelectedCastId(created.id);
+  };
+
+  const handleAddMediaToAlbum = () => {
+    if (!newMediaDetails.url || !selectedCastId) return;
+    const updated = castMembers.map(m => {
+      if (m.id === selectedCastId) {
+        return {
+          ...m,
+          items: [
+            ...(m.items || []),
+            {
+              id: 'media-' + Math.random().toString(36).substr(2, 9),
+              type: newMediaDetails.type,
+              url: newMediaDetails.url,
+              name: newMediaDetails.name || 'Mídia'
+            }
+          ]
+        };
+      }
+      return m;
+    });
+    saveCastMembers(updated);
+    setNewMediaDetails({ name: '', type: 'image', url: '' });
+    setMediaUploadType('url');
+    setIsAddMediaOpen(false);
+  };
+
+  const handleMediaFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploadingMedia(true);
+      try {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setNewMediaDetails(prev => ({
+            ...prev,
+            url: reader.result as string
+          }));
+          setIsUploadingMedia(false);
+        };
+        reader.readAsDataURL(file);
+      } catch (err) {
+        console.error("Erro ao converter e ler arquivo de mídia:", err);
+        setIsUploadingMedia(false);
+        alert("Erro ao decodificar arquivo local.");
+      }
+    }
+  };
   
   // Playlist State
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
@@ -386,6 +529,18 @@ export const SoundLibrary = ({
         >
           <ListPlus size={14} />
           Músicas & Playlists ({musicSounds.length} faixas)
+        </button>
+        <button 
+          onClick={() => setCurrentTab('gallery')}
+          className={cn(
+            "py-4 text-[10px] uppercase font-semibold tracking-[0.15em] border-b-2 transition-all flex items-center gap-2",
+            currentTab === 'gallery' 
+              ? "border-her-accent text-her-accent" 
+              : "border-transparent text-her-muted hover:text-white/60"
+          )}
+        >
+          <Image size={13} />
+          Galeria de Elenco (Álbum)
         </button>
       </div>
 
@@ -763,6 +918,189 @@ export const SoundLibrary = ({
           </div>
         </div>
       )}
+
+      {/* Tab 3: Cast Gallery Management & Album */}
+      {currentTab === 'gallery' && (() => {
+        const selectedMember = castMembers.find(m => m.id === selectedCastId);
+        return (
+          <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden text-zinc-100">
+            {/* Elenco Left Panel */}
+            <div className="w-full md:w-[280px] border-r border-white/[0.05] bg-black/10 flex flex-col min-h-0">
+              <div className="p-4 flex items-center justify-between border-b border-white/[0.05] shrink-0">
+                <span className="text-[9px] uppercase tracking-widest text-[#9ca3af] font-light">Elenco de Integrantes</span>
+                <button 
+                  onClick={() => setIsAddingCast(true)}
+                  className="p-1 px-2.5 bg-[#db2777]/20 hover:bg-[#db2777]/30 text-[#f472b6] rounded-md border border-[#db2777]/20 flex items-center gap-1.5 transition-all text-[9.5px] font-bold uppercase tracking-wider cursor-pointer active:scale-95"
+                >
+                  <Plus size={11} />
+                  <span>Cadastrar +</span>
+                </button>
+              </div>
+
+              {/* List of members */}
+              <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-none">
+                {castMembers.map(member => {
+                  const isSelected = selectedCastId === member.id;
+                  return (
+                    <div
+                      key={member.id}
+                      onClick={() => setSelectedCastId(member.id)}
+                      className={cn(
+                        "w-full p-3 rounded-lg text-left text-xs flex items-center justify-between transition-all cursor-pointer group/member",
+                        isSelected 
+                          ? "bg-white/[0.06] text-white font-medium border-l-2 border-[#db2777]" 
+                          : "text-zinc-400 hover:bg-white/[0.02] border-l-2 border-transparent"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <div className="w-6 h-6 rounded-full bg-[#db2777]/10 flex items-center justify-center font-serif italic text-[#f472b6] border border-[#db2777]/20 shrink-0 select-none text-[10px]">
+                          {member.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <span className="truncate">{member.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[9px] bg-white/[0.05] px-1.5 py-0.5 rounded-full select-none text-zinc-400">
+                          {member.items?.length || 0}
+                        </span>
+                        {member.id !== 'elenco-1' && member.id !== 'elenco-2' && ( 
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Tem certeza que deseja excluir ${member.name} do elenco? Seu álbum de imagens também será apagado.`)) {
+                                const updated = castMembers.filter(m => m.id !== member.id);
+                                saveCastMembers(updated);
+                                if (selectedCastId === member.id && updated.length > 0) {
+                                  setSelectedCastId(updated[0].id);
+                                }
+                              }
+                            }}
+                            className="opacity-0 group-hover/member:opacity-100 p-1 hover:text-red-400 transition-all text-zinc-500 hover:text-red-400"
+                            title="Excluir do Elenco"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {castMembers.length === 0 && (
+                  <div className="py-8 px-4 text-center text-zinc-500 italic text-[11px] font-light">
+                    Nenhum integrante cadastrado. Clique no botão acima para adicionar!
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Album Right Panel */}
+            <div className="flex-1 flex flex-col min-h-0 p-4 md:p-6 overflow-hidden bg-black/5">
+              {selectedMember ? (
+                <div className="flex-1 flex flex-col min-h-0">
+                  {/* Member Header */}
+                  <div className="flex items-center justify-between mb-4 shrink-0">
+                    <div>
+                      <h3 className="text-sm font-serif italic text-white/95">
+                        Álbum de {selectedMember.name}
+                      </h3>
+                      <p className="text-[9px] text-zinc-400 uppercase tracking-wider mt-0.5 font-light">
+                        Gerencie as fotos e vídeos desta pessoa. Quando requisitados no chat central, eles flutuarão na tela inicial.
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setIsAddMediaOpen(true)}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-500 to-[#db2777] text-white hover:shadow-lg hover:shadow-purple-500/10 text-[9px] font-bold uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+                      >
+                        <Plus size={11} />
+                        <span>Adicionar Mídia</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Media Grid */}
+                  <div className="flex-1 overflow-y-auto pr-1 pb-[120px] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {selectedMember.items && selectedMember.items.map((item) => (
+                        <div 
+                          key={item.id}
+                          className="group relative rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden aspect-square flex flex-col justify-between hover:border-[#db2777]/30 transition-all"
+                        >
+                          <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+                            {item.type === 'video' ? (
+                              <div className="w-full h-full bg-zinc-950 flex flex-col items-center justify-center relative">
+                                <Film size={24} className="text-zinc-600 mb-1" />
+                                <span className="text-[8px] uppercase tracking-wider text-zinc-500 font-mono">Vídeo</span>
+                                <video src={item.url} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline autoPlay />
+                              </div>
+                            ) : (
+                              <img 
+                                src={item.url} 
+                                alt={item.name || "Imagem do Álbum"} 
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                              />
+                            )}
+
+                            {/* Float delete button */}
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                              <button
+                                onClick={() => {
+                                  if (confirm("Deseja mesmo remover esta imagem/vídeo do álbum?")) {
+                                    const updated = castMembers.map(m => {
+                                      if (m.id === selectedMember.id) {
+                                        return {
+                                          ...m,
+                                          items: m.items.filter(i => i.id !== item.id)
+                                        };
+                                      }
+                                      return m;
+                                    });
+                                    saveCastMembers(updated);
+                                  }
+                                }}
+                                className="p-1 px-1.5 bg-black/80 hover:bg-red-500/90 text-white rounded-md transition-colors flex items-center justify-center cursor-pointer"
+                                title="Excluir Mídia"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {item.name ? (
+                            <div className="p-2 bg-black/50 border-t border-white/[0.03] backdrop-blur-sm truncate">
+                              <p className="text-[10px] text-zinc-300 font-light truncate select-none">{item.name}</p>
+                            </div>
+                          ) : (
+                            <div className="p-2 bg-black/50 border-t border-white/[0.03] backdrop-blur-sm truncate">
+                              <p className="text-[10px] text-zinc-500 font-light truncate select-none">Mídia sem nome</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {(!selectedMember.items || selectedMember.items.length === 0) && (
+                        <div className="col-span-full py-16 text-center border border-dashed border-white/[0.05] rounded-2xl flex flex-col items-center justify-center text-zinc-500">
+                          <Camera size={28} className="mb-2 opacity-20 text-zinc-400" />
+                          <p className="text-xs font-light text-zinc-400">Este álbum está vazio.</p>
+                          <p className="text-[10px] text-zinc-500 mt-1 max-w-[200px]">Adicione imagens ou vídeos usando o botão no canto superior!</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-white/[0.05] rounded-3xl p-8">
+                  <UserPlus size={36} className="mb-3 opacity-20" />
+                  <p className="text-xs font-light">Nenhum integrante selecionado do elenco.</p>
+                  <p className="text-[10px] text-zinc-500 mt-1">Crie um novo integrante no botão Cadastrar para iniciar!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Global Interactive Media Player Footer */}
       <AnimatePresence>
@@ -1157,6 +1495,221 @@ export const SoundLibrary = ({
                   className="w-full py-5 bg-her-accent text-white text-xs font-black uppercase tracking-[0.2em] hover:bg-her-accent/90 transition-all disabled:opacity-30 disabled:grayscale mt-4"
                 >
                   {isUploading ? 'Processando...' : editingSound ? 'Salvar Alterações' : 'Adicionar à Biblioteca'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Cadastrar Integrante no Elenco */}
+      <AnimatePresence>
+        {isAddingCast && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0e0f12]/95 backdrop-blur-xl w-full max-w-sm rounded-[2rem] shadow-2xl p-6 border border-white/[0.1] relative overflow-hidden text-zinc-100"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-base font-serif italic text-white">Cadastrar Integrante do Elenco</h3>
+                <button onClick={() => setIsAddingCast(false)} className="p-1 hover:bg-white/[0.05] rounded-full transition-colors cursor-pointer text-zinc-400 hover:text-white">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-zinc-400 mb-2 font-mono">Nome da Pessoa/Integrante</label>
+                  <input 
+                    type="text" 
+                    value={newCastName}
+                    onChange={(e) => setNewCastName(e.target.value)}
+                    placeholder="Ex: Amanda Silva, Carlos de Souza..."
+                    className="w-full bg-white/[0.03] border border-white/[0.06] py-3 px-4 rounded-xl text-xs font-light focus:outline-none focus:border-[#db2777]/50 text-white"
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateCastMember()}
+                    autoFocus
+                  />
+                  <p className="text-[9px] text-zinc-500 mt-2 font-sans">
+                    💡 Toda vez que o nome deste integrante for citado no chat central, as imagens do seu álbum flutuarão na tela inicial.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2 font-medium">
+                  <button 
+                    onClick={() => setIsAddingCast(false)}
+                    className="px-4 py-2 bg-white/[0.03] hover:bg-white/[0.08] text-xs font-medium uppercase tracking-wider rounded-lg text-zinc-400 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleCreateCastMember}
+                    disabled={!newCastName.trim()}
+                    className="px-5 py-2 bg-[#db2777] hover:bg-[#db2777]/90 text-xs font-bold uppercase tracking-wider rounded-lg text-white disabled:opacity-20 transition-all cursor-pointer"
+                  >
+                    Adicionar ao Elenco
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Adicionar Nova Mídia ao Álbum */}
+      <AnimatePresence>
+        {isAddMediaOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0e0f12]/95 backdrop-blur-xl w-full max-w-sm rounded-[2rem] shadow-2xl p-7 border border-white/[0.1] text-zinc-100"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-base font-serif italic text-white flex items-center gap-2">
+                    <Camera size={16} className="text-[#f472b6]" />
+                    <span>Adicionar Mídia</span>
+                  </h3>
+                  <p className="text-[8px] text-zinc-400 font-sans uppercase tracking-widest mt-0.5">Álbum do de elenco selecionado</p>
+                </div>
+                <button onClick={() => { setIsAddMediaOpen(false); setNewMediaDetails({ name: '', type: 'image', url: '' }); }} className="p-1.5 hover:bg-white/[0.05] rounded-full transition-colors cursor-pointer text-zinc-400 hover:text-white">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Method selector */}
+                <div className="flex bg-white/[0.03] p-1 border border-white/5 rounded-xl">
+                  <button 
+                    onClick={() => setMediaUploadType('url')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 py-2.5 text-[9px] uppercase tracking-wider transition-colors rounded-lg font-bold cursor-pointer",
+                      mediaUploadType === 'url' ? "bg-white/10 text-white" : "text-zinc-500 hover:text-white"
+                    )}
+                  >
+                    <Link size={12} />
+                    <span>Link Externo</span>
+                  </button>
+                  <button 
+                    onClick={() => setMediaUploadType('file')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 py-2.5 text-[9px] uppercase tracking-wider transition-colors rounded-lg font-bold cursor-pointer",
+                      mediaUploadType === 'file' ? "bg-white/10 text-white" : "text-zinc-500 hover:text-white"
+                    )}
+                  >
+                    <Upload size={12} />
+                    <span>Upload Arquivo</span>
+                  </button>
+                </div>
+
+                {/* Media Type */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setNewMediaDetails(prev => ({ ...prev, type: 'image' }))}
+                    className={cn(
+                      "py-2.5 rounded-xl border text-[9px] uppercase font-bold tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer",
+                      newMediaDetails.type === 'image' 
+                        ? "bg-[#db2777]/10 border-[#db2777]/30 text-[#f472b6]" 
+                        : "bg-white/[0.02] border-white/5 text-zinc-400 hover:bg-white/[0.04]"
+                    )}
+                  >
+                    <Image size={12} />
+                    <span>Imagem</span>
+                  </button>
+                  <button
+                    onClick={() => setNewMediaDetails(prev => ({ ...prev, type: 'video' }))}
+                    className={cn(
+                      "py-2.5 rounded-xl border text-[9px] uppercase font-bold tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer",
+                      newMediaDetails.type === 'video' 
+                        ? "bg-purple-500/10 border-purple-500/30 text-purple-300" 
+                        : "bg-white/[0.02] border-white/5 text-zinc-400 hover:bg-white/[0.04]"
+                    )}
+                  >
+                    <Film size={12} />
+                    <span>Vídeo</span>
+                  </button>
+                </div>
+
+                {/* Name / Label */}
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">Legenda / Nome (Opcional)</label>
+                  <input 
+                    type="text" 
+                    value={newMediaDetails.name}
+                    onChange={(e) => setNewMediaDetails({ ...newMediaDetails, name: e.target.value })}
+                    placeholder="Ex: Sorriso de Verão"
+                    className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl py-2.5 px-4 text-xs font-light focus:outline-none focus:border-[#db2777]/40 text-white"
+                  />
+                </div>
+
+                {/* Value Input */}
+                <div>
+                  <label className="block text-[9px] uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                    {mediaUploadType === 'url' ? 'URL da Imagem ou do Vídeo' : 'Upload Local de Arquivo'}
+                  </label>
+                  {mediaUploadType === 'url' ? (
+                    <input 
+                      type="text" 
+                      value={newMediaDetails.url}
+                      onChange={(e) => setNewMediaDetails({ ...newMediaDetails, url: e.target.value })}
+                      placeholder="https://exemplo.com/foto.jpg"
+                      className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl py-2.5 px-4 text-xs font-light focus:outline-none focus:border-[#db2777]/40 text-white"
+                    />
+                  ) : (
+                    <div className="relative">
+                      <input 
+                        type="file" 
+                        accept={newMediaDetails.type === 'image' ? "image/*" : "video/*"}
+                        onChange={handleMediaFileChange}
+                        className="hidden" 
+                        id="media-gallery-upload"
+                      />
+                      <label 
+                        htmlFor="media-gallery-upload"
+                        className={cn(
+                          "w-full flex flex-col items-center justify-center gap-3 p-5 bg-white/[0.03] border-2 border-dashed border-white/[0.06] rounded-2xl cursor-pointer hover:bg-white/[0.05] hover:border-[#db2777]/30 transition-all text-center",
+                          newMediaDetails.url && "border-emerald-500/50 bg-emerald-500/5 text-emerald-400"
+                        )}
+                      >
+                        {isUploadingMedia ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#db2777] border-t-transparent" />
+                        ) : newMediaDetails.url ? (
+                          <>
+                            <div className="p-2 bg-emerald-500/10 rounded-full text-emerald-400 border border-emerald-500/30">
+                              <Plus size={16} />
+                            </div>
+                            <span className="text-[9px] text-emerald-400 uppercase tracking-widest font-bold">Arquivo Carregado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="text-zinc-500" size={20} />
+                            <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-light">Selecione uma {newMediaDetails.type === 'image' ? 'Imagem' : 'Mídia de Vídeo'}</span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleAddMediaToAlbum}
+                  disabled={!newMediaDetails.url || isUploadingMedia}
+                  className="w-full py-4 bg-gradient-to-r from-purple-500 to-[#db2777] text-white text-xs font-black uppercase tracking-[0.15em] rounded-xl transition-all disabled:opacity-30 disabled:grayscale mt-2 cursor-pointer shadow-lg active:scale-[0.98]"
+                >
+                  {isUploadingMedia ? 'Processando Arquivo...' : 'Salvar no Álbum'}
                 </button>
               </div>
             </motion.div>

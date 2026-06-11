@@ -13,7 +13,7 @@
 
 @layer base {
   body {
-    @apply font-sans antialiased overflow-hidden;
+    @apply font-sans antialiased overflow-x-hidden;
     background-color: var(--color-her-bg);
     color: var(--color-her-ink);
   }

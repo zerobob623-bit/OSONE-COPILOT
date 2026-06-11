@@ -16,7 +16,12 @@ import {
   RefreshCw, 
   Copy, 
   ChevronRight,
-  Info
+  Info,
+  Video,
+  Zap,
+  Radio,
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
@@ -43,7 +48,7 @@ interface PersonalizationPanelProps {
   onAddNotification: (msg: string, type: 'success' | 'info' | 'error') => void;
 }
 
-type TabId = 'profile' | 'voice' | 'elevenlabs' | 'keys' | 'interface' | 'sync';
+type TabId = 'profile' | 'voice' | 'elevenlabs' | 'keys' | 'interface' | 'sync' | 'tiktok';
 
 export default function PersonalizationPanel({
   onMenuClick,
@@ -81,6 +86,123 @@ export default function PersonalizationPanel({
   const [syncStatus, setSyncStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+
+  // ====== TikTok Live Integration State ======
+  const [tiktokUser, setTiktokUser] = useState('');
+  const [tiktokState, setTiktokState] = useState<any>({
+    status: 'disconnected',
+    username: '',
+    isAutoRespondActive: false,
+    logs: []
+  });
+  const [tiktokLoading, setTiktokLoading] = useState(false);
+
+  // Poll TikTok Live webcast status and events
+  React.useEffect(() => {
+    let interval: any = null;
+    const fetchTiktokState = async () => {
+      try {
+        const res = await fetch('/api/tiktok/state');
+        if (res.ok) {
+          const data = await res.json();
+          setTiktokState(data);
+          if (data.username && !tiktokUser) {
+            setTiktokUser(data.username);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll tiktok state:', err);
+      }
+    };
+
+    fetchTiktokState();
+    interval = setInterval(fetchTiktokState, 3000); // Poll TikTok events every 3 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleTiktokConnect = async (simulate = false) => {
+    setTiktokLoading(true);
+    try {
+      const res = await fetch('/api/tiktok/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: tiktokUser,
+          simulate
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        onAddNotification(data.message || 'Ponte Estabelecida!', 'success');
+        // Instantly refresh state
+        const stateRes = await fetch('/api/tiktok/state');
+        if (stateRes.ok) setTiktokState(await stateRes.json());
+      } else {
+        onAddNotification(data.error || 'Falha ao conectar ao TikTok.', 'error');
+      }
+    } catch (err) {
+      onAddNotification('Erro de tráfego de rede.', 'error');
+    } finally {
+      setTiktokLoading(false);
+    }
+  };
+
+  const handleTiktokDisconnect = async () => {
+    setTiktokLoading(true);
+    try {
+      const res = await fetch('/api/tiktok/disconnect', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        onAddNotification(data.message, 'info');
+        // Instantly refresh state
+        const stateRes = await fetch('/api/tiktok/state');
+        if (stateRes.ok) setTiktokState(await stateRes.json());
+      }
+    } catch (err) {
+      onAddNotification('Erro de rede ao desconectar.', 'error');
+    } finally {
+      setTiktokLoading(false);
+    }
+  };
+
+  const handleTiktokToggleAutoRespond = async (active: boolean) => {
+    try {
+      const res = await fetch('/api/tiktok/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAutoRespondActive: active })
+      });
+      if (res.ok) {
+        onAddNotification(active ? 'Co-piloto Automático Ativado!' : 'Co-piloto Automático Desativado.', 'info');
+        setTiktokState((prev: any) => ({ ...prev, isAutoRespondActive: active }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleTiktokClearLogs = async () => {
+    try {
+      const res = await fetch('/api/tiktok/clear-logs', { method: 'POST' });
+      if (res.ok) {
+        onAddNotification('Terminal do TikTok limpo.', 'info');
+        setTiktokState((prev: any) => ({
+          ...prev,
+          logs: [{
+            id: 'clear',
+            type: 'system',
+            user: 'Sistema',
+            message: 'Histórico de eventos do TikTok Live limpo com segurança.',
+            timestamp: Date.now()
+          }]
+        }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Verification for Gemini API Key
   const handleVerifyGemini = async () => {
@@ -302,6 +424,7 @@ export default function PersonalizationPanel({
           { id: 'elevenlabs', label: 'ElevenLabs & Gemini 3.5', icon: Cpu },
           { id: 'keys', label: 'Chaves Extras', icon: Key },
           { id: 'interface', label: 'Estética do Orb', icon: Sliders },
+          { id: 'tiktok', label: 'Conexão TikTok Live', icon: Video },
         ].map((subTab) => {
           const isActive = activeSubTab === subTab.id;
           return (
@@ -677,6 +800,42 @@ export default function PersonalizationPanel({
                         <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
                       )}
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Google Custom Search Section */}
+              <div className="space-y-5 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div className="flex items-center gap-2 mb-1">
+                  <Key size={13} className="text-purple-400" />
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#efefef]">Google Custom Search API</h4>
+                </div>
+                
+                <p className="text-[11px] text-zinc-400 font-sans leading-relaxed text-left">
+                  Configure o Custom Search para habilitar buscas na web em tempo real localmente sem depender exclusivamente da pesquisa geradora padrão do Gemini.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="text-left">
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">Google Custom Search API Key (Developer Key)</label>
+                    <input 
+                      type="password"
+                      value={keys.googleCustomSearchApiKey || ''}
+                      onChange={(e) => setKeys({ ...keys, googleCustomSearchApiKey: e.target.value })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-purple-500/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
+                      placeholder="Ex: AIzaSyD..."
+                    />
+                  </div>
+
+                  <div className="text-left">
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">Search Engine ID (CX)</label>
+                    <input 
+                      type="text"
+                      value={keys.googleCustomSearchCx || ''}
+                      onChange={(e) => setKeys({ ...keys, googleCustomSearchCx: e.target.value })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-purple-500/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
+                      placeholder="Ex: d18bde89..."
+                    />
                   </div>
                 </div>
               </div>
@@ -1069,6 +1228,193 @@ export default function PersonalizationPanel({
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          )}
+
+          {activeSubTab === 'tiktok' && (
+            <motion.div
+              key="tiktok"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6 max-w-3xl mx-auto"
+            >
+              <div className="text-left select-none">
+                <h3 className="text-base font-bold uppercase tracking-wider text-white">Co-piloto do TikTok Live</h3>
+                <p className="text-xs text-her-muted/60 mt-1">
+                  Estreite a conexão de voz e os dados do OSONE G5 diretamente aos eventos de sua live no TikTok sem espelhamento de tela.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Lateral controls card */}
+                <div className="md:col-span-1 space-y-6">
+                  <div className="bg-white/[0.01] border border-white/[0.03] p-5 rounded-2xl space-y-4">
+                    <span className="block text-[9px] uppercase tracking-widest text-[#666] font-mono tracking-widest font-bold">CONECTIVIDADE</span>
+                    
+                    <div className="space-y-1.5">
+                      <label className="block text-[8.5px] text-zinc-400 font-mono tracking-wider uppercase font-bold">NOME DO HOST / USERNAME</label>
+                      <input 
+                        type="text"
+                        value={tiktokUser}
+                        onChange={(e) => setTiktokUser(e.target.value)}
+                        placeholder="Ex: @seu_canal_tiktok"
+                        disabled={tiktokState.status !== 'disconnected'}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-3.5 py-3 focus:outline-none focus:border-rose-500/20 text-xs text-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      {tiktokState.status === 'disconnected' ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleTiktokConnect(false)}
+                            disabled={tiktokLoading || !tiktokUser.trim()}
+                            className="w-full py-3 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold uppercase tracking-widest transition-all rounded-xl cursor-pointer disabled:opacity-40"
+                          >
+                            {tiktokLoading ? "Mapeando..." : "Conectar Webcast"}
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleTiktokConnect(true)}
+                            disabled={tiktokLoading}
+                            className="w-full py-3 bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 text-zinc-300 text-xs font-bold uppercase tracking-widest transition-all rounded-xl cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Zap size={11} className="text-amber-400" />
+                            Mock/Simular Live
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleTiktokDisconnect}
+                          disabled={tiktokLoading}
+                          className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-rose-400 border border-zinc-700 text-xs font-bold uppercase tracking-widest transition-all rounded-xl cursor-pointer"
+                        >
+                          {tiktokLoading ? "Sincronizando..." : "Desconectar"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white/[0.01] border border-white/[0.03] p-5 rounded-2xl space-y-4">
+                    <span className="block text-[9px] uppercase tracking-widest text-[#666] font-mono tracking-widest font-bold">CO-PILOTO COGNITIVO</span>
+                    
+                    <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/[0.02]">
+                      <div className="text-left">
+                        <span className="block text-[9.5px] font-bold text-zinc-200 uppercase leading-none">Auto-Responder IA</span>
+                        <span className="text-[8px] text-zinc-500 select-none block mt-1">Respostas sintéticas automáticas</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTiktokToggleAutoRespond(!tiktokState.isAutoRespondActive)}
+                        className={cn(
+                          "px-3 py-1.5 text-[8.5px] font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer",
+                          tiktokState.isAutoRespondActive
+                            ? "bg-rose-500/10 text-rose-400 border border-rose-500/15"
+                            : "bg-white/[0.02] text-zinc-500 border border-white/5"
+                        )}
+                      >
+                        {tiktokState.isAutoRespondActive ? "ATIVO" : "INATIVO"}
+                      </button>
+                    </div>
+
+                    <div className="space-y-1 select-none">
+                      <p className="text-[8.5px] leading-relaxed text-zinc-500">
+                        *O modo <strong>Auto-Responder</strong> monitora novas interações do chat da live, utilizando a inteligência do OSONE para formular feedbacks instantâneos em texto.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main terminal screen log */}
+                <div className="md:col-span-2 flex flex-col h-[420px] bg-[#050505] border border-white/[0.04] rounded-2xl overflow-hidden shadow-2xl relative">
+                  <div className="flex items-center justify-between px-4 py-3 bg-black/40 border-b border-white/[0.04] shrink-0">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full relative">
+                        <span className={cn(
+                          "absolute inset-0 rounded-full",
+                          tiktokState.status === 'connected' ? "bg-emerald-400 animate-ping" : 
+                          tiktokState.status === 'connecting' ? "bg-amber-400 animate-ping" : "bg-zinc-600"
+                        )} />
+                        <span className={cn(
+                          "absolute inset-0.5 rounded-full",
+                          tiktokState.status === 'connected' ? "bg-emerald-500" : 
+                          tiktokState.status === 'connecting' ? "bg-amber-500" : "bg-zinc-500"
+                        )} />
+                      </span>
+                      <span className="text-[10px] font-mono tracking-widest text-zinc-400 font-bold uppercase">
+                        {tiktokState.status === 'connected' ? `Conectado: @${tiktokState.username}` : 
+                         tiktokState.status === 'connecting' ? "Sincronizando..." : "Módulo Desconectado"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleTiktokClearLogs}
+                        className="px-2.5 py-1 text-[8.5px] font-mono border border-white/5 bg-white/[0.02] hover:bg-white/[0.06] rounded-md transition-all text-zinc-400"
+                      >
+                        Limpar Log
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Terminal log items scrolling client */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-2.5 select-text font-mono text-[10.5px] bg-[#030303]">
+                    {tiktokState.logs.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center text-zinc-600">
+                        <Radio size={16} className="mb-2 text-zinc-700 animate-pulse" />
+                        <span className="text-[9px] uppercase tracking-widest">Nenhuma atividade interceptada</span>
+                        <span className="text-[8px] opacity-60 mt-0.5 font-sans">Abra uma Live e clique em Conectar ou experimente Simulador</span>
+                      </div>
+                    ) : (
+                      tiktokState.logs.map((log: any) => {
+                        let colorClasses = "bg-white/[0.01] border-white/5 text-zinc-400";
+                        let label = "INFO";
+                        
+                        if (log.type === "chat") {
+                          colorClasses = "bg-sky-500/[0.02] border-sky-500/10 text-sky-200";
+                          label = "CHAT";
+                        } else if (log.type === "gift") {
+                          colorClasses = "bg-pink-500/[0.03] border-pink-500/15 text-pink-300 font-bold";
+                          label = "PRESENTE";
+                        } else if (log.type === "like") {
+                          colorClasses = "bg-emerald-500/[0.02] border-emerald-500/10 text-emerald-300";
+                          label = "CURTIDA";
+                        } else if (log.type === "member") {
+                          colorClasses = "bg-purple-500/[0.02] border-purple-500/10 text-purple-300";
+                          label = "ENTROU";
+                        } else if (log.type === "error") {
+                          colorClasses = "bg-red-500/[0.03] border-red-500/15 text-red-400";
+                          label = "ERRO";
+                        } else if (log.type === "system") {
+                          colorClasses = "bg-amber-500/[0.02] border-amber-500/10 text-amber-300";
+                          label = "SISTEMA";
+                        }
+
+                        // Short date format
+                        const dateStr = new Date(log.timestamp).toLocaleTimeString('pt-BR', { hour12: false });
+
+                        return (
+                          <div key={log.id} className={cn("p-2.5 rounded-xl border text-left leading-relaxed", colorClasses)}>
+                            <div className="flex items-center justify-between gap-3 mb-1 shrink-0 select-none opacity-60">
+                              <span className="text-[8px] uppercase tracking-wider">{label} • {dateStr}</span>
+                              <span className="text-[9px] font-bold">@{log.user}</span>
+                            </div>
+                            <p className="whitespace-pre-wrap">{log.message}</p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
               </div>
             </motion.div>
           )}

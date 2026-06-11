@@ -11,6 +11,7 @@ interface IntimateMissionModalProps {
 
 export function IntimateMissionModal({ isOpen, onClose, intimateAnswers }: IntimateMissionModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>("Informações Básicas e Identidade");
+  const [filterType, setFilterType] = useState<'all' | 'answered' | 'pending'>('all');
 
   const answeredCount = Object.keys(intimateAnswers).length;
   const totalCount = INTIMATE_QUESTIONS.length;
@@ -136,7 +137,34 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers }: Intim
           {/* Core interface content splitting */}
           <div className="flex-grow flex flex-col md:flex-row overflow-hidden min-h-0">
             {/* Category tabs */}
-            <div className="w-full md:w-[320px] bg-black/40 border-r border-white/5 overflow-y-auto p-3 flex flex-row md:flex-col gap-1 shrink-0">
+            <div className="w-full md:w-[325px] bg-black/40 border-r border-white/5 overflow-y-auto p-4 flex flex-row md:flex-col gap-1 shrink-0 scrollbar-none">
+              
+              {/* Resumo de Perguntas para Acompanhamento Geral */}
+              <div className="hidden md:flex flex-col gap-2.5 p-4.5 mb-3 bg-zinc-950/40 border border-white/[0.04] rounded-2xl text-left select-none relative overflow-hidden shrink-0">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/[0.03] blur-xl rounded-full pointer-events-none" />
+                <span className="text-[9px] font-mono tracking-widest text-zinc-500 font-bold uppercase block">Mapeamento de Sinapses</span>
+                
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="p-2.5 bg-black/40 rounded-xl border border-white/[0.02]">
+                    <span className="block text-[8px] text-zinc-550 uppercase font-mono leading-none tracking-wider">Respondidas</span>
+                    <span className="text-base font-serif italic font-bold text-emerald-400 mt-1 block">
+                      {answeredCount} <span className="text-[10px] text-zinc-500 font-sans font-light">/ {totalCount}</span>
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-black/40 rounded-xl border border-white/[0.02]">
+                    <span className="block text-[8px] text-zinc-555 uppercase font-mono leading-none tracking-wider">Restantes</span>
+                    <span className="text-base font-serif italic font-bold text-rose-450 mt-1 block">
+                      {totalCount - answeredCount} <span className="text-[10px] text-zinc-500 font-sans font-light">restam</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-1 flex items-center justify-between text-[9.5px] text-zinc-500 font-mono">
+                  <span>Conexão Local:</span>
+                  <span className="text-zinc-400 font-semibold">{completionPercentage}% Ativo</span>
+                </div>
+              </div>
+
               {categories.map((category, idx) => {
                 const qInCat = INTIMATE_QUESTIONS.filter(q => q.category === category);
                 const answeredInCat = qInCat.filter(q => intimateAnswers[q.id]).length;
@@ -146,10 +174,10 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers }: Intim
                   <button
                     key={category}
                     onClick={() => setSelectedCategory(category)}
-                    className={`flex flex-col items-start gap-1 p-2.5 rounded-xl text-left border transition-all shrink-0 md:shrink-1 ${
+                    className={`flex flex-col items-start gap-1 p-3 rounded-xl text-left border transition-all shrink-0 md:shrink-1 ${
                       selectedCategory === category 
-                        ? "bg-rose-500/[0.08] border-rose-500/20 text-rose-400" 
-                        : "bg-transparent border-transparent hover:bg-white/[0.02] text-zinc-400"
+                        ? "bg-rose-500/[0.06] border-rose-500/15 text-rose-400" 
+                        : "bg-transparent border-transparent hover:bg-white/[0.015] text-zinc-400"
                     }`}
                   >
                     <span className="text-[9px] font-mono tracking-wider text-rose-500 uppercase leading-none">
@@ -164,7 +192,7 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers }: Intim
                       ) : (
                         <HelpCircle size={10} className="text-zinc-700" />
                       )}
-                      <span>{answeredInCat} de {qInCat.length} mapeados</span>
+                      <span>{answeredInCat} de {qInCat.length} respondidas</span>
                     </div>
                   </button>
                 );
@@ -175,61 +203,116 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers }: Intim
             <div className="flex-1 overflow-y-auto p-6 bg-black/20">
               {selectedCategory && (
                 <div className="space-y-4">
-                  <div className="pb-3 border-b border-white/5 mb-4 shrink-0 select-none">
-                    <h2 className="text-sm font-semibold text-rose-400 tracking-wider">
-                      {selectedCategory.toUpperCase()}
-                    </h2>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      Fatos de identidade do usuário identificados pelo OSONE nesta seção.
-                    </p>
+                  <div className="pb-4 border-b border-white/5 mb-4 shrink-0 select-none flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-rose-400 tracking-wider">
+                        {selectedCategory.toUpperCase()}
+                      </h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Acompanhe o andamento da memória e da sincronização desse compartimento de dados.
+                      </p>
+                    </div>
+
+                    {/* Segmented controls to filter answered/pending questions */}
+                    <div className="flex items-center bg-white/[0.02] border border-white/5 p-1 rounded-xl shrink-0">
+                      <button
+                        onClick={() => setFilterType('all')}
+                        className={`px-3 py-1.5 text-[9.5px] font-mono tracking-wider uppercase rounded-lg transition-all cursor-pointer ${
+                          filterType === 'all' 
+                            ? "bg-white/10 text-white font-bold" 
+                            : "text-zinc-500 hover:text-zinc-350"
+                        }`}
+                      >
+                        Todas ({INTIMATE_QUESTIONS.filter(q => q.category === selectedCategory).length})
+                      </button>
+                      <button
+                        onClick={() => setFilterType('answered')}
+                        className={`px-3 py-1.5 text-[9.5px] font-mono tracking-wider uppercase rounded-lg transition-all cursor-pointer ${
+                          filterType === 'answered' 
+                            ? "bg-emerald-500/10 text-emerald-400 font-bold" 
+                            : "text-zinc-500 hover:text-zinc-350"
+                        }`}
+                      >
+                        Respondidas ({INTIMATE_QUESTIONS.filter(q => q.category === selectedCategory).filter(q => intimateAnswers[q.id]).length})
+                      </button>
+                      <button
+                        onClick={() => setFilterType('pending')}
+                        className={`px-3 py-1.5 text-[9.5px] font-mono tracking-wider uppercase rounded-lg transition-all cursor-pointer ${
+                          filterType === 'pending' 
+                            ? "bg-rose-500/10 text-rose-400 font-bold" 
+                            : "text-zinc-500 hover:text-zinc-350"
+                        }`}
+                      >
+                        Faltam ({INTIMATE_QUESTIONS.filter(q => q.category === selectedCategory).filter(q => !intimateAnswers[q.id]).length})
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-4">
-                    {INTIMATE_QUESTIONS.filter(q => q.category === selectedCategory).map(q => {
-                      const answer = intimateAnswers[q.id];
-                      const isAnswered = !!answer;
+                    {(() => {
+                      const filteredQs = INTIMATE_QUESTIONS.filter(q => q.category === selectedCategory).filter(q => {
+                        const isAnswered = !!intimateAnswers[q.id];
+                        if (filterType === 'answered') return isAnswered;
+                        if (filterType === 'pending') return !isAnswered;
+                        return true;
+                      });
 
-                      return (
-                        <div 
-                          key={q.id}
-                          className={`p-4 rounded-xl border transition-all ${
-                            isAnswered 
-                              ? "bg-emerald-500/[0.02] border-emerald-500/10 text-zinc-100" 
-                              : "bg-white/[0.01] border-white/5 text-zinc-600"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3 justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono px-2 py-0.5 bg-white/5 rounded text-zinc-400">
-                                #{q.id}
-                              </span>
-                              <span className="text-xs font-medium text-zinc-300">
-                                {q.question}
-                              </span>
+                      if (filteredQs.length === 0) {
+                        return (
+                          <div className="py-12 text-center text-zinc-500 border border-dashed border-white/5 rounded-2xl">
+                            <Lock size={18} className="mx-auto mb-2 opacity-20 text-rose-450" />
+                            <p className="text-xs font-light text-zinc-400">Nenhuma pergunta encontrada para este filtro.</p>
+                            <p className="text-[9px] font-mono text-zinc-600 uppercase mt-1">Conectividade e criptografia estáveis</p>
+                          </div>
+                        );
+                      }
+
+                      return filteredQs.map(q => {
+                        const answer = intimateAnswers[q.id];
+                        const isAnswered = !!answer;
+
+                        return (
+                          <div 
+                            key={q.id}
+                            className={`p-4 rounded-xl border transition-all ${
+                              isAnswered 
+                                ? "bg-emerald-500/[0.02] border-emerald-500/10 text-zinc-100" 
+                                : "bg-white/[0.01] border-white/5 text-zinc-600"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono px-2 py-0.5 bg-white/5 rounded text-zinc-400">
+                                  #{q.id}
+                                </span>
+                                <span className="text-xs font-medium text-zinc-300">
+                                  {q.question}
+                                </span>
+                              </div>
+                              <div className="shrink-0 pt-0.5">
+                                {isAnswered ? (
+                                  <Lock size={13} className="text-emerald-500 animate-pulse" />
+                                ) : (
+                                  <Lock size={13} className="text-zinc-700" />
+                                )}
+                              </div>
                             </div>
-                            <div className="shrink-0 pt-0.5">
+
+                            <div className="mt-2.5 pl-2 border-l border-white/5">
                               {isAnswered ? (
-                                <Lock size={13} className="text-emerald-500 animate-pulse" />
+                                <p className="text-xs font-serif italic text-emerald-400/90 leading-relaxed max-w-3xl whitespace-pre-wrap">
+                                  "{answer}"
+                                </p>
                               ) : (
-                                <Lock size={13} className="text-zinc-700" />
+                                <p className="text-[10px] font-mono tracking-widest text-zinc-600 uppercase select-none">
+                                  AGUARDANDO DEPOIMENTO ORDINÁRIO
+                                </p>
                               )}
                             </div>
                           </div>
-
-                          <div className="mt-2.5 pl-2 border-l border-white/5">
-                            {isAnswered ? (
-                              <p className="text-xs font-serif italic text-emerald-400/90 leading-relaxed max-w-3xl whitespace-pre-wrap">
-                                "{answer}"
-                              </p>
-                            ) : (
-                              <p className="text-[10px] font-mono tracking-widest text-zinc-600 uppercase select-none">
-                                AGUARDANDO DEPOIMENTO ORDINÁRIO
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
               )}

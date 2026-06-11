@@ -68,6 +68,267 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+  // ====== TIKTOK LIVE WEBCAST INTEGRATION STATE ======
+  let currentTikTokUser = "";
+  let tiktokStatus: "connected" | "disconnected" | "connecting" = "disconnected";
+  let isTikTokAutoRespondActive = false;
+  let activeTikTokRunner: any = null;
+  let simulatedIntervalId: any = null;
+
+  interface TikTokLog {
+    id: string;
+    type: "chat" | "gift" | "like" | "member" | "system" | "error";
+    user: string;
+    message: string;
+    timestamp: number;
+    detailedData?: any;
+  }
+
+  let tiktokEventLogs: TikTokLog[] = [
+    {
+      id: "init-tiktok",
+      type: "system",
+      user: "Sistema",
+      message: "Co-piloto de Live do TikTok carregado. Ajuste os dados do host em Configurações para iniciar escuta passiva das webcast sockets.",
+      timestamp: Date.now()
+    }
+  ];
+
+  async function handleTikTokAutoResponse(user: string, text: string) {
+    try {
+      const apiKey = getSecretGeminiKey();
+      if (!apiKey) return;
+
+      const ai = new GoogleGenAI({ apiKey, vertexai: false });
+      const prompt = `Você é o co-piloto OSONE G5 assistindo uma transmissão ao vivo no TikTok. O usuário "@${user}" enviou uma mensagem no chat da live. 
+Responda brevemente e com muita energia, carisma, carinho e sintonia (máximo 1 linha com no máximo 20 palavras), interagindo diretamente com ele.
+
+Comentário de @${user}: "${text}"`;
+
+      const gResult = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt
+      });
+
+      const replyText = gResult.text?.trim() || "Sensacional, obrigado por participar da nossa transmissão!";
+      
+      tiktokEventLogs.unshift({
+        id: Math.random().toString(36).substring(2, 11),
+        type: "system",
+        user: "🤖 OSONE G5 (Co-piloto)",
+        message: `Resposta automática para @${user}: "${replyText}"`,
+        timestamp: Date.now()
+      });
+    } catch (err) {
+      console.error("TikTok Auto respond error:", err);
+    }
+  }
+
+  function stopSimulatedLive() {
+    if (simulatedIntervalId) {
+      clearInterval(simulatedIntervalId);
+      simulatedIntervalId = null;
+    }
+  }
+
+  function startSimulatedLive() {
+    stopSimulatedLive();
+    tiktokStatus = "connected";
+    currentTikTokUser = "simulador_osone";
+    
+    tiktokEventLogs.unshift({
+      id: Math.random().toString(),
+      type: "system",
+      user: "Sistema",
+      message: "Modo de simulação ativa! Gerando tráfego virtual de chat, curtidas e presentes TikTok a cada 8 segundos.",
+      timestamp: Date.now()
+    });
+
+    const NAMES = ["LiviaStyle", "Guilherme_Dev", "AnaClara_TikTok", "Pedro_Osone", "Sonia_Mendes", "RenatoG5_Pro"];
+    const COMMENTS = [
+      "Caramba, o OSONE é bizarro de rápido!",
+      "Como faz pra conectar no whatsapp igual você fez?",
+      "Que inteligência incrível, roda local?",
+      "Dá um salve pra galera de São Paulo!",
+      "Gostei muito do design desse orb sínclitico",
+      "Você prefere ser chamado de OSONE ou apenas IA?",
+      "Manda bala nas explicações, aprendendo muito!"
+    ];
+    const GIFTS = ["Rosa", "Coração", "Boné TikTok", "Sorvete", "Diamante"];
+
+    simulatedIntervalId = setInterval(async () => {
+      const coin = Math.random();
+      
+      if (coin < 0.65) {
+        const name = NAMES[Math.floor(Math.random() * NAMES.length)];
+        const msg = COMMENTS[Math.floor(Math.random() * COMMENTS.length)];
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "chat",
+          user: name,
+          message: msg,
+          timestamp: Date.now()
+        });
+        
+        if (isTikTokAutoRespondActive) {
+          await handleTikTokAutoResponse(name, msg);
+        }
+      } else if (coin < 0.85) {
+        const name = NAMES[Math.floor(Math.random() * NAMES.length)];
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "like",
+          user: name,
+          message: `Gostou da live e enviou corações!`,
+          timestamp: Date.now()
+        });
+      } else {
+        const name = NAMES[Math.floor(Math.random() * NAMES.length)];
+        const giftName = GIFTS[Math.floor(Math.random() * GIFTS.length)];
+        const count = Math.floor(Math.random() * 5) + 1;
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "gift",
+          user: name,
+          message: `Enviou Presente: ${giftName} x${count}!`,
+          timestamp: Date.now()
+        });
+      }
+
+      if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+    }, 8000);
+  }
+
+  async function connectToTikTokLive(username: string) {
+    try {
+      await disconnectFromTikTokLive();
+      currentTikTokUser = username;
+      tiktokStatus = "connecting";
+
+      // Dynamic import to support clean compilation
+      const { WebcastPushConnection } = await import("tiktok-live-connector");
+      
+      const connection = new WebcastPushConnection(username, {
+        enableExtendedGiftInfo: true,
+        requestPollingIntervalMs: 2500,
+        clientParams: {
+          "app_language": "pt-BR",
+          "webcast_language": "pt-BR"
+        }
+      });
+      
+      activeTikTokRunner = connection;
+
+      connection.on("chat", async (data) => {
+        const logEntry: TikTokLog = {
+          id: data.msgId || Math.random().toString(),
+          type: "chat",
+          user: data.uniqueId || data.nickname || "Anônimo",
+          message: data.comment,
+          timestamp: Date.now()
+        };
+        tiktokEventLogs.unshift(logEntry);
+        if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+
+        if (isTikTokAutoRespondActive) {
+          await handleTikTokAutoResponse(logEntry.user, logEntry.message);
+        }
+      });
+
+      connection.on("gift", (data) => {
+        const logEntry: TikTokLog = {
+          id: data.msgId || Math.random().toString(),
+          type: "gift",
+          user: data.uniqueId || data.nickname || "Doador",
+          message: `Enviou Presente: ${data.giftName} (x${data.repeatCount || 1})`,
+          timestamp: Date.now()
+        };
+        tiktokEventLogs.unshift(logEntry);
+        if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+      });
+
+      connection.on("like", (data) => {
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "like",
+          user: data.uniqueId || data.nickname || "Gostou",
+          message: `Curtiu a live!`,
+          timestamp: Date.now()
+        });
+        if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+      });
+
+      connection.on("member", (data) => {
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "member",
+          user: data.uniqueId || data.nickname || "Membro",
+          message: `Entrou na live!`,
+          timestamp: Date.now()
+        });
+        if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+      });
+
+      connection.on("disconnected", () => {
+        tiktokStatus = "disconnected";
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "system",
+          user: "Sistema",
+          message: "Conexão encerrada pelo servidor do TikTok Webcast.",
+          timestamp: Date.now()
+        });
+      });
+
+      connection.on("error", (err) => {
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "error",
+          user: "Erro",
+          message: err.message || "Erro na conexão Webcast.",
+          timestamp: Date.now()
+        });
+      });
+
+      await connection.connect();
+      tiktokStatus = "connected";
+
+      tiktokEventLogs.unshift({
+        id: Math.random().toString(),
+        type: "system",
+        user: "Sistema",
+        message: `Conectado com absoluto sucesso à live de @${username}! Sincronia de Webcast ativa.`,
+        timestamp: Date.now()
+      });
+
+    } catch (err: any) {
+      console.error("TikTok connection crash:", err);
+      tiktokStatus = "disconnected";
+      tiktokEventLogs.unshift({
+        id: Math.random().toString(),
+        type: "error",
+        user: "Erro",
+        message: `Falha na conexão: ${err.message || "Transmissão offline, limite de taxa ou host inexistente."}`,
+        timestamp: Date.now()
+      });
+      throw err;
+    }
+  }
+
+  async function disconnectFromTikTokLive() {
+    stopSimulatedLive();
+    if (activeTikTokRunner) {
+      try {
+        await activeTikTokRunner.disconnect();
+      } catch (e) {
+        console.warn("Disconnection failed gracefully:", e);
+      }
+      activeTikTokRunner = null;
+    }
+    tiktokStatus = "disconnected";
+    currentTikTokUser = "";
+  }
+
   // ====== WHATSAPP EVOLUTION INTEGRATION STATE ======
   let whatsappConfig = {
     apiUrl: "https://demo.evolution-api.com",
@@ -978,6 +1239,112 @@ Nome do interlocutor: ${senderName}`;
         message: err.message || "A API do Gemini retornou um erro de rede ao processar. Certifique-se de que a chave tem permissões e saldo de cobrança ativos."
       });
     }
+  });
+
+  // POST endpoint for Google Custom Search API retrieval to prevent client-side CORS and secure credentials
+  app.post("/api/search/custom", async (req, res) => {
+    try {
+      const { query, key, cx } = req.body;
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "O termo de pesquisa 'query' é obrigatório." });
+      }
+
+      const searchKey = key || process.env.GOOGLE_API_KEY;
+      const searchCx = cx || process.env.GOOGLE_CSE_ID;
+
+      if (!searchKey || !searchCx) {
+        return res.status(400).json({
+          error: "Google Custom Search não configurado. Por favor, ajuste as chaves em 'Ajustes > Chaves Extras' ou no arquivo .env."
+        });
+      }
+
+      const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(searchKey)}&cx=${encodeURIComponent(searchCx)}&q=${encodeURIComponent(query)}`;
+      const searchRes = await fetch(url);
+      
+      if (!searchRes.ok) {
+        const errText = await searchRes.text();
+        return res.status(searchRes.status).json({ error: `Erro na Google API: ${errText}` });
+      }
+
+      const data = await searchRes.json();
+      return res.json(data);
+    } catch (err: any) {
+      console.error("Erro ao realizar busca Google Custom Search:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ====== TIKTOK LIVE CO-PILOT API ENDPOINTS ======
+  app.get("/api/tiktok/state", (req, res) => {
+    res.json({
+      status: tiktokStatus,
+      username: currentTikTokUser,
+      isAutoRespondActive: isTikTokAutoRespondActive,
+      logs: tiktokEventLogs
+    });
+  });
+
+  app.post("/api/tiktok/connect", async (req, res) => {
+    try {
+      const { username, simulate } = req.body;
+      
+      if (simulate) {
+        startSimulatedLive();
+        return res.json({ status: "success", message: "Simulação de live do TikTok iniciada no OSONE!" });
+      }
+
+      if (!username || typeof username !== "string" || !username.trim()) {
+        return res.status(400).json({ error: "O nome de usuário do TikTok é obrigatório." });
+      }
+
+      const cleanUser = username.trim().replace(/^@/, "");
+      
+      // Async trigger connection so we don't hold the HTTP request indefinitely
+      connectToTikTokLive(cleanUser).catch(e => {
+        console.error("Delayed connection failed:", e);
+      });
+
+      res.json({ 
+        status: "success", 
+        message: `Sinalização enviada com sucesso! Conectando à webcast de @${cleanUser}...` 
+      });
+    } catch (err: any) {
+      console.error("Erro ao conectar TikTok:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/tiktok/disconnect", async (req, res) => {
+    try {
+      await disconnectFromTikTokLive();
+      res.json({ status: "success", message: "Conectividade do TikTok Live suspensa de forma íntegra." });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/tiktok/config", (req, res) => {
+    const { isAutoRespondActive } = req.body;
+    if (isAutoRespondActive !== undefined) {
+      isTikTokAutoRespondActive = !!isAutoRespondActive;
+    }
+    res.json({ 
+      status: "success", 
+      isAutoRespondActive: isTikTokAutoRespondActive 
+    });
+  });
+
+  app.post("/api/tiktok/clear-logs", (req, res) => {
+    tiktokEventLogs = [
+      {
+        id: "clear-" + Date.now(),
+        type: "system",
+        user: "Sistema",
+        message: "Histórico de eventos do TikTok Live limpo com segurança.",
+        timestamp: Date.now()
+      }
+    ];
+    res.json({ status: "success" });
   });
 
   // POST endpoint for verifying Elevenlabs credentials and options in real-time
