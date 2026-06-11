@@ -21,7 +21,10 @@ import {
   Zap,
   Radio,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  Eye,
+  Heart,
+  Users
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
@@ -89,10 +92,13 @@ export default function PersonalizationPanel({
 
   // ====== TikTok Live Integration State ======
   const [tiktokUser, setTiktokUser] = useState('');
+  const [tiktokSessionId, setTiktokSessionId] = useState('');
   const [tiktokState, setTiktokState] = useState<any>({
     status: 'disconnected',
     username: '',
     isAutoRespondActive: false,
+    viewerCount: 0,
+    likeCount: 0,
     logs: []
   });
   const [tiktokLoading, setTiktokLoading] = useState(false);
@@ -108,6 +114,9 @@ export default function PersonalizationPanel({
           setTiktokState(data);
           if (data.username && !tiktokUser) {
             setTiktokUser(data.username);
+          }
+          if (data.sessionId && !tiktokSessionId) {
+            setTiktokSessionId(data.sessionId);
           }
         }
       } catch (err) {
@@ -129,7 +138,8 @@ export default function PersonalizationPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: tiktokUser,
-          simulate
+          simulate,
+          sessionId: tiktokSessionId
         })
       });
 
@@ -1261,6 +1271,21 @@ export default function PersonalizationPanel({
                       />
                     </div>
 
+                    <div className="space-y-1.5">
+                      <label className="flex items-center justify-between text-[8.5px] text-zinc-400 font-mono tracking-wider uppercase font-bold">
+                        <span>SESSION ID (OPCIONAL)</span>
+                        <span className="text-[7.5px] text-rose-400/80 lowercase italic normal-case font-sans">burlar rate limit</span>
+                      </label>
+                      <input 
+                        type="password"
+                        value={tiktokSessionId}
+                        onChange={(e) => setTiktokSessionId(e.target.value)}
+                        placeholder="sessionid cookie value"
+                        disabled={tiktokState.status !== 'disconnected'}
+                        className="w-full bg-white/[0.02] border border-white/[0.05] rounded-xl px-3.5 py-3 focus:outline-none focus:border-rose-500/20 text-xs text-white font-mono"
+                      />
+                    </div>
+
                     <div className="space-y-2">
                       {tiktokState.status === 'disconnected' ? (
                         <>
@@ -1329,8 +1354,8 @@ export default function PersonalizationPanel({
                 {/* Main terminal screen log */}
                 <div className="md:col-span-2 flex flex-col h-[420px] bg-[#050505] border border-white/[0.04] rounded-2xl overflow-hidden shadow-2xl relative">
                   <div className="flex items-center justify-between px-4 py-3 bg-black/40 border-b border-white/[0.04] shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full relative">
+                    <div className="flex items-center gap-3">
+                      <span className="w-2 h-2 rounded-full relative shrink-0">
                         <span className={cn(
                           "absolute inset-0 rounded-full",
                           tiktokState.status === 'connected' ? "bg-emerald-400 animate-ping" : 
@@ -1342,10 +1367,23 @@ export default function PersonalizationPanel({
                           tiktokState.status === 'connecting' ? "bg-amber-500" : "bg-zinc-500"
                         )} />
                       </span>
-                      <span className="text-[10px] font-mono tracking-widest text-zinc-400 font-bold uppercase">
-                        {tiktokState.status === 'connected' ? `Conectado: @${tiktokState.username}` : 
-                         tiktokState.status === 'connecting' ? "Sincronizando..." : "Módulo Desconectado"}
+                      <span className="text-[10px] font-mono tracking-widest text-zinc-400 font-bold uppercase truncate max-w-[150px]">
+                        {tiktokState.status === 'connected' ? `@${tiktokState.username}` : 
+                         tiktokState.status === 'connecting' ? "Sincronizando..." : "TikTok Desconectado"}
                       </span>
+
+                      {tiktokState.status === 'connected' && (
+                        <div className="flex items-center gap-2.5 ml-2 border-l border-white/5 pl-3">
+                          <div className="flex items-center gap-1.5 text-zinc-300 font-mono text-[9.5px]">
+                            <Eye size={11} className="text-sky-400" />
+                            <span>{tiktokState.viewerCount || 0}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-zinc-300 font-mono text-[9.5px]">
+                            <Heart size={10} className="text-rose-500 fill-rose-500/20" />
+                            <span>{tiktokState.likeCount || 0}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">

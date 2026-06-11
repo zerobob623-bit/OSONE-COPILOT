@@ -74,6 +74,9 @@ async function startServer() {
   let isTikTokAutoRespondActive = false;
   let activeTikTokRunner: any = null;
   let simulatedIntervalId: any = null;
+  let tiktokViewerCount = 0;
+  let tiktokLikeCount = 0;
+  let tiktokSessionId = "";
 
   interface TikTokLog {
     id: string;
@@ -135,12 +138,14 @@ Comentário de @${user}: "${text}"`;
     stopSimulatedLive();
     tiktokStatus = "connected";
     currentTikTokUser = "simulador_osone";
+    tiktokViewerCount = Math.floor(Math.random() * 120) + 38;
+    tiktokLikeCount = Math.floor(Math.random() * 800) + 120;
     
     tiktokEventLogs.unshift({
       id: Math.random().toString(),
       type: "system",
       user: "Sistema",
-      message: "Modo de simulação ativa! Gerando tráfego virtual de chat, curtidas e presentes TikTok a cada 8 segundos.",
+      message: "Modo de simulação ativa! Gerando tráfego virtual de chat, curtidas e presentes TikTok a cada 6 segundos.",
       timestamp: Date.now()
     });
 
@@ -159,6 +164,9 @@ Comentário de @${user}: "${text}"`;
     simulatedIntervalId = setInterval(async () => {
       const coin = Math.random();
       
+      // Dynamic viewer count fluctuates
+      tiktokViewerCount = Math.max(5, tiktokViewerCount + Math.floor(Math.random() * 7) - 3);
+
       if (coin < 0.65) {
         const name = NAMES[Math.floor(Math.random() * NAMES.length)];
         const msg = COMMENTS[Math.floor(Math.random() * COMMENTS.length)];
@@ -175,17 +183,20 @@ Comentário de @${user}: "${text}"`;
         }
       } else if (coin < 0.85) {
         const name = NAMES[Math.floor(Math.random() * NAMES.length)];
+        const addedLikes = Math.floor(Math.random() * 15) + 5;
+        tiktokLikeCount += addedLikes;
         tiktokEventLogs.unshift({
           id: Math.random().toString(),
           type: "like",
           user: name,
-          message: `Gostou da live e enviou corações!`,
+          message: `Curtiu a live enviando corações (+${addedLikes} likes)!`,
           timestamp: Date.now()
         });
       } else {
         const name = NAMES[Math.floor(Math.random() * NAMES.length)];
         const giftName = GIFTS[Math.floor(Math.random() * GIFTS.length)];
         const count = Math.floor(Math.random() * 5) + 1;
+        tiktokLikeCount += (count * 10); // Gifts add lots of likes too
         tiktokEventLogs.unshift({
           id: Math.random().toString(),
           type: "gift",
@@ -196,27 +207,55 @@ Comentário de @${user}: "${text}"`;
       }
 
       if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
-    }, 8000);
+    }, 6000);
   }
 
-  async function connectToTikTokLive(username: string) {
+  async function connectToTikTokLive(username: string, sessionId?: string) {
     try {
       await disconnectFromTikTokLive();
       currentTikTokUser = username;
       tiktokStatus = "connecting";
+      tiktokViewerCount = 0;
+      tiktokLikeCount = 0;
+
+      tiktokEventLogs.unshift({
+        id: Math.random().toString(),
+        type: "system",
+        user: "Sistema",
+        message: `Mapeando username @${username}... Buscando ID do canal de transmissão ativa.`,
+        timestamp: Date.now()
+      });
 
       // Dynamic import to support clean compilation
       const { WebcastPushConnection } = await import("tiktok-live-connector");
       
-      const connection = new WebcastPushConnection(username, {
+      const configOpts: any = {
         enableExtendedGiftInfo: true,
-        requestPollingIntervalMs: 2500,
+        requestPollingIntervalMs: 2000,
         clientParams: {
           "app_language": "pt-BR",
           "webcast_language": "pt-BR"
+        },
+        requestOptions: {
+          timeout: 12000,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
         }
-      });
-      
+      };
+
+      if (sessionId && sessionId.trim()) {
+        configOpts.sessionId = sessionId.trim();
+        tiktokEventLogs.unshift({
+          id: Math.random().toString(),
+          type: "system",
+          user: "Sistema",
+          message: "Autenticação Ativa: Conectando com Session ID credenciado para evitar shadow-blocks.",
+          timestamp: Date.now()
+        });
+      }
+
+      const connection = new WebcastPushConnection(username, configOpts);
       activeTikTokRunner = connection;
 
       connection.on("chat", async (data) => {
@@ -236,26 +275,37 @@ Comentário de @${user}: "${text}"`;
       });
 
       connection.on("gift", (data) => {
+        const giftCount = data.repeatCount || data.count || 1;
         const logEntry: TikTokLog = {
           id: data.msgId || Math.random().toString(),
           type: "gift",
           user: data.uniqueId || data.nickname || "Doador",
-          message: `Enviou Presente: ${data.giftName} (x${data.repeatCount || 1})`,
+          message: `Enviou Presente: ${data.giftName} (x${giftCount})`,
           timestamp: Date.now()
         };
         tiktokEventLogs.unshift(logEntry);
-        if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+         if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
       });
 
       connection.on("like", (data) => {
+        if (data && typeof data.likeCount === "number") {
+          tiktokLikeCount = data.likeCount;
+        }
         tiktokEventLogs.unshift({
           id: Math.random().toString(),
           type: "like",
-          user: data.uniqueId || data.nickname || "Gostou",
-          message: `Curtiu a live!`,
+          user: data.uniqueId || data.nickname || "Curtiu",
+          message: `Curtiu a transmissão! Total: ${data.likeCount || tiktokLikeCount || ''} curtidas`,
           timestamp: Date.now()
         });
         if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
+      });
+
+      // Track spectators count in real-time
+      connection.on("roomUser", (data) => {
+        if (data && typeof data.viewerCount === "number") {
+          tiktokViewerCount = data.viewerCount;
+        }
       });
 
       connection.on("member", (data) => {
@@ -263,21 +313,31 @@ Comentário de @${user}: "${text}"`;
           id: Math.random().toString(),
           type: "member",
           user: data.uniqueId || data.nickname || "Membro",
-          message: `Entrou na live!`,
+          message: `Entrou na live! Bem-vindo(a).`,
           timestamp: Date.now()
         });
         if (tiktokEventLogs.length > 300) tiktokEventLogs.pop();
       });
 
       connection.on("disconnected", () => {
-        tiktokStatus = "disconnected";
-        tiktokEventLogs.unshift({
-          id: Math.random().toString(),
-          type: "system",
-          user: "Sistema",
-          message: "Conexão encerrada pelo servidor do TikTok Webcast.",
-          timestamp: Date.now()
-        });
+        // Only trigger reconnect check if we are still targeting this user and didn't disconnect manually
+        if (currentTikTokUser === username && tiktokStatus === "connected") {
+          tiktokStatus = "connecting";
+          tiktokEventLogs.unshift({
+            id: Math.random().toString(),
+            type: "system",
+            user: "Sistema",
+            message: "Conexão encerrada subitamente pelo TikTok. Tentando reconectar automaticamente em 10 segundos...",
+            timestamp: Date.now()
+          });
+          setTimeout(() => {
+            if (currentTikTokUser === username) {
+              connectToTikTokLive(username, sessionId).catch(() => {});
+            }
+          }, 10000);
+        } else {
+          tiktokStatus = "disconnected";
+        }
       });
 
       connection.on("error", (err) => {
@@ -285,7 +345,7 @@ Comentário de @${user}: "${text}"`;
           id: Math.random().toString(),
           type: "error",
           user: "Erro",
-          message: err.message || "Erro na conexão Webcast.",
+          message: `Alerta na transmissão: ${err.message || "Problema de transporte de sockets."}`,
           timestamp: Date.now()
         });
       });
@@ -297,18 +357,26 @@ Comentário de @${user}: "${text}"`;
         id: Math.random().toString(),
         type: "system",
         user: "Sistema",
-        message: `Conectado com absoluto sucesso à live de @${username}! Sincronia de Webcast ativa.`,
+        message: `Conectado com sucesso absoluto! Assistindo webcast de @${username} e recebendo eventos em tempo real.`,
         timestamp: Date.now()
       });
 
     } catch (err: any) {
       console.error("TikTok connection crash:", err);
       tiktokStatus = "disconnected";
+      
+      let errMsg = err.message || "Sem resposta/Transmissão offline.";
+      if (errMsg.includes("404") || errMsg.includes("not found")) {
+        errMsg = "Canal não encontrado ou transmissão offline no momento.";
+      } else if (errMsg.includes("rate limit") || errMsg.includes("IP") || errMsg.includes("block")) {
+        errMsg = "Bloqueio de IP por taxa limite do TikTok. Recomenda-se preencher o seu 'Session ID' para bypass.";
+      }
+
       tiktokEventLogs.unshift({
         id: Math.random().toString(),
         type: "error",
         user: "Erro",
-        message: `Falha na conexão: ${err.message || "Transmissão offline, limite de taxa ou host inexistente."}`,
+        message: `Falha na conexão: ${errMsg} Dica: Se o canal existir e estiver online, o TikTok pode estar bloqueando nosso IP de nuvem. Use o campo 'Session ID' ao lado para autenticar.`,
         timestamp: Date.now()
       });
       throw err;
@@ -1280,14 +1348,21 @@ Nome do interlocutor: ${senderName}`;
       status: tiktokStatus,
       username: currentTikTokUser,
       isAutoRespondActive: isTikTokAutoRespondActive,
+      viewerCount: tiktokViewerCount,
+      likeCount: tiktokLikeCount,
+      sessionId: tiktokSessionId,
       logs: tiktokEventLogs
     });
   });
 
   app.post("/api/tiktok/connect", async (req, res) => {
     try {
-      const { username, simulate } = req.body;
+      const { username, simulate, sessionId } = req.body;
       
+      if (sessionId !== undefined) {
+        tiktokSessionId = String(sessionId).trim();
+      }
+
       if (simulate) {
         startSimulatedLive();
         return res.json({ status: "success", message: "Simulação de live do TikTok iniciada no OSONE!" });
@@ -1300,7 +1375,7 @@ Nome do interlocutor: ${senderName}`;
       const cleanUser = username.trim().replace(/^@/, "");
       
       // Async trigger connection so we don't hold the HTTP request indefinitely
-      connectToTikTokLive(cleanUser).catch(e => {
+      connectToTikTokLive(cleanUser, tiktokSessionId).catch(e => {
         console.error("Delayed connection failed:", e);
       });
 
