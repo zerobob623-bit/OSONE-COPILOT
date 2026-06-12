@@ -1352,6 +1352,58 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // POST endpoint for high-speed server-side webpage text scraping & parsing
+  app.post("/api/scrape", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ error: "O parâmetro 'url' é obrigatório." });
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+
+      if (!response.ok) {
+        return res.status(400).json({ error: `Falha ao acessar o site: status ${response.status}` });
+      }
+
+      const html = await response.text();
+
+      // Strips structural elements like script tags, stylesheets, and menus
+      let text = html
+        .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
+        .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
+        .replace(/<svg[^>]*>([\s\S]*?)<\/svg>/gi, '')
+        .replace(/<noscript[^>]*>([\s\S]*?)<\/noscript>/gi, '')
+        .replace(/<header[^>]*>([\s\S]*?)<\/header>/gi, '')
+        .replace(/<footer[^>]*>([\s\S]*?)<\/footer>/gi, '')
+        .replace(/<nav[^>]*>([\s\S]*?)<\/nav>/gi, '')
+        .replace(/<iframe[^>]*>([\s\S]*?)<\/iframe>/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
+
+      text = text
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<\/h[1-6]>/gi, '\n\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      // Retain a clean set of text characters up to 12k to avoid bloating context
+      const cleanText = text.slice(0, 12000);
+
+      return res.json({ text: cleanText });
+    } catch (err: any) {
+      console.error("Erro ao analisar página no servidor:", err);
+      return res.status(500).json({ error: "Erro de raspagem: " + err.message });
+    }
+  });
+
   // ====== TIKTOK LIVE CO-PILOT API ENDPOINTS ======
   app.get("/api/tiktok/state", (req, res) => {
     res.json({

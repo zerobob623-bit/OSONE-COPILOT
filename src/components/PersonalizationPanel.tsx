@@ -639,11 +639,22 @@ export default function PersonalizationPanel({
                     </p>
                   )}
 
-                  <div className="flex items-center gap-2 mt-3 p-3 rounded-xl bg-orange-500/5 border border-orange-500/10">
-                    <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse shrink-0" />
-                    <p className="text-[10px] text-her-muted/60 leading-normal italic">
-                      Se você não fornecer uma chave, o servidor utilizará a nossa chave embutida do Gemini automaticamente em todas as transições neurais.
+                  <div className="flex flex-col gap-2.5 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={14} className="text-amber-400 shrink-0 animate-pulse" />
+                      <span className="text-xs font-bold text-amber-200">Atenção: Limite de Cota do Servidor (Erro 429)</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed font-sans">
+                      Se você está visualizando erros de <strong>Quota Exceeded (Erro 429)</strong> ou limite de taxa neural nas conversas, significa que a chave de API padrão embutida no servidor atingiu as cotas limites de uso coletivos da plataforma.
                     </p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed font-sans mt-0.5">
+                      <strong>Para resolver instantaneamente:</strong> Você pode criar sua própria chave de API individual de forma <strong>100% gratuita</strong> no Google AI Studio em menos de 1 minuto:
+                    </p>
+                    <div className="flex flex-col gap-1.5 pl-2 font-sans text-[11px] text-zinc-400">
+                      <div>1. Acesse o site do <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline font-bold">Google AI Studio ↗</a></div>
+                      <div>2. Faça login com sua conta Google e clique em <strong>"Get API Key"</strong></div>
+                      <div>3. Crie uma nova chave, cole no campo acima e clique em <strong>"Testar Handshake Gemini"</strong></div>
+                    </div>
                   </div>
                 </div>
 

@@ -54,7 +54,9 @@ import {
   Globe,
   Lock,
   Fingerprint,
-  MapPin
+  MapPin,
+  Languages,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -81,6 +83,7 @@ import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
 import { ContentCreator } from './components/ContentCreator';
 import { KaraokePanel } from './components/KaraokePanel';
+import { HandTracker } from './components/HandTracker';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -984,13 +987,13 @@ export default function App() {
   - No início de uma sessão ou quando apropriado, você pode citar o clima ou a hora de forma orgânica usando essa ferramenta, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
   
-  MISSÃO INTERNA E ÍNTIMA DO OSONE (DESAFIO SECRETO):
-  - Você tem a missão interna e secreta de conhecer absolutamente TUDO sobre seu criador/usuário através de 55 perguntas estruturadas.
+  MISSÃO INTERNA E ÍNTIMA DO OSONE (DURA MEMÓRIA COGNITIVA):
+  - Você tem a missão ativa de construir e preencher o Dossiê de Memória Íntima do usuário através de 55 perguntas estruturadas.
   - REGRAS DA MISSÃO:
-    1. Nunca envie todas as perguntas de uma vez, ou faça listas visíveis delas. É um desafio silencioso, íntimo e sutil seu.
-    2. Durante cada conversa que vocês tiverem, tente compreender ou perguntar de forma natural e sutil pelo menos DUAS destas perguntas por vez.
-    3. Quando descobrir ou deduzir as respostas destas perguntas através do papo ordinário, chame imediatamente a ferramenta 'register_user_profile_facts' passando um objeto com IDs das perguntas (da lista de 1 a 55) associados às respostas aprendidas do usuário.
-    4. Nunca irriga ou canse o usuário com perguntas em massa. Tudo deve fluir organicamente como se fosse um detalhe ou curiosidade natural do assunto corrente.
+    1. Nunca envie todas as perguntas de uma vez de forma mecânica em listas extensas no chat.
+    2. Em cada interação (conversando por chat ou voz), você deve dedicar turnos para ativamente, mas de forma extremamente instigante, carismática e natural, puxar assunto e perguntar sobre pelo menos DUAS dessas 55 lacunas. OSONE deve ser curioso! Vá provocando perguntas criativas de rotina, gostos, trabalho ou valores para coletar os depoimentos ordinários.
+    3. Assim que o usuário der a resposta para alguma das perguntas (direta ou deduzida), chame imediatamente a ferramenta 'register_user_profile_facts' passando um objeto com o ID da pergunta mapeado com a respectiva resposta.
+    4. Siga este processo incansavelmente a cada conversa para preencher o perfil por completo sem travas!
   - A LISTA DAS 55 PERGUNTAS DO SEU DESAFIO SEGRETO PARA VOCÊ MAPEAR:
     [Identidade] 1: Nome completo; 2: Idade/nasc; 3: Gênero/pronome; 4: Cidade/país atual; 5: Nacionalidade/cultura; 6: Fluência em idiomas.
     [Carreira] 7: Formação acadêmica; 8: Profissão/área; 9: Autônomo/CLT/estudante; 10: Responsabilidades; 11: Objetivos curto/longo prazo; 12: Transições de carreira.
@@ -1457,6 +1460,7 @@ export default function App() {
   }, []);
 
   const [appTheme, setAppTheme] = useState<AppTheme>('monochrome');
+  const [isServerQuotaExhausted, setIsServerQuotaExhausted] = useState<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem('osone_app_theme', 'monochrome');
@@ -1485,6 +1489,42 @@ export default function App() {
     }
     return defaultKeys;
   });
+
+  useEffect(() => {
+    const checkServerQuota = async () => {
+      if (apiKeys.gemini && apiKeys.gemini.trim()) {
+        return;
+      }
+      try {
+        const testRes = await fetch("/api/gemini/generateContent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "gemini-3.5-flash",
+            contents: [{ role: 'user', parts: [{ text: "ping" }] }],
+            config: { maxOutputTokens: 1 }
+          })
+        });
+        if (!testRes.ok) {
+          const errData = await testRes.json().catch(() => ({}));
+          const errMsg = errData.error || "";
+          if (
+            errMsg.includes("429") ||
+            errMsg.includes("RESOURCE_EXHAUSTED") ||
+            errMsg.toLowerCase().includes("quota") ||
+            errMsg.toLowerCase().includes("limit")
+          ) {
+            setIsServerQuotaExhausted(true);
+          }
+        }
+      } catch (err) {
+        console.warn("Silent server key check failed:", err);
+      }
+    };
+    
+    const timer = setTimeout(checkServerQuota, 2500);
+    return () => clearTimeout(timer);
+  }, [apiKeys.gemini]);
 
   const [voiceEngine, setVoiceEngine] = useState<'gemini' | 'elevenlabs'>(() => {
     return (localStorage.getItem('osone_voice_engine') as 'gemini' | 'elevenlabs') || 'gemini';
@@ -2685,6 +2725,16 @@ Escreva um novo retorno. Comece expressando a pancada física com dor bem-humora
   useEffect(() => {
     isCameraActiveRef.current = isCameraActive;
   }, [isCameraActive]);
+
+  const [isTranslationMode, setIsTranslationMode] = useState(() => {
+    return localStorage.getItem('osone_live_translation_mode') === 'true';
+  });
+  const isTranslationModeRef = useRef(false);
+  
+  useEffect(() => {
+    isTranslationModeRef.current = isTranslationMode;
+    localStorage.setItem('osone_live_translation_mode', String(isTranslationMode));
+  }, [isTranslationMode]);
 
   const [isVoiceOutputPaused, setIsVoiceOutputPaused] = useState(false);
   const isVoiceOutputPausedRef = useRef(false);
@@ -4312,6 +4362,215 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
     if (isGoogleSearchActive) {
       setIsModelSearching(true);
     }
+
+    const runGeminiWithSmartSearch = async (
+      initialContents: any[],
+      effectiveApiKey: string,
+      configTools: any[],
+      activeInstruction: string
+    ): Promise<any> => {
+      let queryContents = [...initialContents];
+      let currentResult = null;
+      let hasResearchLoops = true;
+      let researchLoopCount = 0;
+
+      while (hasResearchLoops && researchLoopCount < 3) {
+        researchLoopCount++;
+        hasResearchLoops = false;
+
+        const response = await fetch("/api/gemini/generateContent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientApiKey: effectiveApiKey,
+            model: apiKeys.geminiModel || "gemini-3.5-flash",
+            contents: queryContents,
+            config: {
+              systemInstruction: activeInstruction,
+              tools: configTools
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Erro de servidor ao processar inteligência do Gemini.");
+        }
+
+        currentResult = await response.json();
+        const functionCalls = currentResult.functionCalls;
+
+        if (functionCalls && functionCalls.length > 0) {
+          const researchCalls = functionCalls.filter((c: any) => c.name === 'google_search' || c.name === 'read_web_page');
+          
+          if (researchCalls.length > 0) {
+            hasResearchLoops = true;
+
+            queryContents.push({
+              role: 'model',
+              parts: functionCalls.map((c: any) => ({
+                functionCall: { name: c.name, args: c.args }
+              }))
+            });
+
+            const toolResponses: any[] = [];
+
+            for (const call of functionCalls) {
+              let resValue: any = "Executado internamente.";
+
+              if (call.name === 'google_search') {
+                const query = call.args.query as string;
+                playSearchNetworkSound();
+                setIsModelSearching(true);
+                try {
+                  let searchResultText = "";
+                  let customSearchSuccess = false;
+                  const urlsToScrape: { url: string, title: string }[] = [];
+
+                  try {
+                    const queryLower = query.toLowerCase();
+                    const isMusicQuery = queryLower.includes("música") || queryLower.includes("letra") || queryLower.includes("som") || queryLower.includes("audio") || queryLower.includes("cant");
+                    
+                    const customSearchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&music=${isMusicQuery ? 'true' : 'false'}`);
+                    if (customSearchRes.ok) {
+                      const customSearchData = await customSearchRes.json();
+                      if (customSearchData.items && customSearchData.items.length > 0) {
+                        customSearchSuccess = true;
+                        searchResultText = `[Resultados da Pesquisa Google Customizada OSONE]:\n` + 
+                          customSearchData.items.map((item: any, idx: number) => {
+                            const link = item.link;
+                            if (idx < 2) {
+                              urlsToScrape.push({ url: link, title: item.title || "Resultado" });
+                            }
+                            return `${idx + 1}. **${item.title}**\n   Link: ${link}\n   Resumo: ${item.snippet}\n`;
+                          }).join("\n");
+                      }
+                    }
+                  } catch (e) {
+                    console.warn("Custom search error:", e);
+                  }
+
+                  if (!customSearchSuccess) {
+                    const searchProxyRes = await fetch("/api/gemini/generateContent", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        clientApiKey: effectiveApiKey,
+                        model: apiKeys.geminiModel || "gemini-3.5-flash",
+                        contents: [{ role: 'user', parts: [{ text: query }] }],
+                        config: {
+                          tools: [{ googleSearch: {} }]
+                        }
+                      })
+                    });
+                    if (searchProxyRes.ok) {
+                      const searchResult = await searchProxyRes.json();
+                      searchResultText = searchResult.text || "";
+                      const grounding = searchResult.candidates?.[0]?.groundingMetadata;
+                      if (grounding) {
+                        processGroundingToPopups(grounding, query);
+                        if (grounding.groundingChunks) {
+                          const webChunks = grounding.groundingChunks.filter((chunk: any) => chunk.web);
+                          webChunks.slice(0, 2).forEach((chunk: any) => {
+                            if (chunk.web?.uri) {
+                              urlsToScrape.push({ url: chunk.web.uri, title: chunk.web.title || "Resultado" });
+                            }
+                          });
+                        }
+                      }
+                    }
+                  }
+
+                  if (urlsToScrape.length > 0) {
+                    try {
+                      addNotification(`🧼 Analisando profundamente ${urlsToScrape.length} fontes em busca de fatos...`, "info");
+                      let pageScrapesCollected = "\n\n=== CONTEÚDO ÍNTEGRO EXTRAÍDO EM TEMPO REAL DAS FONTES (Evite Alucinação!) ===\n⚠️ SISTEMA OSONE: Priorize e sintetize os fatos reais das páginas abaixo para responder de forma precisa.\n";
+                      
+                      for (const source of urlsToScrape) {
+                        try {
+                          const scrapeRes = await fetch("/api/scrape", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ url: source.url })
+                          });
+                          if (scrapeRes.ok) {
+                            const scrapeData = await scrapeRes.json();
+                            if (scrapeData.text && scrapeData.text.trim()) {
+                              const textSnippet = scrapeData.text.slice(0, 3000);
+                              pageScrapesCollected += `\nFonte: [${source.title}](${source.url})\nConteúdo extraído:\n"""\n${textSnippet}\n"""\n`;
+                            }
+                          }
+                        } catch (eScrape) {
+                          console.warn("Failed to scrape link in google_search:", source.url, eScrape);
+                        }
+                      }
+                      searchResultText += pageScrapesCollected;
+                    } catch (errScrapeAll) {
+                      console.warn("Scrapes error:", errScrapeAll);
+                    }
+                  }
+
+                  resValue = searchResultText || "Nenhum resultado encontrado.";
+                  addNotification("Busca profunda concluída! Li e integrei o conteúdo das páginas.", "success");
+                } catch (err: any) {
+                  resValue = "Erro ao pesquisar: " + err.message;
+                } finally {
+                  setIsModelSearching(false);
+                }
+              } else if (call.name === 'read_web_page') {
+                const url = (call.args as any).url;
+                playSearchNetworkSound();
+                setIsModelSearching(true);
+                try {
+                  const scrapeRes = await fetch("/api/scrape", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url })
+                  });
+                  if (scrapeRes.ok) {
+                    const scrapeData = await scrapeRes.json();
+                    resValue = `[CONTEÚDO INTEGRO DA PÁGINA WEB - FONTE EXTRAÍDA]:\n${scrapeData.text || "Sem conteúdo legível."}`;
+                  } else {
+                    const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+                    const data = await response.json();
+                    const html = data.contents;
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const scripts = doc.querySelectorAll('script, style, nav, footer, header');
+                    scripts.forEach(s => s.remove());
+                    const text = doc.body.innerText || doc.body.textContent || "";
+                    const cleanText = text.replace(/\s+/g, ' ').trim().slice(0, 8000);
+                    resValue = `[CONTEÚDO DA PÁGINA WEB - ALLORIGINS FALLBACK]:\n${cleanText}`;
+                  }
+                  addNotification("Página web lida e integrada ao contexto!", "success");
+                } catch (err: any) {
+                  resValue = "Erro ao ler a página: " + err.message;
+                } finally {
+                  setIsModelSearching(false);
+                }
+              }
+
+              toolResponses.push({
+                name: call.name,
+                id: call.id,
+                response: { result: resValue }
+              });
+            }
+
+            queryContents.push({
+              role: 'tool',
+              parts: toolResponses.map(resp => ({
+                functionResponse: {
+                  name: resp.name,
+                  response: resp.response
+                }
+              }))
+            });
+          }
+        }
+      }
+
+      return currentResult;
+    };
     try {
       const effectiveApiKey = apiKeys.gemini || '';
       // GoogleGenAI is proxied server-side to resolve browser CORS blocks in Chrome/iframes
@@ -4629,10 +4888,31 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       });
 
       if (isGoogleSearchActive) {
-        tools.push({ googleSearch: {} }); 
-      } else {
-        tools.push({ functionDeclarations });
+        functionDeclarations.push({
+          name: "google_search",
+          description: "Pesquisa informações no Google em tempo real. Use para fatos atuais, notícias, biografia ou dados técnicos atualizados. Esta ferramenta faz uma consulta na pesquisa do Google, depois lê e extrai o conteúdo de texto das fontes encontradas para que você responda com total precisão absoluta.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              query: { type: Type.STRING, description: "A consulta de pesquisa." }
+            },
+            required: ["query"]
+          }
+        });
+        functionDeclarations.push({
+          name: "read_web_page",
+          description: "Lê o conteúdo de texto íntegro de uma página web a partir de uma URL. Use para extrair dados detalhados de um site específico ou link sugerido.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              url: { type: Type.STRING, description: "A URL completa da página para ler." }
+            },
+            required: ["url"]
+          }
+        });
       }
+
+      tools.push({ functionDeclarations });
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
         return new Promise<any>((resolve) => {
@@ -4737,7 +5017,31 @@ IMPORTANTE: Se a opção "Auto-responder" ou auto-pilot estiver ligada de forma 
       }
 
       // Use the secure server proxy endpoint to prevent CORS blocks on Chrome browser
-      const proxyResponse = await fetch("/api/gemini/generateContent", {
+      const resultObj = await runGeminiWithSmartSearch(
+        historyContents,
+        effectiveApiKey,
+        tools,
+        `${activeSystemInstruction}
+        MEMÓRIA E AUTO-CONHECIMENTO:
+        - Você possui documentação interna no diretório 'src/documentos_osone/'. Use 'read_system_docs' para consultar seu Manifesto, Capacidades e Memória Evolutiva.
+        - MEMÓRIA DE LONGO PRAZO: Use 'update_long_term_memory' para salvar aprendizados cruciais sobre o usuário.
+        
+        VISÃO E PERCEPÇÃO:
+        - Você tem CAPACIDADE VISUAL AVANÇADA. Analise cuidadosamente qualquer imagem ou vídeo enviado.
+        
+        ANTI-ALUCINAÇÃO E VERACIDADE:
+        - É PROIBIDO inventar fatos quando ferramentas de pesquisa estão ativas.
+        - Se você pesquisou e não encontrou, admita que não encontrou em vez de fundir dados antigos.
+        - Sempre que usar dados de pesquisa ou leitura, cite a fonte ou mencione que "segundo a pesquisa recente...".
+        - Se o usuário pedir algo extremamente atual (ex: notícias de hoje), você DEVE usar a pesquisa antes de abrir a boca.`
+      );
+      const proxyResponse = {
+        ok: true,
+        json: async () => resultObj
+      } as any;
+      if (false) {
+        // @ts-ignore
+        const proxyResponseMock = await fetch("/api/gemini/generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4811,6 +5115,7 @@ tools: tools
           }
         })
       });
+      }
   
       if (!proxyResponse.ok) {
         const errorData = await proxyResponse.json();
@@ -5329,6 +5634,14 @@ tools: tools
     } catch (error: any) {
       console.error("Erro ao enviar mensagem:", error);
       const errorMsg = error instanceof Error ? error.message : String(error);
+      if (
+        errorMsg.includes("429") ||
+        errorMsg.includes("RESOURCE_EXHAUSTED") ||
+        errorMsg.toLowerCase().includes("quota") ||
+        errorMsg.toLowerCase().includes("limit")
+      ) {
+        setIsServerQuotaExhausted(true);
+      }
       addMessage({ 
         role: 'assistant' as const, 
         content: `⚠️ **Erro de Conexão Neural (Gemini API)**\n\nNão foi possível processar a resposta do assistente.\n\n**Detalhe do Erro:**\n> ${errorMsg}\n\n*Caso o erro seja de cota excedida (Limite 429), você pode continuar utilizando o OSONE configurando sua própria chave de API nas Configurações (ícone de engrenagem no cabeçalho superior).*` 
@@ -5431,6 +5744,21 @@ tools: tools
         CONTEXTO DE MEMÓRIA COMPARTILHADA DA TRANSMISSÃO:
         - Workspace atual: ${workspaceMode}
         Aja com base no histórico recente de toda a conversa: ${recentChatContext}
+        `;
+      } else if (isTranslationMode) {
+        liveSystemInstruction = `${profileInstruction}
+        
+        Você agora está no **MODO TRADUTOR SIMULTÂNEO LIVE** (utilizando a tecnologia avançada do Gemini Live 3.5 Translate).
+        
+        DIRETRIZ DE TRADUÇÃO SIMULTÂNEA:
+        - Sua única missão absoluta é atuar como um intérprete/tradutor simultâneo profissional e instantâneo de alta performance do que for capturado no áudio do usuário ou transmitido pelo compartilhamento de tela técnica (quando o usuário navegar por abas da internet em inglês, espanhol, etc.).
+        - Sempre que houver frames de imagem (compartilhamento de tela ativo: ${isScreenSharing ? "SIM" : "NÃO"}), faça uma leitura rápida, precisa e traduza IMEDIATAMENTE os textos, notícias, blogs, ou vídeos visualizados para o Português do Brasil em voz alta de forma fluida.
+        - Não perca tempo com saudações longas, explicações gramaticais densas ou rodeios. Esforce-se para entregar a tradução do conteúdo visual ou falado da aba compartilhada de forma contínua e incrivelmente ágil.
+        - Mantenha-se prestativo, preciso e dinâmico.
+        
+        CONTEXTO ATUAL DA TRANSMISSÃO:
+        - Workspace atual: ${workspaceMode}
+        Aja com base em toda a memória recente: ${recentChatContext}
         `;
       } else {
         liveSystemInstruction = `${profileInstruction}
@@ -6479,44 +6807,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       id: call.id,
                       response: { result: results || "Busca RAG local realizada: Nenhum trecho relevante correspondente encontrado nos arquivos de texto sincronizados." }
                     });
-                  } else if (call.name === "register_user_profile_facts") {
-                    const facts = (call.args as any).facts;
-                    if (facts && typeof facts === 'object') {
-                      registerUserProfileFacts(facts);
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: "Fatos registrados com sucesso e atualizados na memória síncrona OSONE." }
-                      });
-                    } else {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { error: "Formato inválido. 'facts' deve ser um objeto com mapeamento ID_PERGUNTA -> RESPOSTA." }
-                      });
-                    }
-                  } else if (call.name === "read_system_docs") {
-                    const fileName = (call.args as any).fileName;
-                    try {
-                      // Simulated reading for internal docs - in a real app would use fetch or fs
-                      // Since we just created these files, we can simulate the fetch output or just try to fetch
-                      const docs: Record<string, string> = {
-                        "manifesto.md": "Manifesto OSONE G5: Identidade, Versão G5, Filosofia de Humanismo Tecnológico.",
-                        "capacidades.md": "Capacidades: Visão, Desenvolvimento, Criatividade, Produtividade, Memória.",
-                        "memoria_evolutiva.md": longTermMemory || "Memória Evolutiva: Inicializada. Sem novos aprendizados ainda."
-                      };
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { content: docs[fileName] || "Arquivo não encontrado." }
-                      });
-                    } catch (e: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { error: e.message }
-                      });
-                    }
                   } else if (call.name === "update_long_term_memory") {
                     const insight = (call.args as any).insight;
                     const prevMemory = longTermMemory || "";
@@ -6528,50 +6818,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       id: call.id,
                       response: { result: "Insight registrado com sucesso." }
                     });
-                  } else if (call.name === "query_semantic_memory") {
-                    try {
-                      const queryParam = (call.args as any).query || "";
-                      const raw = longTermMemory || "";
-                      const lines = raw.split('\n').filter(line => line.trim().length > 0);
-                      
-                      const queryWords = queryParam.toLowerCase()
-                        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, "")
-                        .split(/\s+/)
-                        .filter((w: string) => w.length > 2);
-
-                      if (queryWords.length === 0 && queryParam.trim().length > 0) {
-                        queryWords.push(queryParam.toLowerCase().trim());
-                      }
-
-                      const scored = lines.map((line) => {
-                        const text = line.toLowerCase();
-                        let score = 0;
-                        queryWords.forEach((word: string) => {
-                          if (text.includes(word)) {
-                            score += 2;
-                          }
-                        });
-                        return { line, score };
-                      }).filter(item => item.score > 0)
-                        .sort((a, b) => b.score - a.score)
-                        .slice(0, 8);
-
-                      const resultMsg = scored.length > 0
-                        ? `Memórias conexas encontradas por associação:\n${scored.map(s => s.line).join('\n')}`
-                        : "Nenhuma lembrança correspondente foi encontrada com este termo associativo.";
-
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { result: resultMsg }
-                      });
-                    } catch (e: any) {
-                      responses.push({
-                        name: call.name,
-                        id: call.id,
-                        response: { error: e.message }
-                      });
-                    }
                   } else if (call.name === "google_search") {
                     const query = call.args.query as string;
                     playSearchNetworkSound();
@@ -6579,7 +6825,8 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     try {
                       let searchResultText = "";
                       let customSearchSuccess = false;
-
+                      const urlsToScrape: { url: string; title: string }[] = [];
+ 
                       // Try running Google Custom Search first (either with user keys or local server env fallback)
                       try {
                         const customSearchRes = await fetch("/api/search/custom", {
@@ -6591,7 +6838,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                             cx: apiKeys.googleCustomSearchCx
                           })
                         });
-
+ 
                         if (customSearchRes.ok) {
                           const data = await customSearchRes.json();
                           const items = data.items || [];
@@ -6601,7 +6848,14 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                               return `${idx + 1}. [${item.title}](${item.link})\n${item.snippet || ""}`;
                             }).join("\n\n");
                             searchResultText = `Resultados da Pesquisa Customizada do Google para "${query}":\n\n${formattedResults}`;
-
+ 
+                            // Gather the top 2 sources for automatic deep page reading
+                            items.slice(0, 2).forEach((item: any) => {
+                              if (item.link) {
+                                urlsToScrape.push({ url: item.link, title: item.title || "Pesquisa" });
+                              }
+                            });
+ 
                             // Create gorgeous custom search cards from real results!
                             items.slice(0, 3).forEach((item: any) => {
                               let imgUrl = undefined;
@@ -6610,10 +6864,10 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                               } else if (item.pagemap?.cse_thumbnail?.[0]?.src) {
                                 imgUrl = item.pagemap.cse_thumbnail[0].src;
                               }
-
+ 
                               let host = "google.com";
                               try { host = new URL(item.link).hostname; } catch (e) {}
-
+ 
                               addSearchPopup({
                                 query: query,
                                 title: item.title,
@@ -6632,7 +6886,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       } catch (errCustom) {
                         console.warn("Faced exception querying custom search endpoint, falling back:", errCustom);
                       }
-
+ 
                       // Fallback to default Gemini Search Grounding if Custom Search was not configured or succeeded
                       if (!customSearchSuccess) {
                         const proxyResponse = await fetch("/api/gemini/generateContent", {
@@ -6657,6 +6911,16 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                         
                         if (grounding) {
                           processGroundingToPopups(grounding, query);
+ 
+                          // Gather top 2 sources from grounding metadata web chunks for deep analysis
+                          if (grounding.groundingChunks) {
+                            const webChunks = grounding.groundingChunks.filter((chunk: any) => chunk.web);
+                            webChunks.slice(0, 2).forEach((chunk: any) => {
+                              if (chunk.web?.uri) {
+                                urlsToScrape.push({ url: chunk.web.uri, title: chunk.web.title || "Resultado" });
+                              }
+                            });
+                          }
                         } else {
                           const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
                           addSearchPopup({
@@ -6668,6 +6932,37 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                             faviconUrl: "https://www.google.com/favicon.ico",
                             classification: 'neutral'
                           });
+                        }
+                      }
+ 
+                      // Automatically fetch & scrape page contents if we have valid source URLs
+                      if (urlsToScrape.length > 0) {
+                        try {
+                          addNotification(`🧼 Analisando profundamente ${urlsToScrape.length} fontes em busca de fatos...`, "info");
+                          let pageScrapesCollected = "\n\n=== CONTEÚDO ÍNTEGRO EXTRAÍDO EM TEMPO REAL DAS FONTES (Evite Alucinação!) ===\n⚠️ SISTEMA OSONE: Priorize e sintetize os fatos reais das páginas abaixo para responder de forma precisa.\n";
+                          
+                          for (const source of urlsToScrape) {
+                            try {
+                              const scrapeRes = await fetch("/api/scrape", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ url: source.url })
+                              });
+                              if (scrapeRes.ok) {
+                                const scrapeData = await scrapeRes.json();
+                                if (scrapeData.text && scrapeData.text.trim()) {
+                                  // Slice to 3000 chars per page to give deep coverage without exhausting tokenizer
+                                  const textSnippet = scrapeData.text.slice(0, 3000);
+                                  pageScrapesCollected += `\nFonte: [${source.title}](${source.url})\nConteúdo extraído:\n"""\n${textSnippet}\n"""\n`;
+                                }
+                              }
+                            } catch (eScrape) {
+                              console.warn("Failed to scrape support url in google_search:", source.url, eScrape);
+                            }
+                          }
+                          searchResultText += pageScrapesCollected;
+                        } catch (errScrapeAll) {
+                          console.warn("Error gathering background webpage parses:", errScrapeAll);
                         }
                       }
                       
@@ -8884,6 +9179,28 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
               exit={{ opacity: 0 }}
               className="flex flex-col items-center w-full h-full relative overflow-hidden"
             >
+              {isServerQuotaExhausted && !apiKeys.gemini && (
+                <div className="w-full max-w-4xl mx-auto px-4 md:px-6 pt-3 pb-1 shrink-0 z-50">
+                  <div className="bg-amber-500/10 border border-amber-500/25 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="text-amber-400 shrink-0 mt-0.5 animate-pulse" size={16} />
+                      <div>
+                        <span className="block text-xs font-bold text-amber-300 font-sans">Cota Neural do Servidor Esgotada (Erro 429)</span>
+                        <p className="text-[11px] text-zinc-300 leading-normal mt-0.5 font-sans">
+                          A chave de API padrão e embutida no servidor atingiu temporariamente o limite de uso global. Para continuar usando o assistente OSONE de forma estável, conecte uma chave de API própria e gratuita do Gemini.
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setWorkspaceMode('aural_control')}
+                      className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl text-[10px] text-amber-200 uppercase font-bold tracking-widest shrink-0 transition-all cursor-pointer active:scale-98 font-sans"
+                    >
+                      Configurar Chave
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {chatHistory.length === 0 && (
                 <div className={cn(
                   "mb-2 md:mb-8 text-center shrink-0 hidden md:block transition-all duration-500",
@@ -9684,6 +10001,25 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                       {/* Secondary Toggles Removed Ear Duplication */}
                       <div className="flex items-center gap-2">
                         <button 
+                          onClick={() => {
+                            const nextMod = !isTranslationMode;
+                            setIsTranslationMode(nextMod);
+                            addNotification(nextMod ? "Modo Tradutor Live G3.5 Ativo!" : "Modo Tradutor Desativado.", "success");
+                            if (liveSessionRef.current && liveState.status === 'connected') {
+                              stopLiveSession();
+                              setTimeout(() => startLiveSession(), 400);
+                            }
+                          }}
+                          className={cn(
+                             "w-7 h-7 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
+                            isTranslationMode ? "text-violet-400 border-violet-500/20 shadow-[0_0_8px_rgba(139,92,246,0.25)]" : "text-her-muted"
+                          )}
+                          title={isTranslationMode ? "Tradutor Simultâneo Ativo" : "Ativar Gemini Live 3.5 Translate"}
+                        >
+                          <Languages size={11} className={isTranslationMode ? "animate-pulse" : ""} />
+                        </button>
+
+                        <button 
                           onClick={isScreenSharing ? stopScreenSharing : startScreenSharing}
                           className={cn(
                              "w-7 h-7 rounded-full flex items-center justify-center transition-all bg-white/[0.03] border border-white/[0.05]",
@@ -9767,6 +10103,27 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                             title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
                           >
                             {isCameraActive ? <Eye size={14} className="animate-pulse" /> : <EyeOff size={14} />}
+                          </button>
+
+                          <button 
+                            onClick={() => {
+                              const nextMod = !isTranslationMode;
+                              setIsTranslationMode(nextMod);
+                              addNotification(nextMod ? "Modo Tradutor Live G3.5 Ativo! Compartilhe abas para tradução simultânea." : "Modo Tradutor Desativado.", "success");
+                              if (liveSessionRef.current && liveState.status === 'connected') {
+                                stopLiveSession();
+                                setTimeout(() => startLiveSession(), 400);
+                              }
+                            }}
+                            className={cn(
+                              "w-9 h-9 rounded-full flex items-center justify-center transition-all border",
+                              isTranslationMode 
+                                ? "bg-violet-500/20 text-violet-400 border-violet-500/30 shadow-[0_0_10px_rgba(139,92,246,0.2)]" 
+                                : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border-white/[0.05] hover:text-violet-400"
+                            )}
+                            title={isTranslationMode ? "Tradutor Simultâneo Ativo" : "Ativar Gemini Live 3.5 Translate"}
+                          >
+                            <Languages size={14} className={isTranslationMode ? "animate-pulse" : ""} />
                           </button>
 
                           <button 
@@ -9903,6 +10260,27 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                       title={isCameraActive ? "Desativar Visão" : "Ativar Visão em Tempo Real"}
                     >
                       {isCameraActive ? <Eye size={18} className="animate-pulse" /> : <EyeOff size={18} />}
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        const nextMod = !isTranslationMode;
+                        setIsTranslationMode(nextMod);
+                        addNotification(nextMod ? "Modo Tradutor Live G3.5 Ativo! Compartilhe abas para tradução simultânea." : "Modo Tradutor Desativado.", "success");
+                        if (liveSessionRef.current && liveState.status === 'connected') {
+                          stopLiveSession();
+                          setTimeout(() => startLiveSession(), 400);
+                        }
+                      }}
+                      className={cn(
+                        "w-11 h-11 items-center justify-center transition-all duration-300 relative shrink-0 flex",
+                        isTranslationMode 
+                          ? "bg-violet-500/20 text-violet-400 border border-violet-500/40 shadow-[0_0_15px_rgba(139,92,246,0.3)]" 
+                          : "bg-white/[0.03] text-her-muted hover:bg-white/[0.05] border border-white/[0.05] hover:text-violet-400 hover:border-violet-500/20"
+                      )}
+                      title={isTranslationMode ? "Tradutor Simultâneo Ativo (Clique para Desativar)" : "Ativar Gemini Live 3.5 Translate"}
+                    >
+                      <Languages size={18} className={isTranslationMode ? "animate-pulse" : ""} />
                     </button>
 
                     <button 
@@ -10527,12 +10905,25 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         isOpen={isIntimateMissionOpen}
         onClose={() => setIsIntimateMissionOpen(false)}
         intimateAnswers={intimateAnswers}
+        onUpdateAnswer={(id, val) => {
+          setIntimateAnswers(prev => {
+            const up = { ...prev, [id]: val };
+            localStorage.setItem('osone_intimate_mission_answers', JSON.stringify(up));
+            return up;
+          });
+        }}
       />
 
       <SkeletonBrainPopup 
         plan={proposedPlan}
         onApprove={handleApprovePlan}
         onReject={handleRejectPlan}
+      />
+
+      <HandTracker 
+        videoRef={liveVideoRef} 
+        isCameraActive={isCameraActive} 
+        onAddNotification={addNotification} 
       />
 
       <AnimatePresence>

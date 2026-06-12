@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Video, Sparkles, Send, Play, Copy, Check, Info, FileText, Share2, CornerDownRight, 
-  Trash2, AlertCircle, RefreshCw, Volume2, Bookmark, HelpCircle
+  Trash2, AlertCircle, RefreshCw, Volume2, Bookmark, HelpCircle, BookOpen, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -52,6 +52,11 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
   const [workedIdeas, setWorkedIdeas] = useState('');
   const [customStyle, setCustomStyle] = useState('Alucinante / Ultra Emocionante');
 
+  // Knowledge Base RAG states
+  const [knowledgeBaseText, setKnowledgeBaseText] = useState('');
+  const [strictKnowledgeBase, setStrictKnowledgeBase] = useState(false);
+  const [kbFileName, setKbFileName] = useState('');
+
   // Loading and steps
   const [loadingStep, setLoadingStep] = useState<number>(0); // 0 = idle, 1 = brainstorming 9, 2 = distilling 3, 3 = finalizing best
   const [isGenerating, setIsGenerating] = useState(false);
@@ -83,10 +88,33 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
     setChannelTema('');
     setTargetAudience('');
     setWorkedIdeas('');
+    setKnowledgeBaseText('');
+    setStrictKnowledgeBase(false);
+    setKbFileName('');
     setOutput(null);
     setImagePrompts(null);
     setGenerationError(null);
     setPromptError(null);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setKbFileName(file.name);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content === 'string') {
+        setKnowledgeBaseText(content);
+        addNotification(`Base de conhecimento carregada com sucesso: ${file.name}`, 'success');
+      }
+    };
+    reader.onerror = () => {
+      addNotification(`Erro ao ler o arquivo. Prefira formatos de texto (.txt, .md, .json).`, 'error');
+    };
+    reader.readAsText(file);
   };
 
   const loadExample = () => {
@@ -94,7 +122,13 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
     setTargetAudience('Jovens de 16 a 28 anos, viciados em dopamina rápida no TikTok e Reels, obcecados por mistérios reais e dilemas morais de ficção científica.');
     setWorkedIdeas('- "O dilema da inteligência que descobriu que o mundo é um pixel"\n- "A história do homem que ficou preso em 1993 após pisar num ralo de chuva"\n- "O que acontece se você acordar no meio do oceano dentro de uma bolha flutuante indestrutível"');
     setCustomStyle('Agonizante, suspense cinematográfico com picos de ironia ácida');
-    addNotification('Exemplo de referência configurado!', 'info');
+    setKnowledgeBaseText(`[ESTRUTURA DE SUCESSO COGNITIVO - CASOS REAIS DE 1M+ VIEWS]:
+- Gancho (Seg 0-3): Faça uma pergunta ultra impactante baseada em "Você sabia que existe um objeto que..."
+- Ritmo das frases: Intercale períodos muito curtos com pontuações bem marcadas.
+- Conclusão: Sempre termine com uma lição cínica ou humor ácido que provoca o usuário a debater na seção de comentários (ex: "E você, continuaria dormindo sabendo disso?").`);
+    setStrictKnowledgeBase(true);
+    setKbFileName('modelo_canal_paranormal.txt');
+    addNotification('Exemplo de referência com Base de Conhecimento configurado!', 'info');
   };
 
   const handleGenerate = async () => {
@@ -124,6 +158,28 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
       await delay(1500);
       setLoadingStep(3);
 
+      let kbPrompt = '';
+      if (knowledgeBaseText.trim()) {
+        if (strictKnowledgeBase) {
+          kbPrompt = `
+=== REGRA PRIORITÁRIA DE BASE DE CONHECIMENTO (ESTRITO) ===
+O usuário forneceu abaixo uma Base de Conhecimento com regras de instrução de roteiro que já deram muito certo.
+Como o recurso de SEGURANÇA E ADERÊNCIA ESTRITA À BASE DE CONHECIMENTO ESTÁ ATIVO, você DEVE basear-se UNICA, EXCLUSIVAMENTE E ESTRITAMENTE nas regras, padrões estruturais, ganchos e restrições descritas na base de conhecimento fornecida abaixo. Desconsidere sugestões ou tendências genéricas externas que fujam a este escopo. Sua missão é garantir que o roteiro gerado siga o que já deu certo ipsis litteris:
+
+[BASE DE CONHECIMENTO OFICIAL DE SUCESSO]:
+"${knowledgeBaseText}"
+`;
+        } else {
+          kbPrompt = `
+=== BASE DE CONHECIMENTO ADICIONAL (GUIA DE REFERÊNCIA) ===
+Considere as diretrizes, ideias e exemplos contidos nesta Base de Conhecimento fornecida pelo usuário como inspiração e estruturação complementar de alta qualidade para desenhar seus ganchos, histórias e dinâmicas:
+
+[BASE DE CONHECIMENTO FORNECIDA]:
+"${knowledgeBaseText}"
+`;
+        }
+      }
+
       const prompt = `
 Você é o OSONE Neural Short-Form Scriptwriter, com foco em hiper-viralização no TikTok, Reels, YouTube Shorts e Kwai.
 Sua especialidade é criar roteiros com altíssima retenção, picos de dopamina e gatilhos de suspense.
@@ -134,6 +190,8 @@ Instruções base do canal do usuário:
 - Ideias que já deram muito certo de referência: 
 "${workedIdeas || 'Nenhum exemplo fornecido, use ganchos de extrema retenção'}"
 - Estilo e Tom desejados: "${customStyle}"
+
+${kbPrompt}
 
 === FLUXO COGNITIVO EXIGIDO ===
 1. Você deve raciocinar sobre exatamente 9 ideias virais em potencial que se alinham perfeitamente ao nicho do canal e ao gosto do público.
@@ -447,6 +505,56 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
                 placeholder="Ex: &#10;- O segredo do poço da Ilha de Oak&#10;- E se a gravidade mudasse de direção por 5 segundos?&#10;- A garrafa térmica que esconde uma câmera de 1950"
                 className="w-full min-h-[90px] bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4 text-xs font-light text-white focus:outline-none focus:border-orange-500/40 focus:bg-white/[0.04] transition-all resize-none leading-relaxed placeholder:text-stone-600"
               />
+            </div>
+
+            {/* NEW: Knowledge Base (RAG) */}
+            <div className="flex flex-col gap-2.5 p-4 rounded-2xl bg-white/[0.01] border border-white/[0.04]">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-orange-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <BookOpen size={14} />
+                  Base de Conhecimento
+                </label>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer flex items-center gap-1 text-[10px] bg-neutral-900 border border-white/10 hover:bg-neutral-800 transition-colors text-zinc-300 px-2 py-1 rounded-lg">
+                    <Upload size={11} className="text-orange-400" />
+                    <span>Carregar</span>
+                    <input 
+                      type="file" 
+                      accept=".txt,.md,.json,.csv" 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {kbFileName && (
+                <div className="text-[10px] font-mono text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                  Arquivo: {kbFileName}
+                </div>
+              )}
+
+              <textarea
+                value={knowledgeBaseText}
+                onChange={(e) => setKnowledgeBaseText(e.target.value)}
+                placeholder="Cole regras estratégicas, roteiros milionários do TikTok/Shorts ou diretrizes que já deram muito certo para o OSONE seguir..."
+                className="w-full min-h-[90px] bg-black/40 border border-white/[0.06] focus:border-orange-500/30 rounded-xl p-3 text-xs font-light text-zinc-100 focus:outline-none transition-all resize-none leading-relaxed placeholder:text-stone-600"
+              />
+
+              {/* Strict option */}
+              <div className="flex items-center justify-between pt-1 border-t border-white/[0.03]">
+                <span className="text-[10px] text-zinc-400 font-medium">Siga apenas a base p/ roteiros</span>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={strictKnowledgeBase}
+                    onChange={(e) => setStrictKnowledgeBase(e.target.checked)}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-8 h-4 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-[14px] after:transition-all peer-checked:bg-orange-500/70 peer-checked:after:bg-white"></div>
+                </label>
+              </div>
             </div>
 
             {/* Field 4: Custom Style */}
