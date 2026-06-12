@@ -60,9 +60,14 @@ export class AudioProcessor {
   
       this.source.connect(this.processor);
       this.processor.connect(this.audioContext.destination);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao iniciar gravação de áudio:", error);
       this.stopRecording();
+      if (error?.name === 'NotAllowedError' || error?.message?.includes('Permission denied') || error?.message?.includes('not-allowed')) {
+        const enhancedError = new Error("Permissão de microfone negada. Clique no cadeado (URL) para habilitar, ou abra o OSONE em uma nova aba para contornar restrições de iframe.");
+        (enhancedError as any).name = 'NotAllowedError';
+        throw enhancedError;
+      }
       throw error;
     }
   }

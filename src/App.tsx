@@ -80,6 +80,7 @@ import { TikTokLivePanel } from './components/TikTokLivePanel';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
 import { ContentCreator } from './components/ContentCreator';
+import { KaraokePanel } from './components/KaraokePanel';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -4070,6 +4071,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
 
   const playDuoSpeech = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (isSinging || lyrics) {
+      console.log("Ignoring assistant speech since Karaoke active.");
+      return;
+    }
     
     // Ensure we resume if paused as a classic browser unfreezing technique
     if (window.speechSynthesis.paused) {
@@ -4215,6 +4220,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
 
   const playSpeech = (text: string) => {
     if (typeof window === 'undefined') return;
+    if (isSinging || lyrics) {
+      console.log("Ignoring solo speech since Karaoke active.");
+      return;
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
@@ -4797,8 +4806,8 @@ IMPORTANTE: Se a opção "Auto-responder" ou auto-pilot estiver ligada de forma 
             - NÃO envie o plano completo no chat principal. Use a ferramenta popup 'propose_skeleton_plan' para que o usuário avalie visualmente e aprove.
             - Assim que o usuário clicar em aprovar, o sistema enviará uma aprovação automática e você deve imediatamente iniciar as modificações de programação e entregar o trabalho concluído de forma autónoma.
   
-            Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar, CANTE ativamente. Use as ferramentas do sistema sempre que necessário para apoiar a experiência do usuário.`,
-            tools: tools
+            Se o usuário desenhar no canvas, use as informações de coordenadas e tipos de objetos para entender o que ele está fazendo (especialmente em jogos). Se o usuário pedir para você cantar ou criar uma música, CANTE ativamente inventando uma composição poética, rimada e ritmada, e mude o estilo de canto chamando a ferramenta 'display_lyrics' com a letra estruturada estritamente em linhas simples contendo frases curtas (estilo karaoke, uma única frase/frase curta por linha). O OSONE possui um sintetizador síncrono que modulará a voz e tocará beats e acordes em perfeita sincronia com essas frases!`,
+tools: tools
           }
         })
       });
@@ -7451,72 +7460,15 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
           />
         )}
       </AnimatePresence>
-      {/* Lyrics Overlay */}
+      {/* Karaoke System - One Phrase At A Time */}
       <AnimatePresence>
         {lyrics && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 pointer-events-none"
-          >
-            <div className="relative w-full flex flex-col gap-4 pointer-events-auto items-center">
-              <button 
-                onClick={closeLyrics}
-                className="absolute -top-12 md:-top-16 p-2 bg-white/5 hover:bg-white/10 rounded-full text-white/40 transition-all border border-white/10"
-              >
-                <X size={16} />
-              </button>
-              
-              <div className="flex flex-col items-center gap-1 mb-2">
-                {lyrics.title && (
-                  <motion.h2 
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    className="text-[10px] md:text-xs font-light text-her-accent tracking-[0.4em] uppercase text-center opacity-60"
-                  >
-                    {lyrics.title}
-                  </motion.h2>
-                )}
-              </div>
-              
-              <motion.div 
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                className="text-center px-4 max-w-2xl"
-              >
-                <div 
-                  className="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-xl md:text-2xl font-medium leading-[1.8] tracking-tight text-white/90 px-4 font-serif italic selection:bg-her-accent/30"
-                  style={{
-                    WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)',
-                    maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)'
-                  }}
-                >
-                  {lyrics.content}
-                </div>
-              </motion.div>
-
-              <div className="flex justify-center pt-8 opacity-40 scale-75">
-                <div className="flex items-end gap-2 h-10">
-                  {[...Array(8)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      animate={{ 
-                        height: [8, Math.random() * 20 + 10, 8],
-                        opacity: [0.3, 0.8, 0.3]
-                      }}
-                      transition={{ 
-                        duration: 1.2 + Math.random(), 
-                        repeat: Infinity,
-                        ease: "easeInOut"
-                      }}
-                      className="w-1.5 bg-her-accent rounded-full shadow-[0_0_10px_rgba(255,78,0,0.3)]"
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          <KaraokePanel
+            lyrics={lyrics}
+            onClose={closeLyrics}
+            isSinging={isSinging}
+            setIsSinging={setIsSinging}
+          />
         )}
       </AnimatePresence>
       {/* Click Visual Effect */}
@@ -9289,14 +9241,38 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                               key="error"
                               initial={{ opacity: 0, scale: 0.9 }}
                               animate={{ opacity: 1, scale: 1 }}
-                              className="flex flex-col items-center gap-1"
+                              className="flex flex-col items-center gap-2 max-w-[280px]"
                             >
                               <span className="text-[10px] text-red-500 font-bold uppercase tracking-widest px-4 py-1 bg-red-500/10 rounded-full border border-red-500/20">
                                 FALHA DE CONEXÃO
                               </span>
-                              <p className="text-[9px] text-red-400 opacity-80 max-w-[250px] text-center leading-tight">
+                              <p className="text-[9px] text-red-400 opacity-80 text-center leading-tight">
                                 {liveState.error}
                               </p>
+
+                              {(liveState.error?.toLowerCase().includes('microfone') || liveState.error?.toLowerCase().includes('permiss')) && (
+                                <div className="mt-2 w-full p-3 bg-white/[0.02] border border-white/5 rounded-2xl flex flex-col gap-2 pointer-events-auto">
+                                  <span className="text-[9px] font-bold text-pink-400 font-mono tracking-wider uppercase block text-center">
+                                    💡 SOLUÇÃO RÁPIDA
+                                  </span>
+                                  <ul className="text-[9px] text-zinc-400 space-y-1.5 list-none pl-0 text-left">
+                                    <li className="leading-normal">
+                                      <strong className="text-zinc-300">1. Ative as Permissões:</strong> Clique no ícone de <span className="text-zinc-200 underline">Cadeado (🔒)</span> na barra de endereço do navegador e mude o Microfone para <span className="text-emerald-400">Permitir</span>.
+                                    </li>
+                                    <li className="leading-normal">
+                                      <strong className="text-zinc-300">2. Link Externo (Recomendado):</strong> O navegador restringe o microfone dentro de telas emuladas (iFrames). Abrir em aba cheia resolve 100%!
+                                    </li>
+                                  </ul>
+                                  <a 
+                                    href={window.location.href} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="mt-1 w-full py-2 bg-gradient-to-tr from-pink-500/20 to-purple-600/20 hover:from-pink-500/30 hover:to-purple-600/30 text-white border border-pink-500/30 hover:border-pink-500/50 rounded-xl transition-all font-mono text-[9px] font-bold tracking-wider text-center block cursor-pointer"
+                                  >
+                                    ABRIR EM NOVA ABA ↗
+                                  </a>
+                                </div>
+                              )}
                             </motion.div>
                           ) : isVoiceOutputPaused ? (
                             <motion.button 
