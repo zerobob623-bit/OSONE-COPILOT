@@ -4406,9 +4406,15 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         }
 
         if (functionCalls && functionCalls.length > 0) {
-          const researchCalls = functionCalls.filter((c: any) => c.name === 'google_search' || c.name === 'read_web_page');
+          const smartTools = functionCalls.filter((c: any) => 
+            c.name === 'google_search' || 
+            c.name === 'read_web_page' || 
+            c.name === 'read_system_docs' || 
+            c.name === 'read_user_profile_facts' || 
+            c.name === 'register_user_profile_facts'
+          );
           
-          if (researchCalls.length > 0) {
+          if (smartTools.length > 0) {
             hasResearchLoops = true;
 
             queryContents.push({
@@ -4844,6 +4850,15 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
             }
           },
           required: ["facts"]
+        }
+      });
+
+      functionDeclarations.push({
+        name: "read_user_profile_facts",
+        description: "Lê todo o Dossiê de Memória Íntima do usuário (as 55 perguntas e quaisquer respostas cadastradas). Use para consultar quais fatos já foram mapeados ou entender o perfil completo do Criador.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {}
         }
       });
 
@@ -5951,6 +5966,14 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       }
                     },
                     required: ["facts"]
+                  }
+                },
+                {
+                  name: "read_user_profile_facts",
+                  description: "Lê todo o Dossiê de Memória Íntima do usuário (as 55 perguntas e quaisquer respostas cadastradas). Use para consultar quais fatos já foram mapeados ou entender o perfil completo do Criador.",
+                  parameters: {
+                    type: Type.OBJECT,
+                    properties: {}
                   }
                 },
                 {

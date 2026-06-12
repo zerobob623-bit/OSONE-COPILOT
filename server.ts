@@ -1421,6 +1421,28 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  app.get("/api/system-docs", (req, res) => {
+    try {
+      const { file } = req.query;
+      if (!file || typeof file !== "string") {
+        return res.status(400).json({ error: "Faltando o parâmetro do arquivo." });
+      }
+      const allowed = ["manifesto.md", "capacidades.md", "memoria_evolutiva.md"];
+      if (!allowed.includes(file)) {
+        return res.status(400).json({ error: "Arquivo proibido ou não mapeado nas diretrizes." });
+      }
+      const filePath = path.join(process.cwd(), "src", "documentos_osone", file);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: `Arquivo ${file} não existe no diretório.` });
+      }
+      const text = fs.readFileSync(filePath, "utf-8");
+      return res.json({ text });
+    } catch (err: any) {
+      console.error("Erro ao ler documento de sistema:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ====== TIKTOK LIVE CO-PILOT API ENDPOINTS ======
   app.get("/api/tiktok/state", (req, res) => {
     res.json({
