@@ -732,7 +732,7 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.error('Failed to poll tiktok state:', err);
+        console.warn('TikTok live state polling paused of active offline status:', err);
       }
     };
 
@@ -4398,7 +4398,12 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         }
 
         currentResult = await response.json();
-        const functionCalls = currentResult.functionCalls;
+        let functionCalls = currentResult.functionCalls;
+        if (!functionCalls && currentResult.candidates?.[0]?.content?.parts) {
+          functionCalls = currentResult.candidates[0].content.parts
+            .filter((p: any) => p.functionCall)
+            .map((p: any) => p.functionCall);
+        }
 
         if (functionCalls && functionCalls.length > 0) {
           const researchCalls = functionCalls.filter((c: any) => c.name === 'google_search' || c.name === 'read_web_page');
@@ -4431,7 +4436,15 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
                     const queryLower = query.toLowerCase();
                     const isMusicQuery = queryLower.includes("música") || queryLower.includes("letra") || queryLower.includes("som") || queryLower.includes("audio") || queryLower.includes("cant");
                     
-                    const customSearchRes = await fetch(`/api/search?q=${encodeURIComponent(query)}&music=${isMusicQuery ? 'true' : 'false'}`);
+                    const customSearchRes = await fetch("/api/search/custom", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        query: query,
+                        key: apiKeys.googleCustomSearchApiKey,
+                        cx: apiKeys.googleCustomSearchCx
+                      })
+                    });
                     if (customSearchRes.ok) {
                       const customSearchData = await customSearchRes.json();
                       if (customSearchData.items && customSearchData.items.length > 0) {
@@ -5124,7 +5137,12 @@ tools: tools
   
       const result = await proxyResponse.json();
       
-      const functionCalls = result.functionCalls;
+      let functionCalls = result.functionCalls;
+      if (!functionCalls && result.candidates?.[0]?.content?.parts) {
+        functionCalls = result.candidates[0].content.parts
+          .filter((p: any) => p.functionCall)
+          .map((p: any) => p.functionCall);
+      }
       if (functionCalls) {
         for (const call of functionCalls) {
           if (call.name === 'start_screen_share') {
@@ -5583,7 +5601,7 @@ tools: tools
           }
         }
       } else {
-        const text = result.text;
+        const text = result.text || result.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text;
         const grounding = result.candidates?.[0]?.groundingMetadata;
         if (text) {
           let contentWithSources = text;
@@ -6906,7 +6924,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                           throw new Error(errorData.error || "Erro na pesquisa via proxy");
                         }
                         const searchResult = await proxyResponse.json();
-                        searchResultText = searchResult.text;
+                        searchResultText = searchResult.text || searchResult.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text;
                         const grounding = searchResult.candidates?.[0]?.groundingMetadata;
                         
                         if (grounding) {

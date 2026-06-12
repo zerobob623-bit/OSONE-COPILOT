@@ -1226,7 +1226,24 @@ Nome do interlocutor: ${senderName}`;
         config: config
       });
 
-      return res.json(response);
+      // Enrich response object with non-enumerable class getters (text, functionCalls) so they survive JSON serialization
+      const responseJson = JSON.parse(JSON.stringify(response));
+      try {
+        if (response.text !== undefined) {
+          responseJson.text = response.text;
+        }
+      } catch (e) {
+        console.warn("Error copying response.text getter:", e);
+      }
+      try {
+        if (response.functionCalls !== undefined) {
+          responseJson.functionCalls = response.functionCalls;
+        }
+      } catch (e) {
+        console.warn("Error copying response.functionCalls getter:", e);
+      }
+
+      return res.json(responseJson);
     } catch (err: any) {
       console.error("Erro no proxy server-side generateContent:", err);
       return res.status(500).json({ error: formatGeminiError(err) });
