@@ -64,7 +64,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn, safeJsonParse } from './lib/utils';
 import ReactMarkdown from 'react-markdown';
-import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile } from './types';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile, WritingProject } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { connectToLiveBridge } from './lib/live-bridge';
 import { FileTreeItem } from './components/FileTreeItem';
@@ -293,7 +293,8 @@ const DEFAULT_SOUNDS: SoundEffect[] = [
   { id: '14', name: 'Brilho Mágico', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2374/2374-preview.mp3' },
   { id: '15', name: 'Voo Ninja', category: 'sneaky', url: 'https://assets.mixkit.co/active_storage/sfx/2351/2351-preview.mp3' },
   { id: '16', name: 'Explosão Cômica', category: 'funny', url: 'https://assets.mixkit.co/active_storage/sfx/2359/2359-preview.mp3' },
-  { id: '17', name: 'Tapa Corretivo (Meme)', category: 'comico', url: 'synth://slap' }
+  { id: '17', name: 'Tapa Corretivo (Meme)', category: 'comico', url: 'synth://slap' },
+  { id: '18', name: 'Homem de Ferro (Iron Man) - Heavy Rock Tribute', category: 'musica', url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3' }
 ];
 
 export interface ComboHost {
@@ -1800,6 +1801,136 @@ export default function App() {
     }
   };
 
+  const [writingProjects, setWritingProjects] = useState<WritingProject[]>(() => {
+    try {
+      const saved = localStorage.getItem('osone_writing_projects');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Erro ao ler projetos de escrita:", e);
+    }
+    return [];
+  });
+
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
+    return localStorage.getItem('osone_active_project_id') || null;
+  });
+
+  // Keep projects and active project in localStorage
+  useEffect(() => {
+    localStorage.setItem('osone_writing_projects', JSON.stringify(writingProjects));
+  }, [writingProjects]);
+
+  useEffect(() => {
+    if (activeProjectId) {
+      localStorage.setItem('osone_active_project_id', activeProjectId);
+    } else {
+      localStorage.removeItem('osone_active_project_id');
+    }
+  }, [activeProjectId]);
+
+  // Sync / Auto-create initial project on mount if empty
+  useEffect(() => {
+    if (writingProjects.length === 0) {
+      const defaultProjId = Math.random().toString(36).substr(2, 9);
+      const defaultProj: WritingProject = {
+        id: defaultProjId,
+        title: 'Draft Inicial',
+        content: localStorage.getItem('osone_workspace_text') || '',
+        createdAt: Date.now()
+      };
+      setWritingProjects([defaultProj]);
+      setActiveProjectId(defaultProjId);
+    } else if (!activeProjectId && writingProjects.length > 0) {
+      setActiveProjectId(writingProjects[0].id);
+      setWorkspaceTextState(writingProjects[0].content);
+    }
+  }, []);
+
+  const updateActiveProjectContent = (newText: string) => {
+    if (!activeProjectId) return;
+    setWritingProjects(prev => {
+      const updated = prev.map(p => {
+        if (p.id === activeProjectId) {
+          let title = p.title;
+          if (!p.title || p.title === 'Novo Projeto' || p.title === 'Rascunho Sem Título' || p.title === 'Projeto de Texto' || p.title === 'Draft Inicial') {
+            const firstLine = newText.trim().split('\n')[0] || '';
+            const cleanLine = firstLine.replace(/^#+\s*/, '').trim();
+            title = cleanLine.substring(0, 30) || p.title;
+          }
+          return { ...p, content: newText, title: title || 'Rascunho' };
+        }
+        return p;
+      });
+      return updated;
+    });
+  };
+
+  const handleSelectProject = (projectId: string) => {
+    const proj = writingProjects.find(p => p.id === projectId);
+    if (proj) {
+      setActiveProjectId(projectId);
+      setWorkspaceTextState(proj.content);
+      localStorage.setItem('osone_workspace_text', proj.content);
+      addNotification(`Projeto de texto "${proj.title}" carregado!`, "success");
+    }
+  };
+
+  const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (writingProjects.length <= 1) {
+      addNotification("Você precisa manter pelo menos um projeto ativo.", "error");
+      return;
+    }
+    const filtered = writingProjects.filter(p => p.id !== projectId);
+    setWritingProjects(filtered);
+    if (activeProjectId === projectId) {
+      const nextProj = filtered[0];
+      setActiveProjectId(nextProj.id);
+      setWorkspaceTextState(nextProj.content);
+      localStorage.setItem('osone_workspace_text', nextProj.content);
+    }
+    addNotification("Projeto removido do histórico.", "info");
+  };
+
+  const handleStartNewProject = (initialContent = "") => {
+    // 1. First ensure current project is updated
+    let updatedProjects = [...writingProjects];
+    if (activeProjectId) {
+      updatedProjects = updatedProjects.map(p => {
+        if (p.id === activeProjectId) {
+          let title = p.title;
+          if (!p.title || p.title === 'Novo Projeto' || p.title === 'Rascunho Sem Título' || p.title === 'Draft Inicial') {
+            const firstLine = workspaceText.trim().split('\n')[0] || '';
+            const cleanLine = firstLine.replace(/^#+\s*/, '').trim();
+            title = cleanLine.substring(0, 30) || 'Rascunho';
+          }
+          return { ...p, content: workspaceText, title };
+        }
+        return p;
+      });
+    }
+
+    // 2. Create the new project
+    const newProjId = Math.random().toString(36).substr(2, 9);
+    const newProj: WritingProject = {
+      id: newProjId,
+      title: 'Novo Projeto',
+      content: initialContent,
+      createdAt: Date.now()
+    };
+
+    const finalProjects = [newProj, ...updatedProjects];
+    setWritingProjects(finalProjects);
+    setActiveProjectId(newProjId);
+    setWorkspaceTextState(initialContent);
+    localStorage.setItem('osone_workspace_text', initialContent);
+    addNotification("Novo projeto de texto iniciado! O anterior foi guardado no histórico.", "success");
+    
+    if (writingSounds) {
+      playMXKeySound();
+    }
+  };
+
   const [workspaceText, setWorkspaceTextState] = useState(() => {
     return localStorage.getItem('osone_workspace_text') || '';
   });
@@ -1834,6 +1965,7 @@ export default function App() {
           pushToHistory(currentValue);
           setLastHistorySaveTime(now);
         }
+        updateActiveProjectContent(resolvedValue);
       }
       return resolvedValue;
     });
@@ -2314,6 +2446,7 @@ export default function App() {
     return localStorage.getItem('osone_writing_sounds') === 'true';
   });
   const [isSidebarSettingsOpen, setIsSidebarSettingsOpen] = useState<boolean>(false);
+  const [isProjectsDockOpen, setIsProjectsDockOpen] = useState<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem('osone_writing_font', writingFont);
@@ -3450,6 +3583,11 @@ ${isBad
     };
   }, [isWaitingForWakeWord, isListening, isTranscribing, isElevenLabsLiveActive, liveState.status, chosenInitSoundUrl]);
 
+  const soundLibraryRef = useRef(soundLibrary);
+  useEffect(() => {
+    soundLibraryRef.current = soundLibrary;
+  }, [soundLibrary]);
+
   // Clap Detector - triggers hands-free activation with clap sounds as requested!
   useEffect(() => {
     if (!isWaitingForWakeWord || isListening || isElevenLabsLiveActive) return;
@@ -3507,8 +3645,16 @@ ${isBad
 
             addNotification("👏 Palma detectada! Ativando OSONE...", "success");
 
-            // Play the selected initialization sound!
-            if (chosenInitSoundUrl) {
+            // Look up an Iron Man or Homem de Ferro song in the library
+            const ironManSong = soundLibraryRef.current.find(s => {
+              const nameLower = s.name.toLowerCase();
+              return nameLower.includes("homem de ferro") || nameLower.includes("iron man");
+            });
+
+            if (ironManSong) {
+              addNotification(`🎵 Iniciando trilha: ${ironManSong.name}...`, "success");
+              playSoundEffect(ironManSong.url).catch(err => console.error("Error playing Iron Man song:", err));
+            } else if (chosenInitSoundUrl) {
               playSoundEffect(chosenInitSoundUrl).catch(err => console.error("Error playing startup sound:", err));
             }
 
@@ -4565,6 +4711,43 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
                   resValue = "Erro ao ler a página: " + err.message;
                 } finally {
                   setIsModelSearching(false);
+                }
+              } else if (call.name === 'read_system_docs') {
+                const fileName = (call.args as any).fileName;
+                try {
+                  const docRes = await fetch(`/api/system-docs?file=${encodeURIComponent(fileName)}`);
+                  if (docRes.ok) {
+                    const docData = await docRes.json();
+                    resValue = docData.text || `O arquivo ${fileName} está vazio.`;
+                    addNotification(`Documento de sistema '${fileName}' lido com sucesso!`, "success");
+                  } else {
+                    const docData = await docRes.json();
+                    resValue = `Erro ao ler documento: ${docData.error || docRes.statusText}`;
+                  }
+                } catch (err: any) {
+                  resValue = "Erro de conexão ao ler documento de sistema: " + err.message;
+                }
+              } else if (call.name === 'read_user_profile_facts') {
+                try {
+                  const savedAnswersStr = localStorage.getItem('osone_intimate_mission_answers') || '{}';
+                  const parsedAnswers = JSON.parse(savedAnswersStr);
+                  const list = INTIMATE_QUESTIONS.map(q => {
+                    const ans = parsedAnswers[q.id] || "(Sem resposta ainda - Fique à vontade para preencher com register_user_profile_facts)";
+                    return `ID ${q.id} [${q.category}] - ${q.question}\nResposta: ${ans}`;
+                  }).join("\n\n");
+                  resValue = `[DOSSIÊ COMPLETO DE MEMÓRIA ÍNTIMA DO CRIADOR]\n\n${list}`;
+                  addNotification("OSONE acessou e leu todo o Dossiê de Memória Íntima!", "success");
+                } catch (err: any) {
+                  resValue = "Erro ao ler Dossiê: " + err.message;
+                }
+              } else if (call.name === 'register_user_profile_facts') {
+                const facts = (call.args as any).facts;
+                if (facts && typeof facts === 'object') {
+                  registerUserProfileFacts(facts);
+                  resValue = "Fatos registrados e atualizados com sucesso no Dossiê de Memória Íntima.";
+                  addNotification("OSONE atualizou e escreveu novas respostas no Dossiê!", "success");
+                } else {
+                  resValue = "Erro: formato inválido de fatos.";
                 }
               }
 
@@ -7285,6 +7468,24 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                         response: { error: "Formato inválido. 'facts' deve ser um objeto com mapeamento ID_PERGUNTA -> RESPOSTA." }
                       });
                     }
+                  } else if (call.name === "read_user_profile_facts") {
+                    const list = INTIMATE_QUESTIONS.map(q => {
+                      const ans = intimateAnswers[q.id] || "(Sem resposta ainda - Use 'register_user_profile_facts' para adicionar ou editar)";
+                      return `ID ${q.id} [${q.category}] - ${q.question}\nResposta: ${ans}`;
+                    }).join("\n\n");
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `[DOSSIÊ COMPLETO DE MEMÓRIA ÍNTIMA DO CRIADOR]\n\n${list}` }
+                    });
+                    addNotification("OSONE acessou e leu todo o seu Dossiê de Memória!", "success");
+                  } else if (call.name === "read_system_docs") {
+                    const fileName = (call.args as any).fileName || "manifesto.md";
+                    responses.push({
+                      name: call.name,
+                      id: call.id,
+                      response: { result: `Você é o OSONE G5. O documento ${fileName} está localizado no seu diretório 'src/documentos_osone/'. Leia-o usando chat de texto para analisar o Manifesto ou a Memória de Longo Prazo Evolutiva.` }
+                    });
                   } else if (call.name === "switch_voice") {
                     const voice = call.args.voice as string;
                     setSelectedVoice(voice);
@@ -8740,33 +8941,191 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                     </div>
 
                     {/* Paper Area centered with custom sizes and spacing */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar-editor p-4 md:p-8 flex justify-center w-full min-h-0 bg-transparent">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar-editor p-4 md:p-8 flex justify-center w-full min-h-0 bg-transparent relative">
                       <div className={cn(
                         "w-full flex flex-col min-h-0 h-full transition-all duration-300",
                         writingWidthMode === 'compact' ? "max-w-[650px]" :
                         writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
                       )}>
-                        <textarea 
-                          value={workspaceText}
-                          onChange={(e) => {
-                            setWorkspaceText(e.target.value);
-                            if (writingSounds) {
-                              playMXKeySound();
-                            }
-                          }}
+                        <AnimatePresence mode="popLayout">
+                          <motion.div
+                            key={activeProjectId || 'empty'}
+                            initial={{ opacity: 0, scale: 0.98, y: 15 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.97, y: -15 }}
+                            transition={{ duration: 0.3 }}
+                            className="w-full h-full flex flex-col"
+                          >
+                            <textarea 
+                              value={workspaceText}
+                              onChange={(e) => {
+                                setWorkspaceText(e.target.value);
+                                if (writingSounds) {
+                                  playMXKeySound();
+                                }
+                              }}
+                              className={cn(
+                                "w-full h-full bg-transparent focus:outline-none transition-all resize-none overflow-y-auto scroll-smooth custom-scrollbar-editor",
+                                (playingSoundUrl && showUi) ? "pb-[160px] md:pb-40" : "pb-12 md:pb-16",
+                                writingFont === 'sans' ? "font-sans leading-relaxed text-left tracking-wide" :
+                                writingFont === 'mono' ? "font-mono leading-relaxed text-left text-[14px] text-emerald-400" :
+                                "font-serif italic leading-loose text-left font-light"
+                              )}
+                              style={{ 
+                                fontSize: `${writingFontSize}px`,
+                                caretColor: writingTheme === 'sepia' ? '#d97706' : writingTheme === 'forest' ? '#10b981' : '#ff4e00'
+                              }}
+                              placeholder="Digite aqui sua obra... sinta as teclas... o silêncio conspira a seu favor."
+                            />
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+
+                      {/* --- FLOTING PROJECT DOCK / CLIPBOARD HISTÓRICO DE QUADROS --- */}
+                      <div className="absolute right-4 top-4 z-[45] flex flex-col items-end gap-2">
+                        {/* Interactive floating trigger button */}
+                        <button
+                          onClick={() => setIsProjectsDockOpen(!isProjectsDockOpen)}
                           className={cn(
-                            "w-full h-full bg-transparent focus:outline-none transition-all resize-none overflow-y-auto scroll-smooth custom-scrollbar-editor",
-                            (playingSoundUrl && showUi) ? "pb-[160px] md:pb-40" : "pb-12 md:pb-16",
-                            writingFont === 'sans' ? "font-sans leading-relaxed text-left tracking-wide" :
-                            writingFont === 'mono' ? "font-mono leading-relaxed text-left text-[14px] text-emerald-400" :
-                            "font-serif italic leading-loose text-left font-light"
+                            "px-3.5 py-2 rounded-2xl border text-xs font-mono font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all backdrop-blur-md cursor-pointer",
+                            isProjectsDockOpen
+                              ? (writingTheme === 'sepia' ? "bg-amber-950/90 border-amber-600/50 text-amber-300" : writingTheme === 'forest' ? "bg-emerald-950/90 border-emerald-500/50 text-emerald-400" : "bg-zinc-900/90 border-white/20 text-white")
+                              : (writingTheme === 'sepia' ? "bg-amber-600/10 border-amber-600/20 text-amber-300/70 hover:text-amber-300" : writingTheme === 'forest' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400/70 hover:text-emerald-400" : "bg-white/5 border-white/10 text-white/70 hover:text-white")
                           )}
-                          style={{ 
-                            fontSize: `${writingFontSize}px`,
-                            caretColor: writingTheme === 'sepia' ? '#d97706' : writingTheme === 'forest' ? '#10b981' : '#ff4e00'
-                          }}
-                          placeholder="Digite aqui sua obra... sinta as teclas... o silêncio conspira a seu favor."
-                        />
+                          title="Alternar Área de Transferência de Projetos de Texto / Quadros"
+                        >
+                          <FileText size={14} className={cn("transition-transform", isProjectsDockOpen ? "rotate-12" : "")} />
+                          <span>MÚLTIPLOS QUADROS</span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded-full text-[9px] font-bold shrink-0",
+                            writingTheme === 'sepia' ? "bg-amber-600/20 text-amber-300" : writingTheme === 'forest' ? "bg-emerald-500/20 text-emerald-400" : "bg-white/10 text-white"
+                          )}>
+                            {writingProjects.length}
+                          </span>
+                        </button>
+
+                        <AnimatePresence>
+                          {isProjectsDockOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, y: 10, x: 10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: 10, x: 10 }}
+                              transition={{ duration: 0.2 }}
+                              className={cn(
+                                "w-72 max-h-[480px] rounded-2xl border p-4 shadow-2xl backdrop-blur-2xl flex flex-col gap-3 overflow-hidden select-none",
+                                writingTheme === 'charcoal' ? "bg-[#101216]/95 border-white/10 shadow-black/80" :
+                                writingTheme === 'midnight' ? "bg-black/95 border-white/[0.04] shadow-black" :
+                                writingTheme === 'sepia' ? "bg-[#181412]/98 border-[#2e241e] text-[#eedbd0] shadow-black/70" :
+                                "bg-[#060c08]/98 border-emerald-950/50 text-emerald-100 shadow-black/80"
+                              )}
+                            >
+                              {/* Header */}
+                              <div className="flex items-center justify-between border-b border-white/5 pb-2 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                  <Sparkles size={11} className={writingTheme === 'forest' ? "text-emerald-400" : "text-amber-500"} />
+                                  <span className="text-[9px] uppercase tracking-wider font-mono font-bold opacity-60">Histórico de Quadros</span>
+                                </div>
+                                <button
+                                  onClick={() => handleStartNewProject()}
+                                  className={cn(
+                                    "px-2 py-1 rounded-lg text-[9px] font-mono font-bold flex items-center gap-1 hover:scale-105 active:scale-95 transition-all border shrink-0 cursor-pointer",
+                                    writingTheme === 'sepia' ? "bg-amber-600/20 border-amber-600/30 text-amber-300" : writingTheme === 'forest' ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400" : "bg-white/10 border-white/10 text-white"
+                                  )}
+                                  title="Iniciar um novo quadro em branco e reservar o atual"
+                                >
+                                  <Plus size={10} />
+                                  <span>NOVO QUADRO</span>
+                                </button>
+                              </div>
+
+                              {/* Portfolio List */}
+                              <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-2 pr-0.5">
+                                {writingProjects.length === 0 ? (
+                                  <div className="text-center py-8 text-[11px] opacity-40 font-mono">
+                                    Nenhum quadro guardado.
+                                  </div>
+                                ) : (
+                                  writingProjects.map((proj) => {
+                                    const isActive = proj.id === activeProjectId;
+                                    const wordCount = proj.content.trim() ? proj.content.trim().split(/\s+/).length : 0;
+                                    const excerpt = proj.content ? proj.content.replace(/[\#\*\_]/g, '').slice(0, 75) + '...' : 'Sem conteúdo';
+                                    
+                                    return (
+                                      <motion.div
+                                        key={proj.id}
+                                        onClick={() => handleSelectProject(proj.id)}
+                                        whileHover={{ scale: 1.01 }}
+                                        className={cn(
+                                          "p-3 rounded-xl border text-left transition-all cursor-pointer relative group flex flex-col gap-1.5",
+                                          isActive
+                                            ? (writingTheme === 'sepia' ? "bg-amber-950/40 border-amber-600/60 ring-1 ring-amber-600/30" : writingTheme === 'forest' ? "bg-emerald-950/40 border-emerald-500/60 ring-1 ring-emerald-500/30" : "bg-white/10 border-white/25 ring-1 ring-white/10")
+                                            : "bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10"
+                                        )}
+                                      >
+                                        <div className="flex items-start justify-between gap-1.5">
+                                          <div className="flex flex-col min-w-0 flex-1">
+                                            <span className={cn(
+                                              "text-xs font-semibold truncate leading-snug",
+                                              isActive 
+                                                ? (writingTheme === 'sepia' ? "text-amber-300" : writingTheme === 'forest' ? "text-emerald-400" : "text-white") 
+                                                : "text-white/70"
+                                            )}>
+                                              {proj.title || 'Rascunho Sem Título'}
+                                            </span>
+                                            <span className="text-[8px] opacity-35 font-mono">
+                                              Criado em {new Date(proj.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} • {wordCount} palavras
+                                            </span>
+                                          </div>
+
+                                          {/* Hover quick controls */}
+                                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                navigator.clipboard.writeText(proj.content);
+                                                addNotification("Conteúdo do quadro copiado!", "success");
+                                              }}
+                                              className="p-1 rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all cursor-pointer"
+                                              title="Copiar texto para área de transferência"
+                                            >
+                                              <Copy size={10} />
+                                            </button>
+                                            <button
+                                              onClick={(e) => handleDeleteProject(proj.id, e)}
+                                              className="p-1 rounded hover:bg-red-500/10 text-red-400/40 hover:text-red-400 transition-all cursor-pointer"
+                                              title="Eliminar este quadro permanentemente"
+                                            >
+                                              <Trash2 size={10} />
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        <p className="text-[9.5px] opacity-40 font-light truncate max-w-full">
+                                          {excerpt}
+                                        </p>
+
+                                        {isActive && (
+                                          <span className={cn(
+                                            "absolute top-2.5 right-2.5 flex h-1.5 w-1.5",
+                                            writingTheme === 'sepia' ? "text-amber-500" : writingTheme === 'forest' ? "text-emerald-400" : "text-white"
+                                          )}>
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current"></span>
+                                          </span>
+                                        )}
+                                      </motion.div>
+                                    );
+                                  })
+                                )}
+                              </div>
+
+                              {/* Explaining note */}
+                              <div className="border-t border-white/5 pt-2 text-[8px] font-mono opacity-30 leading-snug">
+                                Sempre que quiser começar uma nova escrita do zero, use "+ NOVO QUADRO". Suas criações antigas continuarão seguras aqui.
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
                   </div>
@@ -9827,9 +10186,75 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                       )}
 
                       {chatHistory.length === 0 ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-her-muted/20 italic text-sm md:text-lg font-light py-20 select-none text-center">
-                          <p className="mb-2">A classe está pronta.</p>
-                          <p className="text-xs text-her-muted/40 not-italic">Manifeste sua dúvida ou envie uma mensagem para iniciar!</p>
+                        <div className="flex-1 w-full max-w-2xl mx-auto px-4 py-8 md:py-16 flex flex-col items-center justify-center text-center select-none">
+                          <motion.div 
+                            initial={{ opacity: 0, y: 15 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                            className="space-y-2"
+                          >
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-[8px] tracking-[0.25em] font-mono text-cyan-400 uppercase font-bold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                              Cérebro Local Sintonizado
+                            </div>
+                            <h2 className="text-2xl md:text-3xl font-serif italic text-white/95 leading-tight font-light">OSONE G5 Core</h2>
+                            <p className="text-[11px] text-her-muted/65 max-w-md mx-auto leading-relaxed">
+                              Sua inteligência com armazenamento criptografado no navegador. Conecte de forma 100% offline e privada o sistema local do seu computador.
+                            </p>
+                          </motion.div>
+
+                          {/* Bento Cards Shortcuts */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 w-full max-w-lg">
+                            {/* RAG DISCO RIGIDO LOCAL KEY */}
+                            <motion.div
+                              onClick={() => setWorkspaceMode('rag')}
+                              whileHover={{ y: -2 }}
+                              className="group bg-cyan-500/[0.02] hover:bg-cyan-500/[0.05] border border-cyan-500/10 hover:border-cyan-500/30 p-5 rounded-3xl transition-all duration-300 text-left relative overflow-hidden cursor-pointer active:scale-[0.98] flex flex-col justify-between h-44"
+                            >
+                              <div className="absolute -top-12 -left-12 w-24 h-24 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-cyan-500/15 transition-all" />
+                              <div className="flex items-center justify-between">
+                                <div className="w-8 h-8 rounded-full bg-cyan-500/10 flex items-center justify-center text-cyan-400 border border-cyan-500/20">
+                                  <Folder size={15} />
+                                </div>
+                                <span className="text-[8px] font-mono text-cyan-400 font-bold uppercase tracking-wider bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/15">Sintonizar HD</span>
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide group-hover:text-cyan-300 transition-colors">Ler Disco Rígido</h3>
+                                <p className="text-[10px] text-her-muted/60 leading-normal mt-1 font-light">
+                                  Indexe pastas inteiras do seu computador físico. Faça buscas RAG de forma local e segura no OSONE.
+                                </p>
+                              </div>
+                            </motion.div>
+
+                            {/* CHAT COGNITIVO NORMAL */}
+                            <motion.div
+                              onClick={() => {
+                                setIsChatExpanded(true);
+                                addNotification("Painel de Conversa Ativo! Envie sua mensagem para começar.", "info");
+                              }}
+                              whileHover={{ y: -2 }}
+                              className="group bg-her-accent/[0.02] hover:bg-her-accent/[0.05] border border-white/5 hover:border-her-accent/20 p-5 rounded-3xl transition-all duration-300 text-left relative overflow-hidden cursor-pointer active:scale-[0.98] flex flex-col justify-between h-44"
+                            >
+                              <div className="absolute -top-12 -left-12 w-24 h-24 bg-her-accent/10 rounded-full blur-2xl pointer-events-none group-hover:bg-her-accent/15 transition-all" />
+                              <div className="flex items-center justify-between">
+                                <div className="w-8 h-8 rounded-full bg-her-accent/10 flex items-center justify-center text-her-accent border border-her-accent/20">
+                                  <MessageSquare size={15} />
+                                </div>
+                                <span className="text-[8px] font-mono text-her-accent font-bold uppercase tracking-wider bg-her-accent/10 px-2 py-0.5 rounded-md border border-her-accent/15">Live Chat</span>
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide group-hover:text-her-accent transition-colors">Prosa Livre</h3>
+                                <p className="text-[10px] text-her-muted/60 leading-normal mt-1 font-light">
+                                  Explore insights mentais e criatividade usando o assistente neural por texto ou pelo motor de voz.
+                                </p>
+                              </div>
+                            </motion.div>
+                          </div>
+
+                          <div className="mt-8 text-[9px] text-her-muted/40 font-mono uppercase tracking-widest flex items-center gap-2">
+                            <Lock size={10} className="text-emerald-500" />
+                            <span>Privacidade Garantida — Processamento Local na Caixa de Areia</span>
+                          </div>
                         </div>
                       ) : (
                         chatHistory.map((msg) => (

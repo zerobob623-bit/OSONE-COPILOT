@@ -139,4 +139,12 @@ export interface VoiceModulation {
   distortion: number;
 }
 
+export interface WritingProject {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+}
+
+
 
