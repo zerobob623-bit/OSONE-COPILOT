@@ -1369,6 +1369,117 @@ Nome do interlocutor: ${senderName}`;
     }
   });
 
+  // POST endpoint for Google-Lens style visual intelligence searches (with or without Google Search grounding)
+  app.post("/api/lens/query", async (req, res) => {
+    try {
+      const { image, internetSearch, clientApiKey } = req.body;
+      if (!image) {
+        return res.status(400).json({ error: "A imagem é obrigatória para a pesquisa da Lente." });
+      }
+
+      const apiKey = clientApiKey || getSecretGeminiKey();
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida no servidor." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        vertexai: false,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      // Extract raw base64 data and mimeType
+      let base64Data = image;
+      let mimeType = "image/jpeg";
+      if (image.startsWith("data:")) {
+        const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+
+      const imagePart = {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Data,
+        },
+      };
+
+      const systemInstruction = `Você é o sintonizador visual da Lente OSONE (mecanismo inspirado no Google Lens).
+Sua missão é identificar detalhadamente o objeto, marca, planta, animal, alimento, monumento ou texto contido na imagem enviada.
+Você deve produzir uma resposta estruturada de forma impecável no formato JSON contendo campos úteis para o usuário.
+Não inclua nenhuma formatação markdown extra fora do JSON bruto.`;
+
+      const promptText = `Analise a imagem de foco fornecida. Identifique o que aparece nela e responda estritamente com um objeto JSON no seguinte formato:
+{
+  "name": "Nome específico do item identificado",
+  "category": "Categoria / Especialidade",
+  "confidence": 99, 
+  "description": "Uma descrição rica, focada e cativante em língua portuguesa detalhando o item...",
+  "tags": ["tag1", "tag2", "tag3"], 
+  "details": {
+    "marcaOuOrigem": "Marca fabricante, proveniência ou bioma original",
+    "caracteristicaPrincipal": "A característica física ou estrutural mais marcante observada",
+    "curiosidadeOuUso": "Curiosidade histórica, utilidade prática, ou conselho de manutenção"
+  },
+  "suggestions": ["Ação de pesquisa útil 1", "Sugestão de uso do item 2"]
+}
+`;
+
+      const config: any = {
+        systemInstruction,
+        responseMimeType: "application/json",
+      };
+
+      // If internetSearch is true, enable Google Search Grounding for live Lens matches!
+      if (internetSearch) {
+        config.tools = [{ googleSearch: {} }];
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: { parts: [imagePart, { text: promptText }] },
+        config: config
+      });
+
+      const responseText = response.text || "{}";
+      let parsedData: any = {};
+      try {
+        parsedData = JSON.parse(responseText.trim());
+      } catch (parseErr) {
+        console.warn("Raw Gemini answer could not be parsed as direct JSON, attempting to extract blocks:", responseText);
+        // Fallback robust json extraction from markdown blocks
+        const cleaned = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
+        parsedData = JSON.parse(cleaned);
+      }
+
+      // Extract actual live Google Search citations if available in Gemini's grounding metadata!
+      const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      const citations: { title: string; uri: string }[] = [];
+      if (groundingChunks && Array.isArray(groundingChunks)) {
+        for (const chunk of groundingChunks) {
+          if (chunk.web && chunk.web.uri) {
+            citations.push({
+              title: chunk.web.title || "Resultado da Web",
+              uri: chunk.web.uri
+            });
+          }
+        }
+      }
+
+      parsedData.citations = citations;
+      return res.json(parsedData);
+    } catch (err: any) {
+      console.error("Erro na pesquisa da Lente OSONE:", err);
+      return res.status(500).json({ error: formatGeminiError(err) });
+    }
+  });
+
   // POST endpoint for high-speed server-side webpage text scraping & parsing
   app.post("/api/scrape", async (req, res) => {
     try {

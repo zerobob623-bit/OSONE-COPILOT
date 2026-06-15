@@ -64,6 +64,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { cn, safeJsonParse } from './lib/utils';
 import ReactMarkdown from 'react-markdown';
+import html2canvas from 'html2canvas';
 import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile, WritingProject } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { connectToLiveBridge } from './lib/live-bridge';
@@ -88,6 +89,8 @@ import { HandTracker } from './components/HandTracker';
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
 import { TeacherWhiteboard } from './components/TeacherWhiteboard';
+import { OSONELens } from './components/OSONELens';
+import { OSONESentinel } from './components/OSONESentinel';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
@@ -1108,7 +1111,11 @@ export default function App() {
 
       recognitionRef.current.onerror = (event: any) => {
         if (event.error !== 'aborted') {
-          console.error('Speech recognition error', event.error);
+          if (event.error === 'not-allowed') {
+            console.warn('Speech recognition warning: microphone permission not-allowed');
+          } else {
+            console.error('Speech recognition error', event.error);
+          }
           let errorMsg = `Erro de voz: ${event.error}`;
           if (event.error === 'not-allowed') {
             errorMsg = "Permissão de microfone negada. Acesse as permissões do navegador ou clique no ícone de link acima para abrir em uma nova aba!";
@@ -1157,6 +1164,72 @@ export default function App() {
   }, [isMuted]);
 
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  // Sentinel (Auto-Print Vision) States
+  const [isSentinelActive, setIsSentinelActive] = useState(() => {
+    try {
+      return localStorage.getItem('osone_sentinel_active') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [sentinelInterval, setSentinelInterval] = useState(() => {
+    try {
+      const saved = localStorage.getItem('osone_sentinel_interval');
+      return saved ? parseInt(saved, 10) : 30;
+    } catch {
+      return 30;
+    }
+  });
+  const [sentinelLogs, setSentinelLogs] = useState<{ id: string; timestamp: string; image: string; comment: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('osone_sentinel_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isSentinelProcessing, setIsSentinelProcessing] = useState(false);
+  const [lastCapturedImage, setLastCapturedImage] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('osone_sentinel_last_image') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_sentinel_active', String(isSentinelActive));
+  }, [isSentinelActive]);
+
+  useEffect(() => {
+    localStorage.setItem('osone_sentinel_interval', String(sentinelInterval));
+  }, [sentinelInterval]);
+
+  useEffect(() => {
+    try {
+      if (sentinelLogs.length > 0) {
+        localStorage.setItem('osone_sentinel_logs', JSON.stringify(sentinelLogs.slice(0, 30)));
+      } else {
+        localStorage.removeItem('osone_sentinel_logs');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [sentinelLogs]);
+
+  useEffect(() => {
+    try {
+      if (lastCapturedImage) {
+        localStorage.setItem('osone_sentinel_last_image', lastCapturedImage);
+      } else {
+        localStorage.removeItem('osone_sentinel_last_image');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [lastCapturedImage]);
+
   const [isGoogleSearchActive, setIsGoogleSearchActive] = useState(() => {
     try {
       const val = localStorage.getItem('osone_google_search_active');
@@ -4140,6 +4213,176 @@ ${isBad
     }
   };
 
+  // ==========================================
+  // OSONE SENTINEL EYE (Vision-Based Real-Time Watcher)
+  // ==========================================
+
+  const captureAndAnalyzeSentinel = async () => {
+    if (isSentinelProcessing) return;
+    
+    setIsSentinelProcessing(true);
+    let capturedDataUrl = "";
+    
+    try {
+      if (isScreenSharing && screenStreamRef.current) {
+        // Grab from screen share media stream
+        const captureFromStream = (stream: MediaStream): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.autoplay = true;
+            video.playsInline = true;
+            video.muted = true;
+            
+            let completed = false;
+            const timeout = setTimeout(() => {
+              if (!completed) {
+                completed = true;
+                reject(new Error("Timeout waiting for stream video track frame"));
+              }
+            }, 3000);
+
+            video.onloadeddata = () => {
+              setTimeout(() => {
+                if (completed) return;
+                completed = true;
+                clearTimeout(timeout);
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = video.videoWidth || 640;
+                  canvas.height = video.videoHeight || 480;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+                    resolve(dataUrl);
+                  } else {
+                    reject(new Error("Failed to get 2d canvas context"));
+                  }
+                } catch (e) {
+                  reject(e);
+                } finally {
+                  video.srcObject = null;
+                }
+              }, 300);
+            };
+            video.onerror = (e) => {
+              if (completed) return;
+              completed = true;
+              clearTimeout(timeout);
+              reject(e);
+            };
+          });
+        };
+        
+        capturedDataUrl = await captureFromStream(screenStreamRef.current);
+      } else {
+        // Grab from application DOM silently using html2canvas
+        const appRoot = document.getElementById('root') || document.body;
+        const canvas = await html2canvas(appRoot, {
+          scale: 0.85, // Lightweight but clear
+          useCORS: true,
+          logging: false
+        });
+        capturedDataUrl = canvas.toDataURL('image/jpeg', 0.65);
+      }
+
+      if (!capturedDataUrl) {
+        throw new Error("Não foi possível gerar um print válido.");
+      }
+
+      setLastCapturedImage(capturedDataUrl);
+
+      // Transmit to Gemini vision proxy
+      const base64Part = capturedDataUrl.split(',')[1];
+      const effectiveApiKey = apiKeys.gemini || '';
+      const modelName = apiKeys.geminiModel || "gemini-2.5-flash";
+      
+      const visionPrompt = `Você é o OSONE Sentinel Eye (Olho Sentinela OSONE), o módulo de percepção visual avançada e visão computacional em tempo real que monitora de forma amigável as ações do usuário no OSONE G5.
+Analise a imagem da tela fornecida (representando o que o usuário está visualizando e editando). Veja as abas de trabalho (Escrita, Canvas, Saúde, Música, Whiteboard, TikTok Live, etc.), textos ativos, códigos, desenhos ou configurações.
+Com base no que observar, crie um único conselho prático, opinião sagaz, dica de estudos refinada ou comentário proativo interessante sobre essa atividade.
+
+Siga rigorosamente estas diretrizes:
+- Seja extremamente proativo, sincero, inteligente e perspicaz. Use o tom de um parceiro de codificação genial / co-mentor estratégico de alta performance.
+- Seja breve e de altíssimo impacto: escreva no máximo 2 parágrafos simples e amigáveis (menos de 80 palavras no total).
+- Chave de filtro crucial: Se a tela analisada não mudou praticamente nada ou o conteúdo visível for substancialmente idêntico à atividade anterior, responda única, literal e exclusivamente com a palavra [SEM ALTERAÇÕES]. Não use markdown nem pontuações adicionais para isso.`;
+
+      const response = await fetch("/api/gemini/generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: modelName,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    data: base64Part,
+                    mimeType: "image/jpeg"
+                  }
+                },
+                {
+                  text: visionPrompt
+                }
+              ]
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Falha no processamento visual (${response.status})`);
+      }
+
+      const result = await response.json();
+      const rawText = result.text || "";
+
+      if (rawText.trim().toUpperCase() === "[SEM ALTERAÇÕES]" || rawText.trim().length < 5) {
+        console.log("OSONE Sentinel Eye: Nenhuma alteração significativa detectada na tela.");
+      } else {
+        const comment = rawText.trim();
+        const textToSpeak = comment.replace(/[*#]/g, ''); // strip markdown characters for safe speech synthesis
+
+        const newLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          image: capturedDataUrl,
+          comment: comment
+        };
+
+        setSentinelLogs(prev => [newLog, ...prev].slice(0, 30));
+        addNotification("Olho Sentinela: Novo insight visual gerado!", "success");
+
+        // Autoplay voice if speech-auto-speak or the local speaker option is enabled
+        const autoSpeak = localStorage.getItem('osone_sentinel_autospeak') === 'true';
+        if (autoSpeak || isChatAutoSpeakActive) {
+          playSpeech(textToSpeak);
+        }
+      }
+    } catch (err: any) {
+      console.error("Erro na rotina do OSONE Sentinel Eye:", err);
+    } finally {
+      setIsSentinelProcessing(false);
+    }
+  };
+
+  // Sentinel Timer Trigger
+  useEffect(() => {
+    let intervalId: any = null;
+    if (isSentinelActive) {
+      intervalId = setInterval(() => {
+        captureAndAnalyzeSentinel();
+      }, sentinelInterval * 1000);
+    }
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isSentinelActive, sentinelInterval, apiKeys.gemini, apiKeys.geminiModel]);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(workspaceText);
   };
@@ -6601,7 +6844,14 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                   }
                 }
               ).catch(err => {
-                console.error("Erro no AudioProcessor:", err);
+                const isPermissionDenied = err?.name === 'NotAllowedError' || 
+                                           err?.message?.includes('Permission denied') || 
+                                           err?.message?.includes('not-allowed');
+                if (isPermissionDenied) {
+                  console.warn("Aviso: Erro no AudioProcessor (Gravação de áudio indisponível por falta de permissão):", err.message || err);
+                } else {
+                  console.error("Erro no AudioProcessor:", err);
+                }
                 setIsListening(false);
                 setLiveState({ 
                   status: 'error', 
@@ -9571,6 +9821,63 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 />
               </div>
             </motion.div>
+          ) : workspaceMode === 'lens' ? (
+            <motion.div
+              key="workspace-lens"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <OSONELens 
+                onClose={() => setWorkspaceMode('home')} 
+                onAddNotification={addNotification}
+              />
+            </motion.div>
+          ) : workspaceMode === 'sentinel' ? (
+            <motion.div
+              key="workspace-sentinel"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <div className="flex items-center gap-4 shrink-0 p-6 border-b border-white/10 w-full select-none">
+                <button 
+                  onClick={() => setWorkspaceMode('home')}
+                  className="p-3 bg-white/[0.03] hover:bg-white/[0.05] transition-all text-her-muted border border-white/[0.05]"
+                >
+                  <ChevronRight size={18} className="rotate-180" />
+                </button>
+                <div className="text-left">
+                  <span className="block text-[9px] uppercase tracking-widest text-cyan-400 font-mono">WORKSPACE SENTINELA</span>
+                  <h2 className="text-base font-bold uppercase tracking-wider text-white">OSONE Sentinel Eye</h2>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col h-full min-h-0">
+                <OSONESentinel
+                  isActive={isSentinelActive}
+                  onToggleActive={setIsSentinelActive}
+                  interval={sentinelInterval}
+                  onIntervalChange={setSentinelInterval}
+                  logs={sentinelLogs}
+                  onClearLogs={() => setSentinelLogs([])}
+                  isProcessing={isSentinelProcessing}
+                  onTriggerManual={captureAndAnalyzeSentinel}
+                  lastImage={lastCapturedImage}
+                  onSpeakText={playSpeech}
+                  isScreenSharing={isScreenSharing}
+                  onStartScreenSharing={async () => {
+                    await startScreenSharing().then(() => {
+                      addNotification("Compartilhamento de tela iniciado com sucesso", "success");
+                    }).catch(err => {
+                      addNotification("Não foi possível iniciar o compartilhamento de tela", "error");
+                    });
+                  }}
+                  className="flex-1 w-full h-full min-h-0 text-left"
+                />
+              </div>
+            </motion.div>
           ) : (
             <motion.div 
               key="home"
@@ -9701,7 +10008,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           <InfinityLogo 
                             active={isElevenLabsLiveActive} 
                             speaking={isSpeaking} 
-                            style="jarvis"
+                            style={orbStyle}
                             thinking={isGenerating || isAnalyzingCode || isTranscribing}
                             searching={isModelSearching}
                           />
@@ -9855,7 +10162,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           <InfinityLogo 
                             active={liveState.status === 'connected'} 
                             speaking={isSpeaking} 
-                            style="neural"
+                            style={orbStyle}
                             thinking={isGenerating || isAnalyzingCode || isTranscribing}
                             searching={isModelSearching}
                           />
@@ -10131,38 +10438,22 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                   </div>
                                   <span className="text-xs font-bold font-sans tracking-wide text-sky-400">{currentCombo.hostA.name}</span>
                                   <span className="text-[9px] text-zinc-400 text-center font-light leading-normal h-4 truncate w-full select-none">{currentCombo.hostA.role}</span>
-                                  
-                                  {/* Audio waves visualizer for host A */}
-                                  {aS && (
-                                    <div className="flex gap-0.5 items-end justify-center h-4 mt-2">
-                                      <span className="w-[1.5px] h-2 bg-sky-400 animate-[bounce_0.6s_infinite] delay-75" />
-                                      <span className="w-[1.5px] h-3.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-200" />
-                                      <span className="w-[1.5px] h-1.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-100" />
-                                      <span className="w-[1.5px] h-3.5 bg-sky-400 animate-[bounce_0.6s_infinite] delay-300" />
-                                      <span className="w-[1.5px] h-2 bg-sky-400 animate-[bounce_0.6s_infinite] delay-150" />
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Center separator with collaborative join icon */}
-                                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-950 border border-white/10 w-7 h-7 rounded-full flex items-center justify-center z-10 select-none shadow-md">
-                                  <span className="text-[10px] font-bold text-zinc-400 font-mono">&</span>
                                 </div>
 
                                 {/* Host B Box */}
                                 <div className={cn(
                                   "flex flex-col items-center p-3 rounded-xl border transition-all duration-300 relative",
                                   bS 
-                                    ? "bg-rose-500/[0.03] border-rose-500/30 shadow-[0_0_15px_rgba(251,113,133,0.15)] scale-[1.02]" 
+                                    ? "bg-rose-500/[0.03] border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.15)] scale-[1.02]" 
                                     : "bg-white/[0.01] border-white/5 opacity-70"
                                 )}>
                                   <div className="relative mb-2">
                                     <img src={currentCombo.hostB.avatarUrl} alt={currentCombo.hostB.name} className={cn(
                                       "w-12 h-12 rounded-full object-cover transition-all",
-                                      bS ? "ring-2 ring-rose-500 border-rose-450" : "border border-white/10"
+                                      bS ? "ring-2 ring-rose-500 border-rose-500" : "border border-white/10"
                                     )} />
                                     {bS && (
-                                      <div className="absolute -bottom-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎓</div>
+                                      <div className="absolute -bottom-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 text-[8px] shrink-0 font-bold flex items-center justify-center animate-bounce">🎙️</div>
                                     )}
                                   </div>
                                   <span className="text-xs font-bold font-sans tracking-wide text-rose-400">{currentCombo.hostB.name}</span>
@@ -10204,7 +10495,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           </motion.div>
 
                           {/* Bento Cards Shortcuts */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 w-full max-w-lg">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 w-full max-w-4xl">
                             {/* RAG DISCO RIGIDO LOCAL KEY */}
                             <motion.div
                               onClick={() => setWorkspaceMode('rag')}
@@ -10246,6 +10537,54 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                 <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide group-hover:text-her-accent transition-colors">Prosa Livre</h3>
                                 <p className="text-[10px] text-her-muted/60 leading-normal mt-1 font-light">
                                   Explore insights mentais e criatividade usando o assistente neural por texto ou pelo motor de voz.
+                                </p>
+                              </div>
+                            </motion.div>
+
+                            {/* OSONE LENS */}
+                            <motion.div
+                              onClick={() => setWorkspaceMode('lens')}
+                              whileHover={{ y: -2 }}
+                              className="group bg-purple-500/[0.02] hover:bg-purple-500/[0.05] border border-purple-500/10 hover:border-purple-500/30 p-5 rounded-3xl transition-all duration-300 text-left relative overflow-hidden cursor-pointer active:scale-[0.98] flex flex-col justify-between h-44"
+                            >
+                              <div className="absolute -top-12 -left-12 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-500/15 transition-all" />
+                              <div className="flex items-center justify-between">
+                                <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-400 border border-purple-500/20">
+                                  <Eye size={15} />
+                                </div>
+                                <span className="text-[8px] font-mono text-purple-400 font-bold uppercase tracking-wider bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/15">Varredura Lens</span>
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide group-hover:text-purple-300 transition-colors">Lente OSONE</h3>
+                                <p className="text-[10px] text-her-muted/60 leading-normal mt-1 font-light">
+                                  Identifique espécies, monumentos ou objetos com inteligência artificial, web grounding e voz.
+                                </p>
+                              </div>
+                            </motion.div>
+
+                            {/* OSONE SENTINEL EYE CARD */}
+                            <motion.div
+                              onClick={() => setWorkspaceMode('sentinel')}
+                              whileHover={{ y: -2 }}
+                              className="group bg-cyan-400/[0.02] hover:bg-cyan-400/[0.05] border border-cyan-400/10 hover:border-cyan-400/30 p-5 rounded-3xl transition-all duration-300 text-left relative overflow-hidden cursor-pointer active:scale-[0.98] flex flex-col justify-between h-44"
+                            >
+                              <div className="absolute -top-12 -left-12 w-24 h-24 bg-cyan-400/10 rounded-full blur-2xl pointer-events-none group-hover:bg-cyan-400/15 transition-all" />
+                              <div className="flex items-center justify-between">
+                                <div className="w-8 h-8 rounded-full bg-cyan-400/10 flex items-center justify-center text-cyan-400 border border-cyan-400/20">
+                                  <Eye size={15} />
+                                </div>
+                                <span className={`text-[8px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                                  isSentinelActive 
+                                    ? "bg-cyan-500/20 border-cyan-500/30 text-cyan-400 animate-pulse" 
+                                    : "bg-zinc-800 border-white/5 text-zinc-500"
+                                }`}>
+                                  {isSentinelActive ? "Ativo" : "Inativo"}
+                                </span>
+                              </div>
+                              <div className="mt-4">
+                                <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-wide group-hover:text-cyan-300 transition-colors">Olho Sentinela</h3>
+                                <p className="text-[10px] text-her-muted/60 leading-normal mt-1 font-light">
+                                  Auto-print em tempo real. O OSONE acompanha silenciosamente as suas atividades e cria insights surpresa!
                                 </p>
                               </div>
                             </motion.div>
