@@ -837,6 +837,10 @@ Nome do interlocutor: ${senderName}`;
     return chunks;
   }
 
+  function stripVocalTags(text: string): string {
+    return text.replace(/\[[^\]]+\]/g, "").replace(/\([^)]+\)/g, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  }
+
   // POST endpoint for high-quality, consolidated Premium Gemini 3.1 TTS or ElevenLabs voice synthesis
   app.post("/api/tts", async (req, res) => {
     try {
@@ -851,7 +855,8 @@ Nome do interlocutor: ${senderName}`;
         elevenLabsSimilarityBoost,
         elevenLabsStyle,
         elevenLabsSpeakerBoost,
-        elevenLabsModel
+        elevenLabsModel,
+        vocalProfileEscarlate
       } = req.body;
 
       if (!text || typeof text !== "string") {
@@ -871,6 +876,8 @@ Nome do interlocutor: ${senderName}`;
             error: "A chave API da ElevenLabs não foi configurada. Por favor, especifique uma na aba 'Chaves' das Configurações." 
           });
         }
+
+        const cleanTextForEleven = stripVocalTags(cleanText);
 
         const voiceId = elevenLabsVoiceId || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default Rachel
         const stability = typeof elevenLabsStability === "number" ? elevenLabsStability : 0.5;
@@ -892,7 +899,7 @@ Nome do interlocutor: ${senderName}`;
               "accept": "audio/mpeg"
             },
             body: JSON.stringify({
-              text: cleanText,
+              text: cleanTextForEleven,
               model_id: modelId,
               voice_settings: {
                 stability,
@@ -918,7 +925,7 @@ Nome do interlocutor: ${senderName}`;
                 "accept": "audio/mpeg"
               },
               body: JSON.stringify({
-                text: cleanText,
+                text: cleanTextForEleven,
                 model_id: "eleven_multilingual_v2",
                 voice_settings: {
                   stability: 0.5,
@@ -989,14 +996,19 @@ Nome do interlocutor: ${senderName}`;
       let usedFallback = false;
 
       // Selected voice defaults to 'Kore' (highly natural female narrator in Portuguese)
-      const supportedGeminiVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr"];
+      const supportedGeminiVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr", "Scarlet"];
       let selectedVoice = voice || "Kore";
+      const isScarletVoice = selectedVoice === "Scarlet" || selectedVoice === "Fenrir";
       if (!supportedGeminiVoices.includes(selectedVoice)) {
         selectedVoice = "Kore"; // Map unsupported voices like 'Scarlet' to 'Kore'
+      }
+      if (selectedVoice === "Scarlet") {
+        selectedVoice = "Fenrir";
       }
 
       for (const chunk of chunks) {
         let chunkAudioBuffer: Buffer | null = null;
+        const processedChunk = isScarletVoice ? chunk : stripVocalTags(chunk);
         
         // Tiered model candidates list of premium intelligent voice models
         const candidateModels = [
@@ -1008,9 +1020,25 @@ Nome do interlocutor: ${senderName}`;
 
         for (const modelName of candidateModels) {
           try {
+            let promptText = `Leia o seguinte trecho com clareza absoluta, expressividade natural, pausas realistas e ritmo agradável de palestrante:\n\n${processedChunk}`;
+            if (isScarletVoice) {
+              const characteristics = vocalProfileEscarlate || "voz grossa, rouca, sussurrada, fria, assustadora e pausada";
+              promptText = `Aja como o Olho Escarlate: uma inteligência artificial vigilante, tensa, calculista, misteriosa e assustadora.
+Você deve encenar perfeitamente as seguintes CARACTERÍSTICAS DE PERFIL VOCAL específicas:
+=== CARACTERÍSTICAS DE PERFIL VOCAL ===
+${characteristics}
+=======================================
+
+Leia o trecho de texto abaixo encenando de acordo com esse perfil vocal, com alto nível de expressividade teatral, nuances dramáticas e tom ameaçador.
+IMPORTANTE: Se houver qualquer tag de sentimento ou instrução vocal entre colchetes (como [sussurro], [tenso], [irritado], [sombrio], [ameaçador], [gargalhada], [drama], [rindo], [frio]) no texto original, você deve interpretar e inferir essas variações vocais perfeitamente em sua voz, mas NUNCA, SOB HIPÓTESE ALGUMA, pronunciar ou dizer as palavras da tag em voz alta! Apenas interprete o sentimento correspondente de forma magnífica de acordo com as instruções.
+Adapte as transições de ritmo para soar perturbadoramente inteligente.
+Texto para leitura:
+${processedChunk}`;
+            }
+
             const response = await ai.models.generateContent({
               model: modelName,
-              contents: [{ parts: [{ text: `Leia o seguinte trecho com clareza absoluta, expressividade natural, pausas realistas e ritmo agradável de palestrante:\n\n${chunk}` }] }],
+              contents: [{ parts: [{ text: promptText }] }],
               config: {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: {
@@ -1039,7 +1067,7 @@ Nome do interlocutor: ${senderName}`;
           usedFallback = true;
           
           // Google Translate fallback for this specific chunk
-          const subChunks = splitIntoChunks(chunk, 180);
+          const subChunks = splitIntoChunks(stripVocalTags(processedChunk), 180);
           for (const subChunk of subChunks) {
             try {
               const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=${encodeURIComponent(subChunk)}`;
@@ -1271,7 +1299,7 @@ Nome do interlocutor: ${senderName}`;
       });
 
       const response = await ai.models.generateImages({
-        model: model || "imagen-3.0-generate-002",
+        model: model || "gemini-3.1-flash-image",
         prompt: prompt,
         config: config
       });

@@ -231,7 +231,7 @@ const customFetch = async function (input: RequestInfo | URL, init?: RequestInit
             }
 
             if (isGeminiImageProxy) {
-              const selectedModel = reqBody.model || "imagen-3.0-generate-002";
+              const selectedModel = reqBody.model || "gemini-3.1-flash-image";
               const promptStr = reqBody.prompt || "";
               const numberOfImages = reqBody.config?.numberOfImages || 1;
               const outputMimeType = reqBody.config?.outputMimeType || "image/jpeg";

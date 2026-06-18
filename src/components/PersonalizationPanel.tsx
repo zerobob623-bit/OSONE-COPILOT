@@ -49,6 +49,8 @@ interface PersonalizationPanelProps {
   aiProfile: AIProfile;
   setAiProfile: (profile: AIProfile) => void;
   onAddNotification: (msg: string, type: 'success' | 'info' | 'error') => void;
+  vocalProfileEscarlate: string;
+  setVocalProfileEscarlate: (val: string) => void;
 }
 
 type TabId = 'profile' | 'voice' | 'elevenlabs' | 'keys' | 'interface' | 'sync';
@@ -72,7 +74,9 @@ export default function PersonalizationPanel({
   setAppTheme,
   aiProfile,
   setAiProfile,
-  onAddNotification
+  onAddNotification,
+  vocalProfileEscarlate,
+  setVocalProfileEscarlate
 }: PersonalizationPanelProps) {
   const [activeSubTab, setActiveSubTab] = useState<TabId>('profile');
   const [elVerificationStatus, setElVerificationStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
@@ -477,6 +481,24 @@ export default function PersonalizationPanel({
                     ))}
                   </div>
                 </div>
+
+                {selectedVoice === 'Scarlet' && (
+                  <div className="mt-3 p-4 bg-red-950/15 border border-red-900/30 rounded-2xl space-y-2 animate-fadeIn text-left">
+                    <label className="block text-[10px] uppercase tracking-[0.15em] text-red-500 font-bold select-none">
+                      Perfil Vocal do Modo Escarlate
+                    </label>
+                    <textarea
+                      value={vocalProfileEscarlate}
+                      onChange={(e) => setVocalProfileEscarlate(e.target.value)}
+                      rows={2}
+                      placeholder="Ex: voz muito grossa, sussurrada, fria, assustadora... "
+                      className="w-full bg-[#0a0a0a]/80 border border-red-900/20 rounded-xl px-4 py-3 focus:outline-none focus:border-red-500 text-xs text-red-100 placeholder-red-900/40 resize-none font-sans"
+                    />
+                    <p className="text-[9.5px] text-red-800/80 leading-normal">
+                      Descreva os atributos acústicos do Olho Escarlate. O motor neural adaptará a pronúncia para ressoar as características fornecidas acima.
+                    </p>
+                  </div>
+                )}
 
                 {/* Auto Speak Option */}
                 <div className="flex items-center justify-between bg-white/[0.01] p-4 rounded-2xl border border-white/[0.04]">

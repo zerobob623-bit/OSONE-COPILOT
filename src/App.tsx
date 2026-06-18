@@ -84,7 +84,6 @@ import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { RAGConnector, loadRagFilesFromDB, saveRagFileToDB } from './components/RAGConnector';
 import { ContentCreator } from './components/ContentCreator';
 import { KaraokePanel } from './components/KaraokePanel';
-import { HandTracker } from './components/HandTracker';
 
 import { WhatsAppIntegration } from './components/WhatsAppIntegration';
 import { OSONEMap } from './components/OSONEMap';
@@ -1629,6 +1628,14 @@ export default function App() {
     return localStorage.getItem('osone_selected_voice') || 'Zephyr';
   });
 
+  const [vocalProfileEscarlate, setVocalProfileEscarlate] = useState<string>(() => {
+    return localStorage.getItem('osone_vocal_profile_escarlate') || 'voz grossa, irritada, fria, calculista, sussurrada e ameaçadora';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('osone_vocal_profile_escarlate', vocalProfileEscarlate);
+  }, [vocalProfileEscarlate]);
+
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
 
   const tryOpenInInternalMap = (url: string, title?: string): boolean => {
@@ -2198,7 +2205,8 @@ export default function App() {
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
           elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-          elevenLabsModel: apiKeys.elevenLabsModel
+          elevenLabsModel: apiKeys.elevenLabsModel,
+          vocalProfileEscarlate: vocalProfileEscarlate
         })
       });
 
@@ -2346,7 +2354,8 @@ export default function App() {
             elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
             elevenLabsStyle: apiKeys.elevenLabsStyle,
             elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-            elevenLabsModel: apiKeys.elevenLabsModel
+            elevenLabsModel: apiKeys.elevenLabsModel,
+            vocalProfileEscarlate: vocalProfileEscarlate
           })
         });
 
@@ -2457,7 +2466,8 @@ export default function App() {
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
           elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-          elevenLabsModel: apiKeys.elevenLabsModel
+          elevenLabsModel: apiKeys.elevenLabsModel,
+          vocalProfileEscarlate: vocalProfileEscarlate
         })
       });
 
@@ -3860,7 +3870,8 @@ ${isBad
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
           elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-          elevenLabsModel: apiKeys.elevenLabsModel
+          elevenLabsModel: apiKeys.elevenLabsModel,
+          vocalProfileEscarlate: vocalProfileEscarlate
         })
       });
       
@@ -5811,7 +5822,7 @@ tools: tools
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   clientApiKey: effectiveApiKey,
-                  model: 'imagen-3.0-generate-002',
+                  model: 'gemini-3.1-flash-image',
                   prompt: prompt,
                   config: {
                     numberOfImages: 1,
@@ -7774,7 +7785,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         clientApiKey: effectiveApiKey,
-                        model: 'imagen-3.0-generate-002',
+                        model: 'gemini-3.1-flash-image',
                         prompt: prompt,
                         config: {
                           numberOfImages: 1,
@@ -8355,23 +8366,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             <MessageSquare size={13} className={subtitlesEnabled ? "scale-110 text-sky-400" : ""} />
             <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
               {subtitlesEnabled ? "LEG: ON" : "LEG: OFF"}
-            </span>
-          </button>
-
-          {/* CHAMAR OSONE / PEGAR FOCO DA ABA */}
-          <button
-            onClick={handleSummonOsone}
-            className={cn(
-              "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1 active:scale-95 cursor-pointer pointer-events-auto",
-              summonedAba === workspaceMode
-                ? "bg-emerald-500/10 border-emerald-500/35 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.35)] animate-pulse" 
-                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
-            )}
-            title={`Chamar OSONE para esta aba (${getFriendlyModeName(workspaceMode)})`}
-          >
-            <MapPin size={13} className={summonedAba === workspaceMode ? "scale-110 text-emerald-400 animate-bounce" : ""} />
-            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
-              {summonedAba === workspaceMode ? "SINTONIZADA" : "CHAMAR OSONE"}
             </span>
           </button>
 
@@ -9654,6 +9648,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 aiProfile={aiProfile}
                 setAiProfile={handleUpdateProfile}
                 onAddNotification={addNotification}
+                vocalProfileEscarlate={vocalProfileEscarlate}
+                setVocalProfileEscarlate={setVocalProfileEscarlate}
               />
             </motion.div>
           ) : workspaceMode === 'sounds' ? (
@@ -11618,6 +11614,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         aiProfile={aiProfile}
         setAiProfile={handleUpdateProfile}
         onAddNotification={addNotification}
+        vocalProfileEscarlate={vocalProfileEscarlate}
+        setVocalProfileEscarlate={setVocalProfileEscarlate}
         onRestoreState={(payload) => {
           try {
             const apiKeysVal = payload['osone_api_keys'];
@@ -11631,6 +11629,9 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
 
             const selectedVoiceVal = payload['osone_selected_voice'];
             if (selectedVoiceVal) setSelectedVoice(selectedVoiceVal);
+
+            const vocalProfileEscarlateVal = payload['osone_vocal_profile_escarlate'];
+            if (vocalProfileEscarlateVal) setVocalProfileEscarlate(vocalProfileEscarlateVal);
 
             const selectedPersonaVal = payload['osone_selected_persona'];
             if (selectedPersonaVal) {
@@ -11723,12 +11724,6 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         plan={proposedPlan}
         onApprove={handleApprovePlan}
         onReject={handleRejectPlan}
-      />
-
-      <HandTracker 
-        videoRef={liveVideoRef} 
-        isCameraActive={isCameraActive} 
-        onAddNotification={addNotification} 
       />
 
       <AnimatePresence>
@@ -11985,6 +11980,27 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* GLOBAL CHAMAR OSONE FLOATING BUTTON FOR NON-HOME PAGES/TABS */}
+      {workspaceMode !== 'home' && showUi && (
+        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={handleSummonOsone}
+            className={cn(
+              "px-4 py-2.5 transition-all text-[11px] font-bold uppercase tracking-wider flex items-center gap-2 border rounded-full relative overflow-hidden shadow-2xl cursor-pointer pointer-events-auto active:scale-95",
+              summonedAba === workspaceMode
+                ? "bg-emerald-500/90 hover:bg-emerald-600 border-emerald-400 text-white shadow-[0_0_20px_rgba(16,185,129,0.5)] animate-pulse" 
+                : "bg-zinc-950/95 hover:bg-zinc-900 border-white/10 text-emerald-400 hover:border-emerald-500/35"
+            )}
+            title={`Chamar OSONE para esta aba (${getFriendlyModeName(workspaceMode)})`}
+          >
+            <MapPin size={13} className={summonedAba === workspaceMode ? "scale-110 text-white animate-bounce" : "text-emerald-400"} />
+            <span>
+              {summonedAba === workspaceMode ? "OSONE SINTONIZADA" : "CHAMAR OSONE"}
+            </span>
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
