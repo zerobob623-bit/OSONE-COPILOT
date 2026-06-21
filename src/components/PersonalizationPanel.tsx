@@ -467,14 +467,14 @@ export default function PersonalizationPanel({
                           selectedVoice === voice 
                             ? "bg-her-accent/15 text-her-accent border-her-accent/30 font-bold" 
                             : "bg-white/[0.01] text-her-muted border-white/[0.03] hover:bg-white/[0.03] hover:text-white",
-                          voice === 'Scarlet' && "border-red-950 hover:border-red-500/30"
+                          voice === 'Scarlet' && "border-cyan-950 hover:border-cyan-500/30"
                         )}
                       >
-                        <span className={cn(voice === 'Scarlet' && "text-red-500 font-medium")}>{voice}</span>
+                        <span className={cn(voice === 'Scarlet' && "text-cyan-400 font-medium")}>{voice === 'Scarlet' ? 'Sensus' : voice}</span>
                         {selectedVoice === voice && (
                           <div className={cn(
-                            "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(255,78,0,0.5)]",
-                            voice === 'Scarlet' ? "bg-red-600 shadow-red-600/50" : "bg-her-accent"
+                            "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.5)]",
+                            voice === 'Scarlet' ? "bg-cyan-500 shadow-cyan-500/50" : "bg-her-accent"
                           )} />
                         )}
                       </button>
@@ -483,19 +483,19 @@ export default function PersonalizationPanel({
                 </div>
 
                 {selectedVoice === 'Scarlet' && (
-                  <div className="mt-3 p-4 bg-red-950/15 border border-red-900/30 rounded-2xl space-y-2 animate-fadeIn text-left">
-                    <label className="block text-[10px] uppercase tracking-[0.15em] text-red-500 font-bold select-none">
-                      Perfil Vocal do Modo Escarlate
+                  <div className="mt-3 p-4 bg-cyan-950/10 border border-cyan-900/30 rounded-2xl space-y-2 animate-fadeIn text-left">
+                    <label className="block text-[10px] uppercase tracking-[0.15em] text-cyan-400 font-bold select-none">
+                      Perfil Vocal do Modo Sensus (Quantum)
                     </label>
                     <textarea
                       value={vocalProfileEscarlate}
                       onChange={(e) => setVocalProfileEscarlate(e.target.value)}
                       rows={2}
-                      placeholder="Ex: voz muito grossa, sussurrada, fria, assustadora... "
-                      className="w-full bg-[#0a0a0a]/80 border border-red-900/20 rounded-xl px-4 py-3 focus:outline-none focus:border-red-500 text-xs text-red-100 placeholder-red-900/40 resize-none font-sans"
+                      placeholder="Ex: voz profunda, ressonante, pausada, de sabedoria cósmica, misteriosa... "
+                      className="w-full bg-[#0a0a0a]/80 border border-cyan-900/20 rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500 text-xs text-cyan-100 placeholder-cyan-900/40 resize-none font-sans"
                     />
-                    <p className="text-[9.5px] text-red-800/80 leading-normal">
-                      Descreva os atributos acústicos do Olho Escarlate. O motor neural adaptará a pronúncia para ressoar as características fornecidas acima.
+                    <p className="text-[9.5px] text-cyan-850/80 leading-normal">
+                      Descreva os atributos acústicos do Osone Sensus. O motor neural adaptará a pronúncia por inteligência quântica para ressoar as características fornecidas acima.
                     </p>
                   </div>
                 )}
@@ -1018,7 +1018,7 @@ export default function PersonalizationPanel({
                     { id: 'neural', name: 'Constelação Neural' },
                     { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
                     { id: 'superintelligence', name: 'Superinteligência' },
-                    { id: 'shadow', name: 'Escarlate (Shadow)' },
+                    { id: 'shadow', name: 'Osone Sensus (Quântico)' },
                   ].map((styleOption) => (
                     <button
                       key={styleOption.id}

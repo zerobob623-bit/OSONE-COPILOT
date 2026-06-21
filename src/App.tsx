@@ -1033,11 +1033,11 @@ export default function App() {
     if (p.id === 'shadow') {
       setOrbStyle('shadow');
       setSelectedVoice('Scarlet');
-      addNotification("PROTOCOLO ESCARLATE ATIVADO: VIGILÂNCIA TOTAL", "error");
+      addNotification("MODO OSONE SENSUS: PROTOCOLO FUTURISTA QUÂNTICO ATIVADO", "info");
     } else if (orbStyle === 'shadow') {
       setOrbStyle('classic');
       setSelectedVoice('Zephyr');
-      addNotification("Protocolos humanos restaurados", "success");
+      addNotification("Protocolos comportamentais de volta à estabilidade", "success");
     }
   };
 
@@ -1629,7 +1629,7 @@ export default function App() {
   });
 
   const [vocalProfileEscarlate, setVocalProfileEscarlate] = useState<string>(() => {
-    return localStorage.getItem('osone_vocal_profile_escarlate') || 'voz grossa, irritada, fria, calculista, sussurrada e ameaçadora';
+    return localStorage.getItem('osone_vocal_profile_escarlate') || 'voz profunda, ressonante, pausada, de sabedoria cósmica, misteriosa e tranquila';
   });
 
   useEffect(() => {

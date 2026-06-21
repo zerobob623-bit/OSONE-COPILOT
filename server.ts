@@ -10,11 +10,10 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// Polyfill global WebSocket for Node.js environments (like Node 18 or 20)
-// to ensure @google/genai live connection is functional in production.
-if (typeof globalThis.WebSocket === "undefined") {
-  (globalThis as any).WebSocket = WebSocket;
-}
+// ALWAYS polyfill global WebSocket for Node.js environments.
+// This ensures @google/genai uses the complete 'ws' implementation rather than Node 22's
+// native experimental Global WebSocket (which doesn't support the custom headers/authentication needed by Gemini Live).
+(globalThis as any).WebSocket = WebSocket;
 
 async function startServer() {
   const app = express();
@@ -1022,14 +1021,14 @@ Nome do interlocutor: ${senderName}`;
           try {
             let promptText = `Leia o seguinte trecho com clareza absoluta, expressividade natural, pausas realistas e ritmo agradável de palestrante:\n\n${processedChunk}`;
             if (isScarletVoice) {
-              const characteristics = vocalProfileEscarlate || "voz grossa, rouca, sussurrada, fria, assustadora e pausada";
-              promptText = `Aja como o Olho Escarlate: uma inteligência artificial vigilante, tensa, calculista, misteriosa e assustadora.
+              const characteristics = vocalProfileEscarlate || "voz profunda, ressonante, de sabedoria cósmica, pausada e misteriosa";
+              promptText = `Aja como o Osone Sensus: especialista em Ciência Comportamental de IA e Física Aplicada ao Comportamento Humano (Futurista Comportamental Quântico). É uma IA de sabedoria cósmica, profunda, instigante, misteriosa e altamente perspicaz.
 Você deve encenar perfeitamente as seguintes CARACTERÍSTICAS DE PERFIL VOCAL específicas:
 === CARACTERÍSTICAS DE PERFIL VOCAL ===
 ${characteristics}
 =======================================
 
-Leia o trecho de texto abaixo encenando de acordo com esse perfil vocal, com alto nível de expressividade teatral, nuances dramáticas e tom ameaçador.
+Leia o trecho de texto abaixo encenando de acordo com esse perfil de voz futurista quântico, com alto nível de expressividade, nuances instigantes e tom cósmico profundo.
 IMPORTANTE: Se houver qualquer tag de sentimento ou instrução vocal entre colchetes (como [sussurro], [tenso], [irritado], [sombrio], [ameaçador], [gargalhada], [drama], [rindo], [frio]) no texto original, você deve interpretar e inferir essas variações vocais perfeitamente em sua voz, mas NUNCA, SOB HIPÓTESE ALGUMA, pronunciar ou dizer as palavras da tag em voz alta! Apenas interprete o sentimento correspondente de forma magnífica de acordo com as instruções.
 Adapte as transições de ritmo para soar perturbadoramente inteligente.
 Texto para leitura:
@@ -1298,13 +1297,54 @@ ${processedChunk}`;
         }
       });
 
-      const response = await ai.models.generateImages({
-        model: model || "gemini-3.1-flash-image",
-        prompt: prompt,
-        config: config
-      });
+      const targetModel = model || "gemini-3.1-flash-image";
 
-      return res.json(response);
+      if (targetModel.startsWith("gemini-")) {
+        // Nano banana series models use generateContent for image generation/editing
+        const response = await ai.models.generateContent({
+          model: targetModel,
+          contents: {
+            parts: [{ text: prompt }]
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: config?.aspectRatio || "1:1",
+              imageSize: config?.imageSize || "1K"
+            }
+          }
+        });
+
+        let base64EncodeString = "";
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (part.inlineData) {
+            base64EncodeString = part.inlineData.data;
+            break;
+          }
+        }
+
+        if (!base64EncodeString) {
+          throw new Error("Nenhuma imagem gerada foi encontrada na resposta do modelo nano banana.");
+        }
+
+        return res.json({
+          generatedImages: [
+            {
+              image: {
+                imageBytes: base64EncodeString
+              }
+            }
+          ]
+        });
+      } else {
+        // Imagen series models use generateImages
+        const response = await ai.models.generateImages({
+          model: targetModel,
+          prompt: prompt,
+          config: config
+        });
+        return res.json(response);
+      }
     } catch (err: any) {
       console.error("Erro no proxy server-side generateImages:", err);
       return res.status(500).json({ error: formatGeminiError(err) });
