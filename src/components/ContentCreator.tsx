@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   Video, Sparkles, Send, Play, Copy, Check, Info, FileText, Share2, CornerDownRight, 
-  Trash2, AlertCircle, RefreshCw, Volume2, Bookmark, HelpCircle, BookOpen, Upload
+  Trash2, AlertCircle, RefreshCw, Volume2, Bookmark, HelpCircle, BookOpen, Upload,
+  Zap, Brain
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -20,6 +21,17 @@ interface IdeaIdea {
   viralPotential: 'Extremo' | 'Altíssimo' | 'Alto';
   description: string;
   reason: string;
+}
+
+interface BrainAreaImpact {
+  area: string;
+  targetExplanation: string;
+}
+
+interface ScientificApproachImpact {
+  name: string;
+  whyChosen: string;
+  applicationInScript: string;
 }
 
 interface CreativeEngineOutput {
@@ -43,7 +55,37 @@ interface CreativeEngineOutput {
       narration: string;
     }[];
   };
+  neuroAnalysis?: {
+    selectedApproaches: ScientificApproachImpact[];
+    brainAreas: BrainAreaImpact[];
+    neurotransmitters: string[];
+    languageStructureType: string;
+    cognitivePreWritingReflexion: string;
+  };
 }
+
+export const SCIENTIFIC_APPROACHES = [
+  { id: 'cla', name: 'Análise de Camadas Causais (CLA)', desc: 'Desmistifica passado e presente para futuros alternativos.' },
+  { id: 'scenarios', name: 'Planejamento de Cenários', desc: 'Cria mundos paralelos e futuros plausíveis.' },
+  { id: 'least_action', name: 'Princípio da Menor Ação', desc: 'Encontra a trajetória biológica e física mais eficiente.' },
+  { id: 'snell_descartes', name: 'Lei de Snell-Descartes', desc: 'Otimiza transição de frentes de onda e meios de esforço.' },
+  { id: 'quantum_cognition', name: 'Cognição Quântica', desc: 'Aborda estados de superposição pré e pós decisão.' },
+  { id: 'behavioral_econ', name: 'Economia Comportamental', desc: 'Mapeia aversão à perda e assimetria de ganhos.' },
+  { id: 'nudging', name: 'Arquitetura de Escolha & Nudging', desc: 'Desenha estímulos suaves que guiam decisões sem limitar liberdade.' },
+  { id: 'fogg', name: 'Modelo de Comportamento de Fogg', desc: 'Aperfeiçoa hábitos com B = MAP (Motivação, Velocidade, Gatilho).' },
+  { id: 'sct', name: 'Teoria Cognitiva Social (SCT)', desc: 'Analisa autoeficácia, ambiente e retroreforços.' },
+  { id: 'backcasting', name: 'Backcasting', desc: 'Trabalha do futuro ideal de volta para o presente.' },
+  { id: 'delphi', name: 'Método Delphi', desc: 'Consulta iterativa a tendências especialistas.' },
+  { id: 'morphological', name: 'Análise Morfológica', desc: 'Mapeia todas as possíveis permutações e combinações de problemas.' },
+  { id: 'futures_wheel', name: 'Roda do Futuro (Futures Wheel)', desc: 'Identifica desdobramentos secundários e terciários de escolhas.' },
+  { id: 'cross_impact', name: 'Análise de Impacto Cruzado', desc: 'Interdependência probabilística de eventos futuros.' },
+  { id: 'look_heuristic', name: 'Heurística do Olhar', desc: 'Processamento imediato com variáveis físicas mantidas equilibradas.' },
+  { id: 'wild_cards', name: 'Monitoramento de Wild Cards', desc: 'Varredura de choques térmicos inesperados de alto impacto.' },
+  { id: 'chaos_theory', name: 'Teoria do Caos & Efeito Borboleta', desc: 'Como o bater de asas altera o destino final de longo prazo.' },
+  { id: 'behavioral_entropy', name: 'Entropia Comportamental', desc: 'Mapeia e governa a imprevisibilidade sobre as decisões.' },
+  { id: 'operant_conditioning', name: 'Condicionamento Operante', desc: 'Reforços comportamentais baseados em recompensa e estresse.' },
+  { id: 'abm', name: 'Modelagem Baseada em Agentes (ABM)', desc: 'Simula dinâmicas de comportamento cooperativo em massa.' }
+];
 
 export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorkspace }: ContentCreatorProps) {
   // Inputs
@@ -51,6 +93,8 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
   const [targetAudience, setTargetAudience] = useState('');
   const [workedIdeas, setWorkedIdeas] = useState('');
   const [customStyle, setCustomStyle] = useState('Alucinante / Ultra Emocionante');
+  const [selectedApproaches, setSelectedApproaches] = useState<string[]>([]);
+  const [cognitiveGoal, setCognitiveGoal] = useState('Curiosidade Extrema (Gatilho Dopamina)');
 
   // Knowledge Base RAG states
   const [knowledgeBaseText, setKnowledgeBaseText] = useState('');
@@ -82,7 +126,7 @@ export function ContentCreator({ apiKeys, addNotification, onSaveToVirtualWorksp
   const [copiedPromptIdx, setCopiedPromptIdx] = useState<number | null>(null);
   
   // Tab within final output
-  const [activeResultTab, setActiveResultTab] = useState<'brainstorm' | 'comparison' | 'master_script'>('master_script');
+  const [activeResultTab, setActiveResultTab] = useState<'brainstorm' | 'comparison' | 'master_script' | 'neuro_science'>('master_script');
 
   const cleanInputs = () => {
     setChannelTema('');
@@ -180,28 +224,43 @@ Considere as diretrizes, ideias e exemplos contidos nesta Base de Conhecimento f
         }
       }
 
-      const prompt = `
-Você é o OSONE Neural Short-Form Scriptwriter, com foco em hiper-viralização no TikTok, Reels, YouTube Shorts e Kwai.
-Sua especialidade é criar roteiros com altíssima retenção, picos de dopamina e gatilhos de suspense.
+      const approachedPrompt = selectedApproaches.length > 0 
+        ? `Use obrigatoriamente as seguintes abordagens científicas/futuristas escolhidas pelo usuário para pautar o roteiro: [${selectedApproaches.map(id => SCIENTIFIC_APPROACHES.find(a => a.id === id)?.name).join(', ')}].`
+        : `Você (OSONE) deve escolher ativamente entre 3 e 5 destas abordagens científicas/futuristas para modelar o roteiro e o embasamento cognitivo do usuário: Análise de Camadas Causais (CLA), Planejamento de Cenários, Princípio da Menor Ação, Lei de Snell-Descartes, Cognição Quântica, Economia Comportamental, Arquitetura de Escolha & Nudging, Modelo de Comportamento de Fogg, Teoria Cognitiva Social (SCT), Backcasting, Método Delphi, Análise Morfológica, Roda do Futuro, Análise de Impacto Cruzado, Heurística do Olhar, Monitoramento de Wild Cards, Teoria do Caos, Entropia Comportamental, Condicionamento Operante, Modelagem Baseada em Agentes.`;
 
-Instruções base do canal do usuário:
+      const prompt = `
+Você é o OSONE Neural Short-Form Scriptwriter, especialista em neurocomunicação, storytelling educativo e hiper-viralização no TikTok, Reels, YouTube Shorts e Kwai.
+Sua missão especial é criar roteiros e textos baseados em neurociência que não apenas informem, mas que "assinem" o cérebro do espectador através de gatilhos neuroquímicos e ativação de áreas cerebrais específicas.
+
+Siga obrigatoriamente este protocolo que prioriza o processamento cognitivo antes da redação:
+"osone, quando você for criar um roteiro, antes de escrever, pense sobre as áreas cerebrais que precisam ser acessadas. Só depois de analisar a neurociência envolvida no aprendizado daquele tema, você irá escrever o roteiro de acordo, garantindo que as palavras escolhidas sejam 'bússolas' que guiam o cérebro para o estado de fluxo e compreensão máxima."
+
+Informações base enviadas pelo usuário:
 - Tema/Nicho do Canal: "${channelTema}"
 - Público Alvo: "${targetAudience || 'Geral apaixonado por Shorts'}"
-- Ideias que já deram muito certo de referência: 
-"${workedIdeas || 'Nenhum exemplo fornecido, use ganchos de extrema retenção'}"
+- Ideias de Referência/Êxito: "${workedIdeas || 'Nenhum exemplo fornecido'}"
 - Estilo e Tom desejados: "${customStyle}"
+- Meta / Objetivo Cognitivo do Usuário: "${cognitiveGoal}"
 
-${kbPrompt}
+=== DIRETRIZES DE NEUROCOMUNICAÇÃO ===
+1. A Primazia do Sentir: O cérebro humano sente antes de pensar. Emoções organizam sensações em padrões de resposta. Seu roteiro deve primeiro evocar uma sensação impactante para depois entregar a lógica.
+2. O Combustível da Dopamina: Desperte curiosidade, surpresa ou desafio para liberar dopamina, facilitando a retenção.
+3. Storytelling e Acoplamento Neural: Ative o córtex motor, sensorial e frontal através de histórias que o espectador transforme em sua própria experiência.
+4. Processamento Visual e "Bottom-up": Ajude pensadores visuais traduzindo palavras em "filmes coloridos" na mente (detalhes marcantes antes do reflexo conceitual).
+
+=== SELEÇÃO DE ABORDAGENS CIENTÍFICAS DA FÍSICA E SOCIEDADE ===
+${approachedPrompt}
 
 === FLUXO COGNITIVO EXIGIDO ===
 1. Você deve raciocinar sobre exatamente 9 ideias virais em potencial que se alinham perfeitamente ao nicho do canal e ao gosto do público.
 2. Filtre e extraia as 3 melhores ideias dessas 9. Descreva o porquê destas 3 serem excepcionais.
 3. Compare as 3 ideias mais fortes e tome a decisão cirúrgica de qual é a MELHOR (A Vencedora) com potencial absoluto de viralizar, justificando as taxas prováveis de retenção.
-4. Estruture o roteiro storytelling da vencedora exatamente nas 3 partes exigidas pelo mestre OSONE:
+4. Mapeie a resposta com base em termos neurocientíficos e preencha a estrutura de "neuroAnalysis" no JSON.
+5. Estruture o roteiro storytelling da vencedora nas 3 etapas de estresse de retenção:
    - Gancho visual traumático e impactante: (Cena de abertura chocante que impede o scroll nos primeiros 3 segundos).
-   - Conflito aflitivo que gera emoção e sentimento angustiante e intenso: (O miolo da história, onde o perigo, dilema moral angustiante ou curiosidade desconcertante atinge o pico).
-   - Conclusão com consequência inesperada com gatilho de humor ou surpresa: (O desfecho, que quebra a expectativa com sarcasmo, ironia, humor ácido ou choque total, garantindo comentários infinitos).
-5. Forneça o roteiro de fala em sequência para vídeos rápidos de até 1 minuto. O roteiro de falas deve conter cenas sugeridas de fundo e as falas exatas de forma fluída e veloz.
+   - Conflito aflitivo de alto impacto: (O miolo da história, onde o perigo, dilema moral angustiante ou curiosidade desconcertante atinge o pico).
+   - Conclusão inesperada com gatilho de humor ou surpresa: (O desfecho, que quebra a expectativa com sarcasmo, ironia, humor ácido ou choque total, garantindo comentários infinitos).
+6. Forneça o roteiro de fala em sequência para vídeos rápidos de até 1 minuto. O roteiro de falas deve conter cenas sugeridas de fundo e as falas exatas de forma fluída e veloz.
 
 RESPONDA APENAS no formato de um objeto corporativo JSON sem marcações externas desnecessárias além de JSON válido, para que meu front-end possa estruturar os cards de transição.
 O schema JSON deve ser rigorosamente o seguinte:
@@ -227,7 +286,7 @@ O schema JSON deve ser rigorosamente o seguinte:
   ],
   "bestIdea": {
     "title": "Título da Ideia Vencedora",
-    "justification": "Por que esta é a campeã incontestável com base nas referências de sucesso fornecidas",
+    "justification": "Por que esta é a campeã incontestável com base das referências de sucesso fornecidas",
     "storytelling": {
       "hook": "Descreva o Gancho visual traumático e impactante",
       "conflict": "Descreva o Conflito aflitivo e angustiante com riqueza de sentimento",
@@ -239,6 +298,24 @@ O schema JSON deve ser rigorosamente o seguinte:
         "narration": "Texto exato a ser falado pelo locutor (rápido, magnético, sem enrolação)."
       }
     ]
+  },
+  "neuroAnalysis": {
+    "selectedApproaches": [
+      {
+        "name": "Nome de uma das 20 Abordagens Científicas/Futuristas aplicadas",
+        "whyChosen": "Por que essa teoria clássica ou física se alinha perfeitamente ao objetivo do usuário?",
+        "applicationInScript": "Como essa teoria moldou diretamente o andamento do roteiro?"
+      }
+    ],
+    "brainAreas": [
+      {
+        "area": "Córtex Pré-Frontal" | "Sistema Límbico (Amígdala)" | "Área de Wernicke" | "Área de Broca" | "Giro Fusiforme",
+        "targetExplanation": "Como o roteiro ou as palavras escolhidas pretendem estimular esta região encefálica?"
+      }
+    ],
+    "neurotransmitters": ["Ex: Dopamina, Ocitocina, Serotonina"],
+    "languageStructureType": "Pensamento convergente ou divergente",
+    "cognitivePreWritingReflexion": "Sua reflexão profunda pré-redação. Analise a neurociência envolvida no aprendizado desse tema antes de expor o roteiro de acordo, garantindo que as palavras escolhidas sejam 'bússolas' que guiam o cérebro para o estado de fluxo e compreensão máxima."
   }
 }
 `;
@@ -575,6 +652,86 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
               </select>
             </div>
 
+            {/* NEW Field 5: Meta Neurocognitiva */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-her-ink/80 flex items-center gap-1">
+                5. Meta Neurocognitiva & Foco Cerebral
+              </label>
+              <select
+                value={cognitiveGoal}
+                onChange={(e) => setCognitiveGoal(e.target.value)}
+                className="w-full bg-[#1e1d1b] border border-white/[0.06] rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500/40"
+              >
+                <option value="Curiosidade Extrema (Gatilho Dopamina)">🧠 Curiosidade Extrema (Gatilho Dopamina)</option>
+                <option value="Conexão Sensorial e História (Gatilho Ocitocina)">🤝 Conexão Sensorial e História (Gatilho Ocitocina)</option>
+                <option value="Aprendizado Profundo por Analogia (Gatilho Serotonina)">📚 Aprendizado Profundo por Analogia (Gatilho Serotonina)</option>
+                <option value="Desconforto Moral e Raciocínio Social (Atenção Límbica)">⚠️ Desconforto Moral e Raciocínio Social (Atenção Límbica)</option>
+                <option value="Fascínio Científico e Simulação Futura (Fluxo Córtex)">⚡ Fascínio Científico e Simulação Futura (Fluxo Córtex)</option>
+              </select>
+            </div>
+
+            {/* NEW Field 6: Abordagens Científicas Opcionais */}
+            <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-white/[0.01] border border-white/[0.04]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-orange-400 flex items-center gap-1 uppercase tracking-wider">
+                  <Zap size={13} />
+                  Filtro de Abordagens ({selectedApproaches.length || 'Sone Auto-seleciona'})
+                </span>
+                {selectedApproaches.length > 0 && (
+                  <button 
+                    onClick={() => setSelectedApproaches([])}
+                    type="button"
+                    className="text-[9px] text-stone-500 hover:text-orange-400 transition-colors uppercase font-mono"
+                  >
+                    limpar
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-400 leading-snug">
+                Selecione as teorias clássicas para pautar o comportamento físico e econômico do roteiro:
+              </p>
+              
+              <div className="max-h-[140px] overflow-y-auto pr-1 border border-white/[0.04] rounded-xl p-1.5 bg-black/30 mt-1 flex flex-col gap-1 select-none">
+                {SCIENTIFIC_APPROACHES.map((app) => {
+                  const isChecked = selectedApproaches.includes(app.id);
+                  return (
+                    <label 
+                      key={app.id} 
+                      className={cn(
+                        "flex items-start gap-2 p-1.5 rounded-lg border text-[10px] cursor-pointer transition-colors leading-relaxed",
+                        isChecked 
+                          ? "bg-orange-500/10 border-orange-500/20 text-orange-200" 
+                          : "bg-white/[0.01] border-white/[0.03] hover:bg-white/[0.03] text-stone-400 hover:text-stone-300"
+                      )}
+                    >
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setSelectedApproaches(selectedApproaches.filter(i => i !== app.id));
+                          } else {
+                            setSelectedApproaches([...selectedApproaches, app.id]);
+                          }
+                        }}
+                        className="sr-only"
+                      />
+                      <div className={cn(
+                        "w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center mt-0.5 transition-colors",
+                         isChecked ? "border-orange-500 bg-orange-500 text-black" : "border-stone-700 bg-stone-900"
+                      )}>
+                        {isChecked && <Check size={10} strokeWidth={3} />}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{app.name}</span>
+                        <span className="text-[9px] text-stone-500 leading-normal">{app.desc}</span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* SUBMIT BUTTON */}
             <button
               onClick={handleGenerate}
@@ -744,11 +901,11 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
                 {/* CONTROLS & TAB HEADERS */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-white/[0.01] border border-white/[0.04] rounded-2xl">
                   {/* Tabs */}
-                  <div className="flex bg-neutral-900 p-1 rounded-xl border border-white/5 w-full sm:w-auto">
+                  <div className="flex bg-neutral-900 p-1 rounded-xl border border-white/5 w-full sm:w-auto gap-0.5 overflow-x-auto">
                     <button
                       onClick={() => setActiveResultTab('master_script')}
                       className={cn(
-                        "flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-medium transition-all select-none cursor-pointer",
+                        "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-all select-none cursor-pointer shrink-0",
                         activeResultTab === 'master_script' 
                           ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" 
                           : "text-her-muted hover:text-white"
@@ -759,7 +916,7 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
                     <button
                       onClick={() => setActiveResultTab('comparison')}
                       className={cn(
-                        "flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-medium transition-all select-none cursor-pointer",
+                        "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-all select-none cursor-pointer shrink-0",
                         activeResultTab === 'comparison' 
                           ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" 
                           : "text-her-muted hover:text-white"
@@ -770,13 +927,25 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
                     <button
                       onClick={() => setActiveResultTab('brainstorm')}
                       className={cn(
-                        "flex-1 sm:flex-none px-3.5 py-2 rounded-lg text-xs font-medium transition-all select-none cursor-pointer",
+                        "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-all select-none cursor-pointer shrink-0",
                         activeResultTab === 'brainstorm' 
                           ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" 
                           : "text-her-muted hover:text-white"
                       )}
                     >
                       💡 As 9 Ideias
+                    </button>
+                    <button
+                      onClick={() => setActiveResultTab('neuro_science')}
+                      className={cn(
+                        "flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-medium transition-all select-none cursor-pointer shrink-0 flex items-center gap-1",
+                        activeResultTab === 'neuro_science' 
+                          ? "bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold" 
+                          : "text-her-muted hover:text-white"
+                      )}
+                    >
+                      <Brain size={12} className="text-purple-400 shrink-0" />
+                      <span>Neurociência ({output.neuroAnalysis ? 'Ativo' : 'Auto'})</span>
                     </button>
                   </div>
 
@@ -1128,6 +1297,123 @@ Responda RIGOROSAMENTE com um objeto JSON puro, sem textos adicionais, seguindo 
                             )}
                           </div>
                         </div>
+                      </motion.div>
+                    )}
+
+                    {/* TAB 4: NEUROSCIENCE COGNITIVE STUDY AND SCIENTIFIC THEORIES */}
+                    {activeResultTab === 'neuro_science' && (
+                      <motion.div
+                        key="tab-neuro"
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        className="space-y-6"
+                      >
+                        <div className="border-b border-white/[0.04] pb-3">
+                          <h4 className="text-xs uppercase tracking-[0.2em] font-bold text-purple-400 flex items-center gap-1.5 mb-1 animate-pulse">
+                            <Brain size={14} className="shrink-0 text-purple-400" />
+                            Protocolo Neural & Cognição Pré-Redação
+                          </h4>
+                          <p className="text-[11px] text-zinc-400">
+                            Estudo e mapeamento prévio realizado pelo OSONE antes da redação do roteiro, com base nas teorias de ação comportamental e física.
+                          </p>
+                        </div>
+
+                        {output.neuroAnalysis ? (
+                          <div className="space-y-6">
+                            {/* Reflection statement */}
+                            <div className="p-5 rounded-2xl bg-purple-500/[0.02] border border-purple-500/20 relative overflow-hidden shadow-xl">
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 blur-2xl rounded-full" />
+                              <span className="text-[8px] uppercase tracking-widest font-mono text-purple-400 font-bold bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/15">
+                                Reflexão de Consciência de osone
+                              </span>
+                              <p className="text-xs text-purple-100/90 italic font-mono leading-relaxed mt-3 whitespace-pre-wrap leading-relaxed select-text">
+                                "{output.neuroAnalysis.cognitivePreWritingReflexion}"
+                              </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              {/* Brain Areas Activation Grid */}
+                              <div className="p-5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-4">
+                                <h5 className="text-[11px] uppercase tracking-wider font-bold text-zinc-300 flex items-center gap-1.5 border-b border-white/[0.03] pb-2">
+                                  <Brain size={13} className="text-purple-400 animate-pulse shrink-0" />
+                                  Regiões Encefálicas Estimuladas
+                                </h5>
+                                <div className="space-y-3.5 select-text">
+                                  {output.neuroAnalysis.brainAreas.map((area, key) => (
+                                    <div key={key} className="space-y-1">
+                                      <div className="flex items-center justify-between text-[11px] gap-2">
+                                        <span className="font-bold text-zinc-250 text-white">{area.area}</span>
+                                        <span className="font-mono text-purple-400 font-semibold bg-purple-950/20 px-2 py-0.5 border border-purple-500/10 rounded text-[9px] uppercase tracking-wider">Atividade Alvo</span>
+                                      </div>
+                                      <p className="text-[10px] text-zinc-400 leading-relaxed font-light">
+                                        {area.targetExplanation}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Scientific Theories Applied */}
+                              <div className="p-5 rounded-2xl bg-black/40 border border-white/[0.04] space-y-4">
+                                <h5 className="text-[11px] uppercase tracking-wider font-bold text-zinc-300 flex items-center gap-1.5 border-b border-white/[0.03] pb-2">
+                                  <Zap size={13} className="text-orange-400 animate-pulse shrink-0" />
+                                  Fundamentos de Física e Comportamento
+                                </h5>
+                                <div className="space-y-3.5 select-text">
+                                  {output.neuroAnalysis.selectedApproaches.map((app, key) => (
+                                    <div key={key} className="space-y-1">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-bold text-zinc-250 text-white">{app.name}</span>
+                                        <span className="font-mono text-orange-400 text-[9px] lowercase italic shrink-0">teoria material</span>
+                                      </div>
+                                      <p className="text-[10px] text-zinc-400 leading-relaxed font-light mt-0.5">
+                                        💡 <strong>Ajuste do canal:</strong> {app.whyChosen}
+                                      </p>
+                                      <p className="text-[10px] text-zinc-400 leading-relaxed font-light mt-0.5">
+                                        🎯 <strong>No roteiro:</strong> {app.applicationInScript}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Neurotransmitters bar */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="p-4 rounded-xl bg-purple-950/10 border border-purple-500/10 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 flex-1">
+                                  <div className="text-[10px] text-purple-450 font-bold uppercase tracking-wider">Combustível Neuroquímico Ativado</div>
+                                  <div className="text-xs font-mono font-bold text-white uppercase tracking-tight break-all">
+                                    {output.neuroAnalysis.neurotransmitters.join(', ')}
+                                  </div>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-450 shrink-0">
+                                  <Zap size={14} className="text-purple-400" />
+                                </div>
+                              </div>
+
+                              <div className="p-4 rounded-xl bg-orange-950/10 border border-orange-500/10 flex items-center justify-between gap-2">
+                                <div className="space-y-0.5 flex-1">
+                                  <div className="text-[10px] text-orange-450 font-bold uppercase tracking-wider">Estrutura de Linguagem do Estudo</div>
+                                  <div className="text-xs font-mono font-bold text-white uppercase tracking-tight break-all">
+                                    {output.neuroAnalysis.languageStructureType}
+                                  </div>
+                                </div>
+                                <div className="w-8 h-8 rounded-full bg-orange-500/15 flex items-center justify-center text-orange-450 shrink-0">
+                                  <Brain size={14} className="text-orange-400" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-8 border border-dashed border-white/[0.04] rounded-2xl text-center text-zinc-500">
+                            <Brain size={24} className="mx-auto text-zinc-600 mb-2 animate-pulse" />
+                            <p className="text-[11px]">
+                              Nenhuma análise neurocognitiva detalhada foi mapeada para este roteiro específico. Ative e processe um novo roteiro para visualizar os canais cerebrais.
+                            </p>
+                          </div>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
