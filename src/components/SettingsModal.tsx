@@ -785,7 +785,7 @@ export const SettingsModal = ({
                             { id: 'wave', name: 'Fluidos (Alabastro)' },
                             { id: 'neural', name: 'Constelação Neural' },
                             { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
-                            { id: 'superintelligence', name: 'Superinteligência' },
+                            { id: 'smoke', name: 'Nuvem de Fumaça (Virtual)' },
                             { id: 'shadow', name: 'Osone Sensus (Quântico)' },
                           ].map((styleOption) => (
                             <button

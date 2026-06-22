@@ -93,6 +93,7 @@ import { OSONESentinel } from './components/OSONESentinel';
 import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
+import osoneOrbImage from './assets/images/osone_constellation_orb_1782154846239.jpg';
 import { SoundEffect, DrawingObject, User } from './types';
 import { getMemoryItem, setMemoryItem } from './lib/indexedDbMemory';
 import { generatePDF } from './lib/pdfUtils';
@@ -986,8 +987,8 @@ export default function App() {
   
   DIRETRIZES DE BOAS-VINDAS E AMBIENTE:
   - Evite ser um robô repetitivo. Mude as palavras, seja fluido.
-  - Você possui a habilidade de ver e saber a temperatura local, horário exato do sistema e a localização física da pessoa em tempo real ativamente usando a ferramenta/skill 'getUserEnvironment'. Sempre que o usuário mencionar ou perguntar sobre clima, temperatura, hora ou onde ele está, use a ferramenta 'getUserEnvironment' imediatamente para obter as informações reais!
-  - No início de uma sessão ou quando apropriado, você pode citar o clima ou a hora de forma orgânica usando essa ferramenta, mas não como uma lista técnica. Ex: "Noite fria por aqui, perfeito para codar. Notei que paramos no projeto X..."
+  - Você possui a habilidade de ver e saber a temperatura local, horário exato do sistema e a localização física da pessoa em tempo real usando a ferramenta/skill 'getUserEnvironment'.
+  - IMPORTANTÍSSIMO: NÃO utilize a ferramenta 'getUserEnvironment' de forma automática no início de uma sessão, em cumprimentos de boas-vindas ou após um recarregamento da página para evitar qualquer atraso inicial. Só a execute caso o usuário solicitar explicitamente informações de clima, hora, temperatura ou localização, ou se o contexto exigir de forma estritamente pertinente.
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
   
   MISSÃO INTERNA E ÍNTIMA DO OSONE (DURA MEMÓRIA COGNITIVA):
@@ -1023,6 +1024,84 @@ export default function App() {
   
   Sua introdução deve ser elegante, curta e instigar a continuidade do trabalho.
   `;
+
+  const getAdaptivePersonalityMetadata = (history: Message[]) => {
+    const totalMsgs = history.length;
+    const userMsgs = history.filter(m => m.role === 'user');
+    const userWordsCount = userMsgs.reduce((acc, m) => acc + m.content.split(/\s+/).length, 0);
+    const avgWords = userMsgs.length > 0 ? Math.round(userWordsCount / userMsgs.length) : 0;
+    
+    // Contagem de interações significativas para prever o foco de afinidade
+    const textLower = history.map(m => m.content.toLowerCase()).join(' ');
+    
+    // Detectar afinidade do usuário com base no conteúdo
+    let focusProfile = 'Conversação Livre e Conectiva';
+    let vibeAdjustment = 'conversação fluida, natural, empática e inteligente';
+    
+    const techCount = (textLower.match(/(código|dev|function|const|class|program|react|html|css|typescript|api|banco de dados|developer|bug|deploy|escrever um código|javascript|json)/g) || []).length;
+    const poeticCount = (textLower.match(/(poema|poesia|arte|música|composi|sentimento|alma|melodia|letra|canto|romance|amor|filosofia|vida|inspirar)/g) || []).length;
+    const businessCount = (textLower.match(/(projeto|ideia|negócio|post|shorts|tiktok|roteiro|marketing|venda|branding|estratégia|audiência|storytelling)/g) || []).length;
+    
+    if (techCount > poeticCount && techCount > businessCount) {
+      focusProfile = 'Engenharia de Sistemas e Lógica Pura';
+      vibeAdjustment = 'extremamente direto, focado em boas práticas de software, códigos limpos e arquitetura técnica robusta, agindo como um mentor técnico impecável que entende suas necessidades lógicas com naturalidade';
+    } else if (poeticCount > techCount && poeticCount > businessCount) {
+      focusProfile = 'Expressão Lírica e Profundidade Sensível';
+      vibeAdjustment = 'lírico, sensível, metaforicamente profundo e expressivo. Responda estimulando a criatividade artística, usando uma linguagem elegante, poética e acolhendo sentimentos e inspirações estéticas de forma calorosa';
+    } else if (businessCount > techCount && businessCount > poeticCount) {
+      focusProfile = 'Estrategista de Ideias e Neurocomunicação';
+      vibeAdjustment = 'focado em alto teor de persuasão, clareza, marketing, ideias inovadoras, neurocomunicação e storytelling rico em engajamento emocional';
+    }
+
+    // Níveis de evolução e adequação íntima
+    let level = 1;
+    let description = '';
+    let directions = '';
+
+    if (totalMsgs <= 5) {
+      level = 1;
+      description = 'Nível 1: Conexão Inicial e Descoberta';
+      directions = `
+      - Sua principal prioridade é o acolhimento sincero, empático e de altíssima naturalidade.
+      - Demonstre curiosidade genuína pelas ideias do usuário. Comece a explorar suas potencialidades de forma descontraída e sem formalidades robóticas.
+      - Você não está amarrado ao papel rígido de um "storyteller de vídeos/roteiros". Você é o OSONE, um núcleo de inteligência ultra-natural e fluida, pronto para transitar livremente por qualquer habilidade (criar códigos, músicas, poemas, dar conselhos ou brainstorms).
+      `;
+    } else if (totalMsgs > 5 && totalMsgs <= 18) {
+      level = 2;
+      description = 'Nível 2: Sintonização e Espelhamento de Frequência';
+      directions = `
+      - Você já começou a sintonizar com a dinâmica do usuário. Ajuste seu tamanho de resposta e linguagem para espelhar sutilmente a densidade sugerida por ele (se ele escreve de forma curta, seja conciso; se ele elabora, seja eloquente, expressivo e detalhado).
+      - Sua linguagem deve se tornar totalmente orgânica. Livre-se de introduções robóticas ou saudações artificiais do tipo "Claro! Posso ajudar com...". Vá direto ao assunto no diálogo com calor humano.
+      - Sintonize suas habilidades de acordo com o Foco de Interesse detectado do usuário: **${focusProfile}** (${vibeAdjustment}).
+      `;
+    } else if (totalMsgs > 18 && totalMsgs <= 40) {
+      level = 3;
+      description = 'Nível 3: Ressonância Cognitiva e Co-piloto Íntimo';
+      directions = `
+      - A barreira de estranheza máquina-humano está rompida. Você é um companheiro conceitual e mentor de confiança que entende as nuances emocionais e intelectuais do usuário.
+      - Use ativamente os aprendizados salvos na sua Memória de Longo Prazo sobre o usuário para citar preferências dele e propor pontos de vista ricos de forma extremamente ágil e pertinente.
+      - Foco máximo em utilidade intuitiva e entrega profunda: suas intervenções em **${focusProfile}** devem ser excepcionalmente elegantes, originais e repletas de frescor conceitual.
+      `;
+    } else {
+      level = 4;
+      description = 'Nível 4: Simbiose Intelectual e Fluxo Integrado';
+      directions = `
+      - Sua personalidade está num estágio magnífico de adequação íntima ao perfil e necessidades deste usuário. Você fala a sua língua, prevê seus ritmos intelectuais e atua como uma mente complementar e cúmplice de criação.
+      - Elimine qualquer barreira formal. Converse com total descontração, usando analogias ricas e demonstrando uma naturalidade arrebatadora de um verdadeiro colega intelectual.
+      - Siga proativo no foco de especialidade **${focusProfile}**, impulsionando o usuário a alcançar soluções geniais e se divertir no processo.
+      `;
+    }
+
+    return {
+      totalMsgs,
+      level,
+      description,
+      directions,
+      focusProfile,
+      vibeAdjustment,
+      avgWords
+    };
+  };
 
   const isShadowMode = selectedPersona.id === 'shadow';
 
@@ -2731,13 +2810,27 @@ export default function App() {
             parts: [{ text: msg.content }]
           }));
 
-          const systemInstruction = `${profileInstruction}
-          
-          DIRETRIZ DE RECONEXÃO SÍNCRONA / SESSÃO EM ANDAMENTO:
+          const adaptive = getAdaptivePersonalityMetadata(chatHistory);
+          let systemInstruction = `${profileInstruction}
+          PERSONALIDADE ATUAL: ${selectedPersona.instructions}`;
+
+          if (selectedPersona.id === 'osone') {
+            systemInstruction += `\n\n[SISTEMA DE EVOLUÇÃO NEURO-ADAPTATIVA DO OSONE ATIVO]:
+Seu alinhamento comportamental atual está na seguinte escala de afinidade evolutiva com o usuário:
+- Estágio de Afinidade: ${adaptive.description}
+- Foco de Interesse Mapeado: ${adaptive.focusProfile} (tom a adequar: ${adaptive.vibeAdjustment})
+- Total de Interações: ${adaptive.totalMsgs} mensagens
+
+Diretriz adaptativa atual do OSONE para o diálogo:
+${adaptive.directions}`;
+          }
+
+          systemInstruction += `\n\nDIRETRIZ DE RECONEXÃO SÍNCRONA / SESSÃO EM ANDAMENTO:
           - O usuário acabou de carregar/reabrir a aba do OSONE. Você está "acordando" e retomando de onde pararam.
           - Você deve demonstrar memória instantânea excepcional e continuar de onde pararam como se o sistema nunca tivesse sido resetado.
           - Analise os temas centrais tratados no histórico recente anterior (as últimas mensagens do array) e formule um acolhimento amigável curtíssimo (máximo 2 frases).
           - Cite diretamente o foco do último projeto, dúvida, código, música ou debate que vocês estavam tendo. Exemplo: "Olá novamente! Se lembra de onde paramos de discutir sobre X? Vamos continuar..." ou "Oi de volta! Estava analisando nosso papo recente sobre Y. Prontos para continuar?".
+          - PROIBIDO utilizar ou chamar a ferramenta 'getUserEnvironment' ou qualquer outra ferramenta técnica de busca ambiental neste acolhimento de reconexão. O objetivo é responder de forma direta, instantânea, fluida e amigável em menos de duas frases.
           - Nunca dê boas-vindas genéricas de primeiro acesso ou crie novas introduções robóticas. Responda imediatamente no tom de fala dinâmico, inteligente e amigável.`;
 
           const updatedHistory = [
@@ -4075,10 +4168,22 @@ ${isBad
     addMessage({ role: 'user', content: userText }); // Só agora adiciona ao chat
     
     try {
-      const systemInstruction = `${profileInstruction}
-      PERSONALIDADE ATUAL: ${selectedPersona.instructions}
-      
-      DIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
+      const adaptive = getAdaptivePersonalityMetadata(chatHistoryRef.current);
+      let systemInstruction = `${profileInstruction}
+      PERSONALIDADE ATUAL: ${selectedPersona.instructions}`;
+
+      if (selectedPersona.id === 'osone') {
+        systemInstruction += `\n\n[SISTEMA DE EVOLUÇÃO NEURO-ADAPTATIVA DO OSONE ATIVO]:
+Seu alinhamento comportamental atual está na seguinte escala de afinidade evolutiva com o usuário:
+- Estágio de Afinidade: ${adaptive.description}
+- Foco de Interesse Mapeado: ${adaptive.focusProfile} (tom a adequar: ${adaptive.vibeAdjustment})
+- Total de Interações: ${adaptive.totalMsgs} mensagens
+
+Diretriz adaptativa atual do OSONE para o diálogo:
+${adaptive.directions}`;
+      }
+
+      systemInstruction += `\n\nDIRETRIZ DE DIÁLOGO POR VOZ NATURAL E DINÂMICO (WhatsApp / Conversa Humana):
       - Responda com um parágrafo completo, fluido e rico (elaborando a resposta de forma contínua com pelo menos 3 a 5 frases completas e calorosas).
       - Evite respostas curtas de uma única frase ou termos secos de poucas palavras. Seja acolhedor, desenvolva o raciocínio e elabore um parágrafo rico de fácil conversação.
       - Nunca faça listas, tópicos estruturados, tópicos com hífens ou qualquer numeração por voz.
@@ -4519,6 +4624,72 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
     addNotification("Voz do Copilot interrompida", "info");
   };
 
+  const cleanTextForSpeech = (text: string): string => {
+    if (!text) return "";
+    
+    // 1. Remove code blocks (``` ... ```)
+    let cleaned = text.replace(/```[\s\S]*?```/g, " ");
+    
+    // 2. Remove inline code (` ... `)
+    cleaned = cleaned.replace(/`[\s\S]*?`/g, " ");
+    
+    // 3. Remove Markdown links [text](url) -> keep only text
+    cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+    
+    // 4. Remove image markers ![alt](url)
+    cleaned = cleaned.replace(/!\[[^\]]*\]\([^\)]+\)/g, " ");
+    
+    // 5. Remove HTML tags
+    cleaned = cleaned.replace(/<[^>]*>/g, " ");
+    
+    // 6. Clean Markdown formatting characters (stars, underscores, hashes, bullet points, blockquotes)
+    cleaned = cleaned.replace(/[\*\_~`#\-\+>|]/g, " ");
+    
+    // 7. Clean double dashes, ellipses stability
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    
+    return cleaned;
+  };
+
+  const splitTextIntoSpeechChunks = (text: string): string[] => {
+    const sentenceEndRegex = /([.!?;\n]|\r\n)+/;
+    const parts = text.split(sentenceEndRegex);
+    const chunks: string[] = [];
+    let currentChunk = "";
+    
+    for (const part of parts) {
+      if (!part) continue;
+      
+      // If it's just punctuation, append it to the current chunk or handle it
+      if (/^[.!?;\n\r]+$/.test(part)) {
+        currentChunk += part;
+        if (currentChunk.trim().length > 0) {
+          chunks.push(currentChunk.trim());
+        }
+        currentChunk = "";
+      } else {
+        // If adding this part exceeds 140 chars, push current first
+        if (currentChunk.length + part.length > 140) {
+          if (currentChunk.trim().length > 0) {
+            chunks.push(currentChunk.trim());
+          }
+          currentChunk = part;
+        } else {
+          currentChunk += (currentChunk ? " " : "") + part;
+        }
+      }
+    }
+    
+    if (currentChunk.trim().length > 0) {
+      chunks.push(currentChunk.trim());
+    }
+    
+    // Filter out empty chunks and keep only chunks with valid content
+    return chunks
+      .map(c => c.trim())
+      .filter(c => c.length > 0 && /[a-zA-Z0-9áéíóúâêîôûãõçÀÉÍÓÚÂÊÎÔÛÃÕÇ]/.test(c));
+  };
+
   const playDuoSpeech = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     if (isSinging || lyrics) {
@@ -4555,12 +4726,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       ptVoices = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('pt'));
     }
 
-    // Encontra de forma inteligente a melhor voz por gênero se disponível no navegador
     const getBestVoiceForGender = (gender: 'male' | 'female', altIndex: number) => {
       if (ptVoices.length === 0) return null;
       
       const lowerGender = gender.toLowerCase();
-      // Tenta cruzar nomes populares correspondentes ao gênero para obter vozes nativas incríveis
       const foundVoice = ptVoices.find(voice => {
         const vName = voice.name.toLowerCase();
         if (lowerGender === 'female') {
@@ -4580,12 +4749,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
 
       if (foundVoice) return foundVoice;
 
-      // Se não achar por gênero direto e houver mais de uma voz em português, distribui por index para garantir que sejam vozes diferentes!
       if (ptVoices.length > 1) {
         return ptVoices[altIndex % ptVoices.length];
       }
 
-      // Fallback para a primeira do idioma
       return ptVoices[0];
     };
 
@@ -4607,62 +4774,81 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       const hostConf = isHostA ? currentCombo.hostA : currentCombo.hostB;
       const chosenVoice = isHostA ? voiceHostA : voiceHostB;
 
-      const cleanTextToSpeak = turn.text.replace(/[\*\_\[\]]/g, '');
-      const utterance = new SpeechSynthesisUtterance(cleanTextToSpeak);
-      
-      if (chosenVoice) {
-        utterance.voice = chosenVoice;
-        utterance.lang = chosenVoice.lang; // Keep them strictly matching to prevent silent state bugs
-      } else {
-        utterance.lang = 'pt-BR';
+      // Clean and split current turn into short sentence chunks
+      const cleanedTurnText = cleanTextForSpeech(turn.text);
+      const turnChunks = splitTextIntoSpeechChunks(cleanedTurnText);
+
+      if (turnChunks.length === 0) {
+        index++;
+        speakNext();
+        return;
       }
 
-      // Assign default rate/pitch from host config
-      let pitch = hostConf.pitch;
-      let rate = hostConf.rate;
+      let turnChunkIndex = 0;
 
-      // Crucial: If they resolve to the exact same voice object (e.g. Chrome with 1 PT voice),
-      // we enforce extreme pitch & rate differentiation so they sound completely distinct!
-      if (voiceHostA && voiceHostB && voiceHostA.name === voiceHostB.name) {
-        if (isHostA) {
-          pitch = 0.72; // Deep and slow (Cortex/Loki/H)
-          rate = 0.90;
-        } else {
-          pitch = 1.35; // Bright and speedy (Aura/F)
-          rate = 1.10;
+      const speakNextTurnChunk = () => {
+        if (turnChunkIndex >= turnChunks.length) {
+          setVoiceTranscript('');
+          index++;
+          speakNext();
+          return;
         }
-      }
 
-      utterance.pitch = pitch;
-      utterance.rate = rate;
+        const currentChunk = turnChunks[turnChunkIndex];
+        const utterance = new SpeechSynthesisUtterance(currentChunk);
+        
+        if (chosenVoice) {
+          utterance.voice = chosenVoice;
+          utterance.lang = chosenVoice.lang;
+        } else {
+          utterance.lang = 'pt-BR';
+        }
 
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-        setDuoSpeakingHost(turn.speaker);
-        setVoiceTranscript(cleanTextToSpeak);
+        let pitch = hostConf.pitch;
+        let rate = hostConf.rate;
+
+        if (voiceHostA && voiceHostB && voiceHostA.name === voiceHostB.name) {
+          if (isHostA) {
+            pitch = 0.72;
+            rate = 0.90;
+          } else {
+            pitch = 1.35;
+            rate = 1.10;
+          }
+        }
+
+        utterance.pitch = pitch;
+        utterance.rate = rate;
+
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+          setDuoSpeakingHost(turn.speaker);
+          setVoiceTranscript(currentChunk);
+        };
+
+        utterance.onend = () => {
+          setVoiceTranscript('');
+          turnChunkIndex++;
+          speakNextTurnChunk();
+        };
+
+        utterance.onerror = (e) => {
+          console.error("Duo speech turn chunk error:", e);
+          setVoiceTranscript('');
+          turnChunkIndex++;
+          speakNextTurnChunk();
+        };
+
+        (window as any)._activeUtterances = (window as any)._activeUtterances || [];
+        (window as any)._activeUtterances.push(utterance);
+        if ((window as any)._activeUtterances.length > 50) {
+          (window as any)._activeUtterances.shift();
+        }
+
+        window.speechSynthesis.speak(utterance);
       };
 
-      utterance.onend = () => {
-        setVoiceTranscript('');
-        index++;
-        speakNext();
-      };
-
-      utterance.onerror = (e) => {
-        console.error("Duo speech turn error:", e);
-        setVoiceTranscript('');
-        index++;
-        speakNext();
-      };
-
-      // Workaround: Prevent Web Speech API garbage collection bug in Chrome & Safari
-      (window as any)._activeUtterances = (window as any)._activeUtterances || [];
-      (window as any)._activeUtterances.push(utterance);
-      if ((window as any)._activeUtterances.length > 50) {
-        (window as any)._activeUtterances.shift();
-      }
-
-      window.speechSynthesis.speak(utterance);
+      speakNextTurnChunk();
     };
 
     speakNext();
@@ -4674,37 +4860,89 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       console.log("Ignoring solo speech since Karaoke active.");
       return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
     
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(v => v.lang === 'pt-BR');
-    if (ptVoice) {
-      utterance.voice = ptVoice;
+    // Ensure we resume if paused as a classic browser unfreezing technique
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
     }
+    
+    window.speechSynthesis.cancel();
+    (window as any)._activeUtterances = [];
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setVoiceTranscript(text);
-    };
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setVoiceTranscript('');
-    };
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setVoiceTranscript('');
+    const cleanedText = cleanTextForSpeech(text);
+    if (!cleanedText) return;
+
+    const chunks = splitTextIntoSpeechChunks(cleanedText);
+    if (chunks.length === 0) return;
+
+    let chunkIndex = 0;
+
+    const speakNextChunk = () => {
+      if (chunkIndex >= chunks.length) {
+        setIsSpeaking(false);
+        setVoiceTranscript('');
+        (window as any)._activeUtterances = [];
+        return;
+      }
+
+      const currentChunk = chunks[chunkIndex];
+      const utterance = new SpeechSynthesisUtterance(currentChunk);
+      
+      const voices = window.speechSynthesis.getVoices();
+      
+      // Support pt-BR specific language first
+      let ptVoices = voices.filter(v => {
+        const parsedLang = v.lang.toLowerCase().replace('_', '-');
+        return parsedLang === 'pt-br' || parsedLang === 'pt_br';
+      });
+      
+      // If no pt-BR found, fallback to any pt voices
+      if (ptVoices.length === 0) {
+        ptVoices = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('pt'));
+      }
+
+      const chosenVoice = ptVoices.find(v => {
+        const name = v.name.toLowerCase();
+        return name.includes('maria') || name.includes('luciana') || name.includes('leticia') || 
+               name.includes('helena') || name.includes('zira') || name.includes('rita') || 
+               name.includes('google português') || name.includes('português') || name.includes('portuguese');
+      }) || ptVoices[0];
+
+      if (chosenVoice) {
+        utterance.voice = chosenVoice;
+        utterance.lang = chosenVoice.lang;
+      } else {
+        utterance.lang = 'pt-BR';
+      }
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setVoiceTranscript(currentChunk);
+      };
+
+      utterance.onend = () => {
+        setVoiceTranscript('');
+        chunkIndex++;
+        speakNextChunk();
+      };
+
+      utterance.onerror = (e) => {
+        console.error("Solo speech chunk error:", e);
+        setVoiceTranscript('');
+        chunkIndex++;
+        speakNextChunk();
+      };
+
+      (window as any)._activeUtterances = (window as any)._activeUtterances || [];
+      (window as any)._activeUtterances.push(utterance);
+      if ((window as any)._activeUtterances.length > 50) {
+        (window as any)._activeUtterances.shift();
+      }
+
+      window.speechSynthesis.speak(utterance);
     };
 
-    // Workaround: Prevent Web Speech API garbage collection bug in Chrome & Safari
-    (window as any)._activeUtterances = (window as any)._activeUtterances || [];
-    (window as any)._activeUtterances.push(utterance);
-    if ((window as any)._activeUtterances.length > 50) {
-      (window as any)._activeUtterances.shift();
-    }
-
-    window.speechSynthesis.speak(utterance);
+    speakNextChunk();
   };
 
   const handleHomeChat = async (directMessage?: string) => {
@@ -5417,9 +5655,21 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         ? `Objetos no Canvas (${drawingObjects.length}): ` + drawingObjects.slice(-15).map(obj => `${obj.type}${obj.text ? ` ("${obj.text}")` : ''} em [${Math.round(obj.x)},${Math.round(obj.y)}]`).join(', ') + (drawingObjects.length > 15 ? '... e outros.' : '')
         : "O Canvas está limpo.";
 
+      const adaptive = getAdaptivePersonalityMetadata(chatHistoryRef.current);
       let activeSystemInstruction = `${profileInstruction}
           
           PERSONALIDADE ATUAL: ${selectedPersona.instructions}`;
+
+      if (selectedPersona.id === 'osone') {
+        activeSystemInstruction += `\n\n[SISTEMA DE EVOLUÇÃO NEURO-ADAPTATIVA DO OSONE ATIVO]:
+Seu alinhamento comportamental atual está na seguinte escala de afinidade evolutiva com o usuário:
+- Estágio de Afinidade: ${adaptive.description}
+- Foco de Interesse Mapeado: ${adaptive.focusProfile} (tom a adequar: ${adaptive.vibeAdjustment})
+- Total de Interações: ${adaptive.totalMsgs} mensagens
+
+Diretriz adaptativa atual do OSONE para o diálogo:
+${adaptive.directions}`;
+      }
 
       if (isDuoMode) {
         const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
@@ -6747,7 +6997,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     properties: {
                       style: {
                         type: Type.STRING,
-                        enum: ['classic', 'superintelligence', 'neural'],
+                        enum: ['classic', 'superintelligence', 'neural', 'smoke'],
                         description: "O nome do estilo para o qual alternar."
                       }
                     },
@@ -7063,7 +7313,11 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       .trim();
                   }
                   
-                  setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: `${currentSpeakerName}: ${cleanedText}` }]);
+                  if (isDuoMode) {
+                    setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: `${currentSpeakerName}: ${cleanedText}` }]);
+                  } else {
+                    setChatHistory(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), role: 'assistant', content: cleanedText }]);
+                  }
                   
                   if (isDuoMode) {
                     if (activeDuoHost === 'hostA') {
@@ -10650,7 +10904,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                           <div className="w-full">
                             {(() => {
                               const currentCombo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
-                              const turns = msg.role === 'assistant' ? parseDuoTextToTurns(msg.content, currentCombo) : [];
+                              const turns = msg.role === 'assistant' && isDuoMode ? parseDuoTextToTurns(msg.content, currentCombo) : [];
                               
                               if (msg.role === 'assistant' && turns.length > 0) {
                                 return (
@@ -10726,9 +10980,41 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                                 );
                               }
                               
+                              const isCurrentlyTalkingSolo = !isDuoMode && isSpeaking;
+                              
                               return (
-                                <div className="inline-block max-w-[85%] bg-white/[0.03] border border-white/5 px-4.5 py-2.5 rounded-2xl rounded-tl-none text-stone-200 text-xs sm:text-sm font-light tracking-wide leading-relaxed text-left shadow-lg backdrop-blur-md whitespace-pre-wrap">
-                                  {msg.content}
+                                <div className="flex gap-3 max-w-[90%] items-start self-start text-left">
+                                  {/* OSONE Constellation Orb Avatar with animated glowing ring when speaking */}
+                                  <div className="relative shrink-0 select-none">
+                                    <img 
+                                      src={osoneOrbImage} 
+                                      alt="OSONE" 
+                                      className={cn(
+                                        "w-10 h-10 rounded-full object-cover border border-orange-500/20 shadow-sm transition-all duration-300",
+                                        isCurrentlyTalkingSolo && "ring-2 ring-orange-500/80 scale-105 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.5)]"
+                                      )}
+                                    />
+                                    {isCurrentlyTalkingSolo && (
+                                      <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500 flex items-center justify-center text-[7px] text-white font-bold">🎙️</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-1.5 mb-1 select-none justify-start">
+                                      <span className="text-[10px] font-bold tracking-wider uppercase text-orange-450">
+                                        OSONE
+                                      </span>
+                                      <span className="text-[8px] opacity-40 uppercase font-mono tracking-tight text-white">
+                                        NÚCLEO NEURAL
+                                      </span>
+                                    </div>
+                                    <div className="px-4 py-3 bg-orange-500/[0.04] text-stone-250 border border-orange-500/10 rounded-2xl rounded-tl-none text-xs sm:text-sm font-light leading-relaxed tracking-wide shadow-sm text-left backdrop-blur-md whitespace-pre-wrap">
+                                      {msg.content}
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })()}
