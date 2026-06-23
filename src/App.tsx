@@ -98,6 +98,7 @@ import { SoundEffect, DrawingObject, User } from './types';
 import { getMemoryItem, setMemoryItem } from './lib/indexedDbMemory';
 import { generatePDF } from './lib/pdfUtils';
 import { resolveAudioUrl, deleteAudio } from './lib/audioDb';
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, db, doc, setDoc, getDoc, OperationType, handleFirestoreError } from './firebase';
 
 // Cybernetic glowing robotic hand from the OSONE HUD
 const CyberneticHandIcon = ({ className = "w-8 h-8" }: { className?: string }) => {
@@ -621,9 +622,11 @@ const getFriendlyModeName = (mode: WorkspaceMode): string => {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const isCloudSyncReady = useRef<boolean>(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isGuestMode, setIsGuestMode] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [showUi, setShowUi] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2660,17 +2663,216 @@ export default function App() {
     return id;
   };
 
+  const syncUserDataToCloud = async (
+    targetUser: any,
+    data: {
+      aiProfile?: AIProfile;
+      healthData?: any;
+      chatHistory?: Message[];
+      longTermMemory?: string;
+      intimateAnswers?: { [id: number]: string };
+    }
+  ) => {
+    if (!targetUser) return;
+    try {
+      const userDocRef = doc(db, "users", targetUser.uid);
+      const payload: any = { updatedAt: new Date().toISOString() };
+      
+      if (data.aiProfile !== undefined) payload.aiProfile = data.aiProfile;
+      if (data.healthData !== undefined) payload.healthData = data.healthData;
+      if (data.chatHistory !== undefined) {
+        // Limit to prevent oversized documents (e.g. keep last 100 messages)
+        payload.chatHistory = data.chatHistory.slice(-100);
+      }
+      if (data.longTermMemory !== undefined) payload.longTermMemory = data.longTermMemory;
+      if (data.intimateAnswers !== undefined) {
+        const stringifiedAnswers: { [key: string]: string } = {};
+        Object.entries(data.intimateAnswers).forEach(([k, v]) => {
+          stringifiedAnswers[k] = v;
+        });
+        payload.intimateAnswers = stringifiedAnswers;
+      }
+
+      try {
+        await setDoc(userDocRef, payload, { merge: true });
+        console.log("OSONE Cloud Sync: Sincronização em nuvem bem-sucedida.");
+      } catch (writeErr: any) {
+        const msgStr = writeErr instanceof Error ? writeErr.message : String(writeErr);
+        if (msgStr.toLowerCase().includes("offline")) {
+          console.warn("OSONE Cloud Sync: Client is offline, skipping cloud write.");
+          return;
+        }
+        handleFirestoreError(writeErr, OperationType.WRITE, `users/${targetUser.uid}`);
+      }
+    } catch (err) {
+      console.error("OSONE Cloud Sync Error:", err);
+    }
+  };
+
+  const loadUserDataFromCloud = async (targetUser: any) => {
+    if (!targetUser) return;
+    try {
+      isCloudSyncReady.current = false;
+      const userDocRef = doc(db, "users", targetUser.uid);
+      let userDocSnap;
+      try {
+        userDocSnap = await getDoc(userDocRef);
+      } catch (readErr: any) {
+        const msgStr = readErr instanceof Error ? readErr.message : String(readErr);
+        if (msgStr.toLowerCase().includes("offline")) {
+          console.warn("OSONE Cloud Load: Client is offline, falling back to local memory.");
+          addNotification("Segurança Local: Conexão offline ou limitada. Suas memórias locais estão 100% protegidas e ativas.", "info");
+          return;
+        }
+        handleFirestoreError(readErr, OperationType.GET, `users/${targetUser.uid}`);
+        return;
+      }
+
+      if (userDocSnap && userDocSnap.exists()) {
+        const cloudData = userDocSnap.data();
+        let loadedSomething = false;
+
+        if (cloudData.aiProfile) {
+          setAiProfile(cloudData.aiProfile);
+          localStorage.setItem('osone_ai_profile', JSON.stringify(cloudData.aiProfile));
+          loadedSomething = true;
+        }
+        if (cloudData.healthData) {
+          setHealthData(cloudData.healthData);
+          localStorage.setItem('osone_health_data', JSON.stringify(cloudData.healthData));
+          loadedSomething = true;
+        }
+        if (cloudData.longTermMemory) {
+          setLongTermMemory(cloudData.longTermMemory);
+          setMemoryItem('osone_long_term_memory', cloudData.longTermMemory);
+          loadedSomething = true;
+        }
+        if (cloudData.intimateAnswers) {
+          const formattedAnswers: { [id: number]: string } = {};
+          Object.entries(cloudData.intimateAnswers).forEach(([k, v]) => {
+            const idNum = parseInt(k, 10);
+            if (!isNaN(idNum)) {
+              formattedAnswers[idNum] = v as string;
+            }
+          });
+          setIntimateAnswers(formattedAnswers);
+          setMemoryItem('osone_intimate_mission_answers', formattedAnswers);
+          loadedSomething = true;
+        }
+        if (cloudData.chatHistory && Array.isArray(cloudData.chatHistory) && cloudData.chatHistory.length > 0) {
+          setChatHistory(cloudData.chatHistory);
+          setMemoryItem('osone_chat_history', cloudData.chatHistory);
+          loadedSomething = true;
+        }
+
+        if (loadedSomething) {
+          addNotification("Sincronização Ativa: Seus dados de IA, memórias e histórico foram restaurados da Nuvem!", "success");
+        }
+      } else {
+        // Doc not found, push what we currently have
+        addNotification("Iniciando Nuvem: Vinculando e salvando seu perfil atual no Firebase...", "info");
+        await syncUserDataToCloud(targetUser, {
+          aiProfile,
+          healthData,
+          chatHistory,
+          longTermMemory,
+          intimateAnswers
+        });
+        addNotification("Backup de Nuvem concluído com sucesso.", "success");
+      }
+    } catch (err: any) {
+      console.error("Error loading user data from cloud:", err);
+      const msgStr = err instanceof Error ? err.message : String(err);
+      if (msgStr.toLowerCase().includes("offline")) {
+        addNotification("Segurança Local: Operando offline ou com rede isolada.", "info");
+      } else {
+        addNotification("Erro ao restaurar sincronização com Firebase.", "error");
+      }
+    } finally {
+      // Allow writing to cloud on user edits after loading completed
+      setTimeout(() => {
+        isCloudSyncReady.current = true;
+      }, 800);
+    }
+  };
+
   const handleLogin = async () => {
-    addNotification("Segurança total ativa: Operando 100% offline em Memória Semântica Local.", "info");
+    try {
+      setIsAuthLoading(true);
+      const result = await signInWithPopup(auth, googleProvider);
+      const userObj: User = {
+        uid: result.user.uid,
+        displayName: result.user.displayName || 'Usuário Google',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || undefined
+      };
+      setUser(userObj);
+      setIsGuestMode(false);
+      addNotification(`Bem-vindo, ${userObj.displayName}! Login realizado via Gmail.`, "success");
+      await loadUserDataFromCloud(userObj);
+    } catch (err: any) {
+      console.error("Erro no login com Google/Gmail:", err);
+      if (err.code !== "auth/popup-closed-by-user") {
+        addNotification(`Erro ao autenticar com Gmail: ${err.message}`, "error");
+      }
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
 
   const handleLogout = async () => {
-    addNotification("Modo Seguro Local ativo.", "info");
+    try {
+      setIsAuthLoading(true);
+      isCloudSyncReady.current = false;
+      await signOut(auth);
+      setUser(null);
+      setIsGuestMode(true);
+      addNotification("Conexão com Firebase encerrada.", "info");
+    } catch (err: any) {
+      console.error("Erro ao fazer logout:", err);
+      addNotification("Erro ao encerrar sessão.", "error");
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
 
+  // Se inscreve na mudança de estado de autenticação do Firebase ao montar o componente
+  useEffect(() => {
+    setIsAuthLoading(true);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        const userObj: User = {
+          uid: firebaseUser.uid,
+          displayName: firebaseUser.displayName || 'Usuário Google',
+          email: firebaseUser.email || '',
+          photoURL: firebaseUser.photoURL || undefined
+        };
+        setUser(userObj);
+        setIsGuestMode(false);
+        loadUserDataFromCloud(userObj);
+      } else {
+        setUser(null);
+        setIsGuestMode(true);
+        isCloudSyncReady.current = false;
+      }
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const syncProfileToCloud = async (updatedProfile?: AIProfile, updatedHealth?: any) => {
-    if (updatedProfile) localStorage.setItem('osone_ai_profile', JSON.stringify(updatedProfile));
-    if (updatedHealth) localStorage.setItem('osone_health_data', JSON.stringify(updatedHealth));
+    if (updatedProfile) {
+      localStorage.setItem('osone_ai_profile', JSON.stringify(updatedProfile));
+      if (user && isCloudSyncReady.current) {
+        syncUserDataToCloud(user, { aiProfile: updatedProfile });
+      }
+    }
+    if (updatedHealth) {
+      localStorage.setItem('osone_health_data', JSON.stringify(updatedHealth));
+      if (user && isCloudSyncReady.current) {
+        syncUserDataToCloud(user, { healthData: updatedHealth });
+      }
+    }
   };
 
   const addNotification = (message: string, type: NotificationType = 'info') => {
@@ -2697,11 +2899,17 @@ export default function App() {
 
   useEffect(() => {
     setMemoryItem('osone_intimate_mission_answers', intimateAnswers);
-  }, [intimateAnswers]);
+    if (user && isCloudSyncReady.current) {
+      syncUserDataToCloud(user, { intimateAnswers });
+    }
+  }, [intimateAnswers, user]);
 
   useEffect(() => {
     setMemoryItem('osone_long_term_memory', longTermMemory);
-  }, [longTermMemory]);
+    if (user && isCloudSyncReady.current) {
+      syncUserDataToCloud(user, { longTermMemory });
+    }
+  }, [longTermMemory, user]);
 
   // Load robust async memories from IndexedDB on initial component mount
   useEffect(() => {
@@ -2786,7 +2994,10 @@ export default function App() {
   useEffect(() => {
     chatHistoryRef.current = chatHistory;
     setMemoryItem('osone_chat_history', chatHistory);
-  }, [chatHistory]);
+    if (user && isCloudSyncReady.current) {
+      syncUserDataToCloud(user, { chatHistory });
+    }
+  }, [chatHistory, user]);
 
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const consecutiveSilenceRef = useRef<number>(0);
@@ -5080,27 +5291,62 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
                     const queryLower = query.toLowerCase();
                     const isMusicQuery = queryLower.includes("música") || queryLower.includes("letra") || queryLower.includes("som") || queryLower.includes("audio") || queryLower.includes("cant");
                     
-                    const customSearchRes = await fetch("/api/search/custom", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        query: query,
-                        key: apiKeys.googleCustomSearchApiKey,
-                        cx: apiKeys.googleCustomSearchCx
-                      })
-                    });
-                    if (customSearchRes.ok) {
-                      const customSearchData = await customSearchRes.json();
-                      if (customSearchData.items && customSearchData.items.length > 0) {
-                        customSearchSuccess = true;
-                        searchResultText = `[Resultados da Pesquisa Google Customizada OSONE]:\n` + 
-                          customSearchData.items.map((item: any, idx: number) => {
-                            const link = item.link;
-                            if (idx < 2) {
-                              urlsToScrape.push({ url: link, title: item.title || "Resultado" });
+                    if (apiKeys.tavilyApiKey) {
+                      try {
+                        const tavilyRes = await fetch("/api/search/tavily", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            query: query,
+                            apiKey: apiKeys.tavilyApiKey
+                          })
+                        });
+                        if (tavilyRes.ok) {
+                          const data = await tavilyRes.json();
+                          const results = data.results || [];
+                          if (results.length > 0) {
+                            customSearchSuccess = true;
+                            const formattedResults = results.map((item: any, idx: number) => {
+                              if (idx < 2 && item.url) {
+                                urlsToScrape.push({ url: item.url, title: item.title || "Resultado" });
+                              }
+                              return `${idx + 1}. **${item.title}**\n   Link: ${item.url}\n   Resumo: ${item.content}\n`;
+                            }).join("\n");
+
+                            searchResultText = `[Resultados da Pesquisa Tavily AI]:\n` + formattedResults;
+                            if (data.answer) {
+                              searchResultText = `[Resposta Direta do Tavily AI]:\n${data.answer}\n\n${searchResultText}`;
                             }
-                            return `${idx + 1}. **${item.title}**\n   Link: ${link}\n   Resumo: ${item.snippet}\n`;
-                          }).join("\n");
+                          }
+                        }
+                      } catch (errTavily) {
+                        console.warn("Tavily search exception in smart run, falling back:", errTavily);
+                      }
+                    }
+
+                    if (!customSearchSuccess) {
+                      const customSearchRes = await fetch("/api/search/custom", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          query: query,
+                          key: apiKeys.googleCustomSearchApiKey,
+                          cx: apiKeys.googleCustomSearchCx
+                        })
+                      });
+                      if (customSearchRes.ok) {
+                        const customSearchData = await customSearchRes.json();
+                        if (customSearchData.items && customSearchData.items.length > 0) {
+                          customSearchSuccess = true;
+                          searchResultText = `[Resultados da Pesquisa Google Customizada OSONE]:\n` + 
+                            customSearchData.items.map((item: any, idx: number) => {
+                              const link = item.link;
+                              if (idx < 2) {
+                                urlsToScrape.push({ url: link, title: item.title || "Resultado" });
+                              }
+                              return `${idx + 1}. **${item.title}**\n   Link: ${link}\n   Resumo: ${item.snippet}\n`;
+                            }).join("\n");
+                        }
                       }
                     }
                   } catch (e) {
@@ -6067,43 +6313,66 @@ tools: tools
             }]);
 
             try {
-              const proxyImageRes = await fetch("/api/gemini/generateImages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  clientApiKey: effectiveApiKey,
-                  model: 'gemini-3.1-flash-image',
-                  prompt: prompt,
-                  config: {
-                    numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
-                  }
-                })
-              });
+              let imageUrl = '';
+              if (effectiveApiKey) {
+                try {
+                  const proxyImageRes = await fetch("/api/gemini/generateImages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      clientApiKey: effectiveApiKey,
+                      model: 'gemini-3.1-flash-image',
+                      prompt: prompt,
+                      config: {
+                        numberOfImages: 1,
+                        outputMimeType: 'image/jpeg',
+                        aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
+                      }
+                    })
+                  });
 
-              if (!proxyImageRes.ok) {
-                const errorData = await proxyImageRes.json();
-                throw new Error(errorData.error || "Erro ao conectar com a IA");
+                  if (proxyImageRes.ok) {
+                    const imageResult = await proxyImageRes.json();
+                    const generatedImage = imageResult.generatedImages?.[0];
+                    if (generatedImage?.image?.imageBytes) {
+                      imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                    }
+                  }
+                } catch (geminiErr) {
+                  console.warn("Erro ao gerar com Gemini, usando canal livre de alta fidelidade:", geminiErr);
+                }
               }
 
-              const imageResult = await proxyImageRes.json();
+              // Se não conseguiu com Gemini ou não tem chave, usa Pollinations AI como canal de fluxo gratuito excelente
+              if (!imageUrl) {
+                const seed = Math.floor(Math.random() * 9999999);
+                const queryPrompt = encodeURIComponent(prompt);
+                const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
+                const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
+                const pollinationUrl = `https://image.pollinations.ai/prompt/${queryPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
 
-              let imageUrl = '';
-              const generatedImage = imageResult.generatedImages?.[0];
-              if (generatedImage?.image?.imageBytes) {
-                imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                const pollinationRes = await fetch(pollinationUrl);
+                if (!pollinationRes.ok) {
+                  throw new Error("Não foi possível conectar aos servidores de imagem gratuitos do OSONE.");
+                }
+                const blob = await pollinationRes.blob();
+                imageUrl = await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(blob);
+                });
               }
 
               if (imageUrl) {
                 setChatHistory(prev => [...prev, { 
                   id: Math.random().toString(36).substr(2, 9), 
                   role: 'assistant' as const, 
-                  content: `Aqui está a imagem gerada para: "${prompt}"`,
+                  content: `Aqui está a imagem gerada em alta definição para: "${prompt}"`,
                   imageUrl: imageUrl
                 }]);
               } else {
-                throw new Error("Não foi possível gerar a imagem.");
+                throw new Error("Não foi possível produzir a imagem final.");
               }
             } catch (err: any) {
               setChatHistory(prev => [...prev, { 
@@ -7524,13 +7793,13 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       response: { result: "Osciladores neurais recalibrados. Minha voz agora opera nos novos parâmetros." }
                     });
                   } else if (call.name === "search_chat_history") {
-                    const query = (call.args as any).query.toLowerCase();
-                    const results = chatHistory.filter(msg => 
-                      msg.content.toLowerCase().includes(query)
+                    const queryTerm = (call.args as any).query.toLowerCase();
+                    const filteredHistory = chatHistory.filter(msg => 
+                      msg.content.toLowerCase().includes(queryTerm)
                     ).slice(-10);
 
-                    const resultText = results.length > 0 
-                      ? results.map(r => `[${r.role.toUpperCase()}]: ${r.content}`).join('\n---\n')
+                    const resultText = filteredHistory.length > 0 
+                      ? filteredHistory.map(r => `[${r.role.toUpperCase()}]: ${r.content}`).join('\n---\n')
                       : "Histórico limpo ou sem correspondências.";
                     
                     responses.push({
@@ -7539,8 +7808,8 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       response: { result: resultText }
                     });
                   } else if (call.name === "search_local_documents") {
-                    const query = (call.args as any).query;
-                    const results = searchLocalRagDocs(query);
+                    const queryTerm = (call.args as any).query;
+                    const results = searchLocalRagDocs(queryTerm);
                     responses.push({
                       name: call.name,
                       id: call.id,
@@ -7565,67 +7834,123 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                       let searchResultText = "";
                       let customSearchSuccess = false;
                       const urlsToScrape: { url: string; title: string }[] = [];
- 
-                      // Try running Google Custom Search first (either with user keys or local server env fallback)
-                      try {
-                        const customSearchRes = await fetch("/api/search/custom", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            query: query,
-                            key: apiKeys.googleCustomSearchApiKey,
-                            cx: apiKeys.googleCustomSearchCx
-                          })
-                        });
- 
-                        if (customSearchRes.ok) {
-                          const data = await customSearchRes.json();
-                          const items = data.items || [];
-                          if (items.length > 0) {
-                            customSearchSuccess = true;
-                            const formattedResults = items.map((item: any, idx: number) => {
-                              return `${idx + 1}. [${item.title}](${item.link})\n${item.snippet || ""}`;
-                            }).join("\n\n");
-                            searchResultText = `Resultados da Pesquisa Customizada do Google para "${query}":\n\n${formattedResults}`;
- 
-                            // Gather the top 2 sources for automatic deep page reading
-                            items.slice(0, 2).forEach((item: any) => {
-                              if (item.link) {
-                                urlsToScrape.push({ url: item.link, title: item.title || "Pesquisa" });
+
+                      // Try running Tavily Search first if key is configured
+                      if (apiKeys.tavilyApiKey) {
+                        try {
+                          const tavilyRes = await fetch("/api/search/tavily", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              query: query,
+                              apiKey: apiKeys.tavilyApiKey
+                            })
+                          });
+
+                          if (tavilyRes.ok) {
+                            const data = await tavilyRes.json();
+                            const results = data.results || [];
+                            if (results.length > 0) {
+                              customSearchSuccess = true;
+                              const formattedResults = results.map((item: any, idx: number) => {
+                                return `${idx + 1}. [${item.title}](${item.url})\n${item.content || ""}`;
+                              }).join("\n\n");
+                              searchResultText = `[Resultados da Pesquisa Tavily AI]:\n\n${formattedResults}`;
+                              if (data.answer) {
+                                searchResultText = `[Resposta Direta do Tavily AI]:\n${data.answer}\n\n${searchResultText}`;
                               }
-                            });
- 
-                            // Create gorgeous custom search cards from real results!
-                            items.slice(0, 3).forEach((item: any) => {
-                              let imgUrl = undefined;
-                              if (item.pagemap?.cse_image?.[0]?.src) {
-                                imgUrl = item.pagemap.cse_image[0].src;
-                              } else if (item.pagemap?.cse_thumbnail?.[0]?.src) {
-                                imgUrl = item.pagemap.cse_thumbnail[0].src;
-                              }
- 
-                              let host = "google.com";
-                              try { host = new URL(item.link).hostname; } catch (e) {}
- 
-                              addSearchPopup({
-                                query: query,
-                                title: item.title,
-                                snippet: item.snippet || "Metadados de pesquisa carregados em tempo real.",
-                                url: item.link,
-                                imageUrl: imgUrl || getSimulatedSearchImage(query, item.title, item.link),
-                                faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${host}`,
-                                classification: 'neutral'
+
+                              // Gather top sources for deep analysis
+                              results.slice(0, 2).forEach((item: any) => {
+                                if (item.url) {
+                                  urlsToScrape.push({ url: item.url, title: item.title || "Pesquisa" });
+                                }
                               });
-                            });
+
+                              // Create gorgeous custom search cards from real results!
+                              results.slice(0, 3).forEach((item: any) => {
+                                let host = "tavily.com";
+                                try { host = new URL(item.url).hostname; } catch (e) {}
+
+                                addSearchPopup({
+                                  query: query,
+                                  title: item.title,
+                                  snippet: item.content || "Análise executada de modo neural por Tavily AI.",
+                                  url: item.url,
+                                  imageUrl: getSimulatedSearchImage(query, item.title, item.url),
+                                  faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${host}`,
+                                  classification: 'neutral'
+                                });
+                              });
+                            }
                           }
-                        } else {
-                          const errJson = await customSearchRes.json().catch(() => ({}));
-                          console.warn("Custom Search API endpoint error, falling back:", errJson.error);
+                        } catch (errTavily) {
+                          console.warn("Faced exception querying Tavily search, falling back:", errTavily);
                         }
-                      } catch (errCustom) {
-                        console.warn("Faced exception querying custom search endpoint, falling back:", errCustom);
                       }
- 
+
+                      // Try running Google Custom Search next if Tavily was not configured or succeeded
+                      if (!customSearchSuccess) {
+                        try {
+                          const customSearchRes = await fetch("/api/search/custom", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              query: query,
+                              key: apiKeys.googleCustomSearchApiKey,
+                              cx: apiKeys.googleCustomSearchCx
+                            })
+                          });
+   
+                          if (customSearchRes.ok) {
+                            const data = await customSearchRes.json();
+                            const items = data.items || [];
+                            if (items.length > 0) {
+                              customSearchSuccess = true;
+                              const formattedResults = items.map((item: any, idx: number) => {
+                                return `${idx + 1}. [${item.title}](${item.link})\n${item.snippet || ""}`;
+                              }).join("\n\n");
+                              searchResultText = `Resultados da Pesquisa Customizada do Google para "${query}":\n\n${formattedResults}`;
+   
+                              // Gather the top 2 sources for automatic deep page reading
+                              items.slice(0, 2).forEach((item: any) => {
+                                if (item.link) {
+                                  urlsToScrape.push({ url: item.link, title: item.title || "Pesquisa" });
+                                }
+                              });
+   
+                              // Create gorgeous custom search cards from real results!
+                              items.slice(0, 3).forEach((item: any) => {
+                                let imgUrl = undefined;
+                                if (item.pagemap?.cse_image?.[0]?.src) {
+                                  imgUrl = item.pagemap.cse_image[0].src;
+                                } else if (item.pagemap?.cse_thumbnail?.[0]?.src) {
+                                  imgUrl = item.pagemap.cse_thumbnail[0].src;
+                                }
+   
+                                let host = "google.com";
+                                try { host = new URL(item.link).hostname; } catch (e) {}
+   
+                                addSearchPopup({
+                                  query: query,
+                                  title: item.title,
+                                  snippet: item.snippet || "Metadados de pesquisa carregados em tempo real.",
+                                  url: item.link,
+                                  imageUrl: imgUrl || getSimulatedSearchImage(query, item.title, item.link),
+                                  faviconUrl: `https://www.google.com/s2/favicons?sz=64&domain=${host}`,
+                                  classification: 'neutral'
+                                });
+                              });
+                            }
+                          } else {
+                            const errJson = await customSearchRes.json().catch(() => ({}));
+                            console.warn("Custom Search API endpoint error, falling back:", errJson.error);
+                          }
+                        } catch (errCustom) {
+                          console.warn("Faced exception querying custom search endpoint, falling back:", errCustom);
+                        }
+                      }
+
                       // Fallback to default Gemini Search Grounding if Custom Search was not configured or succeeded
                       if (!customSearchSuccess) {
                         const proxyResponse = await fetch("/api/gemini/generateContent", {
@@ -8034,40 +8359,73 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     
                     const effectiveApiKey = apiKeys.gemini || '';
                     
-                    fetch("/api/gemini/generateImages", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        clientApiKey: effectiveApiKey,
-                        model: 'gemini-3.1-flash-image',
-                        prompt: prompt,
-                        config: {
-                          numberOfImages: 1,
-                          outputMimeType: 'image/jpeg',
-                          aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
-                        }
-                      })
-                    })
-                    .then(res => {
-                      if (!res.ok) throw new Error("Erro ao gerar imagem");
-                      return res.json();
-                    })
-                    .then(imageResult => {
+                    const triggerImageProc = async () => {
                       let imageUrl = '';
-                      const generatedImage = imageResult.generatedImages?.[0];
-                      if (generatedImage?.image?.imageBytes) {
-                        imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                      if (effectiveApiKey) {
+                        try {
+                          const res = await fetch("/api/gemini/generateImages", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              clientApiKey: effectiveApiKey,
+                              model: 'gemini-3.1-flash-image',
+                              prompt: prompt,
+                              config: {
+                                numberOfImages: 1,
+                                outputMimeType: 'image/jpeg',
+                                aspectRatio: aspectRatio === '16:9' ? '16:9' : aspectRatio === '9:16' ? '9:16' : aspectRatio === '4:3' ? '4:3' : aspectRatio === '3:4' ? '3:4' : '1:1'
+                              }
+                            })
+                          });
+                          if (res.ok) {
+                            const imageResult = await res.json();
+                            const generatedImage = imageResult.generatedImages?.[0];
+                            if (generatedImage?.image?.imageBytes) {
+                              imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                            }
+                          }
+                        } catch (e) {
+                          console.warn("Erro ao gerar imagem via Gemini, recorrendo a canal livre:", e);
+                        }
                       }
                       
+                      if (!imageUrl) {
+                        try {
+                          const seed = Math.floor(Math.random() * 9999999);
+                          const queryPrompt = encodeURIComponent(prompt);
+                          const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
+                          const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
+                          const pollinationUrl = `https://image.pollinations.ai/prompt/${queryPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
+                          
+                          const pollinationRes = await fetch(pollinationUrl);
+                          if (!pollinationRes.ok) throw new Error("Erro no servidor livre");
+                          const blob = await pollinationRes.blob();
+                          imageUrl = await new Promise<string>((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result as string);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(blob);
+                          });
+                        } catch (err: any) {
+                          throw new Error(`Ambos os canais falharam. Detalhe: ${err.message}`);
+                        }
+                      }
+                      
+                      return imageUrl;
+                    };
+                    
+                    triggerImageProc()
+                    .then(imageUrl => {
                       if (imageUrl) {
                         setChatHistory(prev => [...prev, { 
                           id: Math.random().toString(36).substr(2, 9), 
                           role: 'assistant' as const, 
-                          content: `Aqui está a imagem gerada para: "${prompt}"`,
+                          content: `Aqui está a imagem gerada em alta definição para: "${prompt}"`,
                           imageUrl: imageUrl
                         }]);
                       }
-                    }).catch(err => {
+                    })
+                    .catch(err => {
                       setChatHistory(prev => [...prev, { 
                         id: Math.random().toString(36).substr(2, 9), 
                         role: 'assistant' as const, 
@@ -8831,9 +9189,88 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             </span>
           </button>
 
+          {/* GOOGLE / GMAIL LOGIN WITH FIREBASE */}
+          <div className="relative z-40">
+            {isAuthLoading ? (
+              <button className="p-2 md:p-3 text-cyan-400 animate-spin">
+                <Loader2 size={16} />
+              </button>
+            ) : user ? (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  className="w-8 h-8 md:w-9 md:h-9 rounded-full border border-cyan-500/30 p-[2px] transition-all hover:border-cyan-400 overflow-hidden bg-zinc-950 flex items-center justify-center relative shadow-[0_0_10px_rgba(6,182,212,0.15)] focus:outline-none"
+                  title={`Usuário: ${user.displayName}`}
+                >
+                  <UserIcon size={14} className="text-cyan-400" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 border border-zinc-900 absolute bottom-0 right-0 animate-pulse" />
+                </button>
+
+                <AnimatePresence>
+                  {isProfileOpen && (
+                    <>
+                      {/* Click outside backdrop for popup */}
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsProfileOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        className="absolute right-0 top-full mt-3 p-4 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.8)] z-50 min-w-[260px]"
+                      >
+                        <div className="flex items-center gap-3 pb-3 border-b border-white/5 mb-3">
+                          <div className="w-10 h-10 rounded-full border border-cyan-500/20 overflow-hidden bg-zinc-955 flex items-center justify-center shrink-0">
+                            {user.photoURL ? (
+                              <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="text-cyan-400 font-bold text-sm uppercase">{user.displayName.slice(0, 2)}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-white truncate leading-tight">{user.displayName}</p>
+                            <p className="text-[10px] text-zinc-400 truncate mt-0.5">{user.email}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-left">
+                          <div className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-1 px-1">CONEXÃO SECURE</div>
+                          <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg p-2 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span>Autenticado via Firebase</span>
+                          </div>
+                          
+                          <button
+                            onClick={() => {
+                              handleLogout();
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full mt-2 py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                          >
+                            <LogOut size={13} />
+                            <span>Desconectar Gmail</span>
+                          </button>
+                        </div>
+                        {/* Popover arrow */}
+                        <div className="absolute -top-1 right-3 w-2 h-2 bg-zinc-950 border-l border-t border-white/10 rotate-45" />
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="p-1 px-3 md:py-1.5 border border-cyan-500/40 hover:border-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold transition-all flex items-center gap-2 rounded-full cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.15)]"
+                title="Fazer Login via Google/Gmail"
+              >
+                <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] font-black text-zinc-950 font-sans leading-none shadow-sm">G</span>
+                <span className="hidden md:inline text-[8px] tracking-[0.2em] leading-none font-bold uppercase">Conectar Gmail</span>
+              </button>
+            )}
+          </div>
+
           <button 
             onClick={() => setIsSettingsOpen(true)}
-            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted"
+            className="p-2 md:p-3 hover:bg-white/[0.03] transition-colors text-her-muted animate-pulse-slow"
           >
             <Settings size={20} className="md:w-[22px] md:h-[22px]" />
           </button>

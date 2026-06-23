@@ -1279,8 +1279,8 @@ ${processedChunk}`;
 
   // POST secure proxy endpoint for Imagen image generation
   app.post("/api/gemini/generateImages", async (req, res) => {
+    const { prompt, model, config, clientApiKey } = req.body;
     try {
-      const { prompt, model, config, clientApiKey } = req.body;
       const apiKey = clientApiKey || getSecretGeminiKey();
       
       if (!apiKey) {
@@ -1346,8 +1346,35 @@ ${processedChunk}`;
         return res.json(response);
       }
     } catch (err: any) {
-      console.error("Erro no proxy server-side generateImages:", err);
-      return res.status(500).json({ error: formatGeminiError(err) });
+      console.warn("Proxy server-side generateImages falhou com erro de cota ou rede. Ativando fallback para Pollinations AI...", err.message || err);
+      try {
+        const aspectRatio = config?.aspectRatio || "1:1";
+        const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
+        const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
+        const seed = Math.floor(Math.random() * 9999999);
+        const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
+        
+        const pollinationRes = await fetch(pollinationUrl);
+        if (!pollinationRes.ok) {
+          throw new Error("Servidor Pollinations também indisponível");
+        }
+        
+        const arrayBuffer = await pollinationRes.arrayBuffer();
+        const base64String = Buffer.from(arrayBuffer).toString("base64");
+        
+        return res.json({
+          generatedImages: [
+            {
+              image: {
+                imageBytes: base64String
+              }
+            }
+          ]
+        });
+      } catch (fallbackErr: any) {
+        console.error("Erro também no fallback de imagem:", fallbackErr);
+        return res.status(500).json({ error: formatGeminiError(err) });
+      }
     }
   });
 
@@ -1433,6 +1460,46 @@ ${processedChunk}`;
       return res.json(data);
     } catch (err: any) {
       console.error("Erro ao realizar busca Google Custom Search:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST endpoint for Tavily Web Search
+  app.post("/api/search/tavily", async (req, res) => {
+    try {
+      const { query, apiKey } = req.body;
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "O termo de pesquisa 'query' é obrigatório." });
+      }
+
+      const tavilyKey = apiKey || process.env.TAVILY_API_KEY;
+      if (!tavilyKey) {
+        return res.status(400).json({
+          error: "API Key do Tavily não configurada. Por favor, ajuste nos Chaves Extras do OSONE ou configure TAVILY_API_KEY no seu servidor."
+        });
+      }
+
+      const response = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          query: query,
+          search_depth: "smart",
+          include_answer: true,
+          max_results: 5
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        return res.status(response.status).json({ error: `Erro na Tavily API: ${errText}` });
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (err: any) {
+      console.error("Erro ao realizar busca via Tavily:", err);
       return res.status(500).json({ error: err.message });
     }
   });

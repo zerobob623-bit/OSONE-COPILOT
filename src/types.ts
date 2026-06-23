@@ -30,6 +30,7 @@ export interface ApiKeys {
   geminiModel?: 'gemini-3.5-flash' | 'gemini-2.5-flash';
   googleCustomSearchApiKey?: string;
   googleCustomSearchCx?: string;
+  tavilyApiKey?: string;
 }
 
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis' | 'smoke';

@@ -992,6 +992,31 @@ export default function PersonalizationPanel({
                   </div>
                 </div>
               </div>
+
+              {/* Tavily Search Section */}
+              <div className="space-y-5 bg-white/[0.01] border border-white/[0.03] p-6 rounded-3xl">
+                <div className="flex items-center gap-2 mb-1">
+                  <Key size={13} className="text-cyan-400" />
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#efefef]">Tavily Search Agent Web API</h4>
+                </div>
+                
+                <p className="text-[11px] text-zinc-400 font-sans leading-relaxed text-left">
+                  Habilite o Tavily Search para respostas dinâmicas focadas em agentes de IA. Perfeito para pesquisas técnicas rápidas e busca em tempo real com excelente síntese informativa.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="text-left">
+                    <label className="block text-[10px] uppercase tracking-widest text-her-muted/60 mb-2 font-bold select-none">Tavily API Key (Opcional)</label>
+                    <input 
+                      type="password"
+                      value={keys.tavilyApiKey || ''}
+                      onChange={(e) => setKeys({ ...keys, tavilyApiKey: e.target.value })}
+                      className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 focus:outline-none focus:border-cyan-500/30 transition-all text-sm font-mono text-white placeholder:text-her-muted/20"
+                      placeholder="Ex: tvly-..."
+                    />
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 
