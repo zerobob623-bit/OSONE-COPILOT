@@ -476,6 +476,57 @@ Comentário de @${user}: "${text}"`;
     res.json({ status: "success" });
   });
 
+  // Proxy requests server-side to bypass CORS block / Failed to fetch
+  app.post("/api/whatsapp/proxy", async (req, res) => {
+    try {
+      const { endpoint, method, headers, body } = req.body;
+      if (!endpoint) {
+        return res.status(400).json({ error: "Nenhum endpoint especificado para o proxy." });
+      }
+
+      let targetUrl = endpoint;
+      if (!endpoint.startsWith("http")) {
+        const cleanApiUrl = whatsappConfig.apiUrl?.endsWith('/') ? whatsappConfig.apiUrl.slice(0, -1) : whatsappConfig.apiUrl;
+        if (!cleanApiUrl) {
+          return res.status(400).json({ error: "A URL da API Evolution não está configurada." });
+        }
+        targetUrl = `${cleanApiUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+      }
+
+      const fetchOptions: any = {
+        method: method || "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...headers,
+        },
+      };
+
+      if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
+        fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
+      }
+
+      // Adiciona apikey se configurado no servidor, caso não enviado
+      if (whatsappConfig.apiKey && !fetchOptions.headers["apikey"]) {
+        fetchOptions.headers["apikey"] = whatsappConfig.apiKey;
+      }
+
+      const response = await fetch(targetUrl, fetchOptions);
+      const contentType = response.headers.get("content-type");
+      
+      let responseBody;
+      if (contentType && contentType.includes("application/json")) {
+        responseBody = await response.json();
+      } else {
+        responseBody = await response.text();
+      }
+
+      res.status(response.status).send(responseBody);
+    } catch (e: any) {
+      console.error("Erro no proxy do WhatsApp:", e);
+      res.status(500).json({ error: e.message || "Falha no proxy da requisição." });
+    }
+  });
+
   // ====== NEURAL CONNECTION MEMORY SYNC ENDPOINTS ======
   // Choose safe paths in OS temp folder (writable in severless containers like Cloud Run)
   const SYNC_FILE_PATH = path.join(os.tmpdir(), "osone-sync-profiles.json");

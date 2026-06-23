@@ -292,26 +292,9 @@ export const ProfileModal = ({
             </form>
 
             <div className="border-t border-white/5 pt-5 space-y-3">
-              <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Desenvolvedores e Cloud</span>
-              {isAuthLoading ? (
-                <div className="w-full p-3 rounded-2xl border border-white/5 bg-white/[0.01] flex items-center justify-center text-zinc-400 text-xs gap-2">
-                  <Loader2 size={14} className="animate-spin text-cyan-400" />
-                  <span>Conectando canal neural...</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onGoogleLogin}
-                  className="w-full p-3 rounded-2xl border border-cyan-500/20 hover:border-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/15 text-cyan-300 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.1)]"
-                >
-                  <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] font-black text-zinc-950 font-sans leading-none shadow-sm shrink-0">
-                    G
-                  </span>
-                  <span>Conectar via Gmail / Firebase</span>
-                </button>
-              )}
-              <p className="text-[8.5px] text-zinc-600 leading-relaxed text-center px-2">
-                Ideal para sincronização em nuvem e backup definitivo. Se você está testando localmente ou em hospedagem própria sem chaves, use os **Membros Locais** acima!
+              <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Privacidade OSONE</span>
+              <p className="text-[10px] text-zinc-400 bg-cyan-950/20 border border-cyan-500/15 p-3 rounded-2xl leading-relaxed">
+                🚀 **Modo 100% Offline Ativo:** Seus perfis, históricos teatrais, memórias e logs do OSONE são gravados e processados exclusivamente nas engrenagens locais do seu navegador, garantindo privacidade absoluta e velocidade instantânea no ecossistema sem nuvem.
               </p>
             </div>
           </div>

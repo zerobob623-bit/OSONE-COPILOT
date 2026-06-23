@@ -127,14 +127,17 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
     setStatusLoading(true);
     setQrCodeData(null);
 
-    const cleanApiUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
-    const checkUrl = `${cleanApiUrl}/instance/connectionState/${config.instanceName}`;
-
     try {
-      const headers: Record<string, string> = {};
-      if (config.apiKey) headers['apikey'] = config.apiKey;
+      const res = await fetch('/api/whatsapp/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: `/instance/connectionState/${config.instanceName}`,
+          method: 'GET',
+          headers: config.apiKey ? { 'apikey': config.apiKey } : {}
+        })
+      });
 
-      const res = await fetch(checkUrl, { headers });
       if (res.ok) {
         const data = await res.json();
         // Evolution returns { instance: { state: "connected" } } or standard state
@@ -162,14 +165,17 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
     setStatusLoading(true);
     setConnectionState('CONNECTING');
 
-    const cleanApiUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
-    const connectUrl = `${cleanApiUrl}/instance/connect/${config.instanceName}`;
-
     try {
-      const headers: Record<string, string> = {};
-      if (config.apiKey) headers['apikey'] = config.apiKey;
+      const res = await fetch('/api/whatsapp/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint: `/instance/connect/${config.instanceName}`,
+          method: 'GET',
+          headers: config.apiKey ? { 'apikey': config.apiKey } : {}
+        })
+      });
 
-      const res = await fetch(connectUrl, { headers });
       if (res.ok) {
         const data = await res.json();
         // Evolution returns code, base64 or qrcode object
@@ -194,20 +200,19 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
   };
 
   const tryCreateInstance = async () => {
-    const cleanApiUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
-    const createUrl = `${cleanApiUrl}/instance/create`;
-
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (config.apiKey) headers['apikey'] = config.apiKey;
-
-      const res = await fetch(createUrl, {
+      const res = await fetch('/api/whatsapp/proxy', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceName: config.instanceName,
-          token: Math.random().toString(36).substring(2, 12),
-          qrcode: true
+          endpoint: '/instance/create',
+          method: 'POST',
+          headers: config.apiKey ? { 'apikey': config.apiKey } : {},
+          body: {
+            instanceName: config.instanceName,
+            token: Math.random().toString(36).substring(2, 12),
+            qrcode: true
+          }
         })
       });
 
@@ -226,23 +231,22 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
     setIsSendingTest(true);
     setTestResult(null);
 
-    const cleanApiUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
-    const sendUrl = `${cleanApiUrl}/message/sendText/${config.instanceName}`;
+    // Ensure number is cleaned
+    const cleanNumber = testNumber.replace(/\D/g, '');
 
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (config.apiKey) headers['apikey'] = config.apiKey;
-
-      // Ensure number is cleaned
-      const cleanNumber = testNumber.replace(/\D/g, '');
-
-      const res = await fetch(sendUrl, {
+      const res = await fetch('/api/whatsapp/proxy', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          number: cleanNumber,
-          text: testMessage,
-          textMessage: { text: testMessage }
+          endpoint: `/message/sendText/${config.instanceName}`,
+          method: 'POST',
+          headers: config.apiKey ? { 'apikey': config.apiKey } : {},
+          body: {
+            number: cleanNumber,
+            text: testMessage,
+            textMessage: { text: testMessage }
+          }
         })
       });
 
@@ -268,24 +272,23 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
     const osoneOrigin = window.location.origin;
     const webhookUrl = `${osoneOrigin}/api/whatsapp/webhook`;
 
-    const cleanApiUrl = config.apiUrl.endsWith('/') ? config.apiUrl.slice(0, -1) : config.apiUrl;
-    const webhookApiUrl = `${cleanApiUrl}/webhook/set/${config.instanceName}`;
-
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (config.apiKey) headers['apikey'] = config.apiKey;
-
-      const res = await fetch(webhookApiUrl, {
+      const res = await fetch('/api/whatsapp/proxy', {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          enabled: true,
-          url: webhookUrl,
-          by: "default",
-          events: [
-            "MESSAGES_UPSERT",
-            "MESSAGES_CREATE"
-          ]
+          endpoint: `/webhook/set/${config.instanceName}`,
+          method: 'POST',
+          headers: config.apiKey ? { 'apikey': config.apiKey } : {},
+          body: {
+            enabled: true,
+            url: webhookUrl,
+            by: "default",
+            events: [
+              "MESSAGES_UPSERT",
+              "MESSAGES_CREATE"
+            ]
+          }
         })
       });
 
@@ -306,7 +309,7 @@ export function WhatsAppIntegration({ defaultGeminiKey }: { defaultGeminiKey: st
     } catch (e: any) {
       setWebhookResult({ 
         success: false, 
-        message: `Houve um erro de rede/CORS: ${e?.message || e}. Você também pode configurar o webhook manualmente no gerenciador da Evolution apontando para: ${webhookUrl}` 
+        message: `Houve um erro: ${e?.message || e}. Você também pode configurar o webhook manualmente no gerenciador da Evolution apontando para: ${webhookUrl}` 
       });
     } finally {
       setIsConfiguringWebhook(false);
