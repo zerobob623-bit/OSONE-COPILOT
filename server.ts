@@ -527,6 +527,108 @@ Comentário de @${user}: "${text}"`;
     }
   });
 
+  // Endpoint de inteligência para preencher Dossiê com arquivo ou PDF de referência
+  app.post("/api/dossier/analyze", async (req, res) => {
+    try {
+      const { fileData, mimeType, questions, currentAnswers } = req.body;
+      if (!fileData) {
+        return res.status(400).json({ error: "Nenhum arquivo de referência foi enviado." });
+      }
+      if (!questions || !Array.isArray(questions)) {
+        return res.status(400).json({ error: "A lista de perguntas é necessária para alinhar o mapeamento." });
+      }
+
+      const apiKey = getSecretGeminiKey();
+      if (!apiKey) {
+        return res.status(400).json({ error: "A API Key do Gemini não está configurada no painel de Secrets. Por favor, adicione-a para habilitar análise de referência." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      // Prepare parts for Gemini based on MIME type
+      const parts: any[] = [];
+
+      if (mimeType === "application/pdf") {
+        parts.push({
+          inlineData: {
+            data: fileData, // Already expected to be base64 from client
+            mimeType: "application/pdf"
+          }
+        });
+      } else {
+        // Assume text file
+        try {
+          const decodedText = Buffer.from(fileData, 'base64').toString('utf8');
+          parts.push({
+            text: `DOCUMENTO DE REFERÊNCIA:\n\n${decodedText}`
+          });
+        } catch (errDec) {
+          // Fallback if decode fails, try passing as inline text direct
+          parts.push({
+            inlineData: {
+              data: fileData,
+              mimeType: mimeType || "text/plain"
+            }
+          });
+        }
+      }
+
+      // Add prompt with instructions and questions
+      const prompt = `
+Você é uma inteligência de elite integrada ao ecossistema OSONE.
+Analise cuidadosamente o documento de referência fornecido acima sobre o Criador/Usuário do OSONE.
+Sua missão é extrair e preencher as respostas do "Dossiê de Memória Íntima" com base UNICAMENTE nos fatos reais documentados na referência de forma natural, humana e direta, sem rodeios ou floreios artificiais.
+
+Aqui está o conjunto de perguntas e seus IDs numéricos:
+${JSON.stringify(questions.map((q: any) => ({ id: q.id, question: q.question })))}
+
+Respostas Atuais cadastradas (as respostas já fornecidas):
+${JSON.stringify(currentAnswers || {})}
+
+Instruções Cruciais:
+1. Extraia respostas precisas apenas para as perguntas cujas informações estejam claramente documentadas na referência fornecida.
+2. Não invente ou presuma fatos adicionais. Se a referência não tiver dados para responder a uma pergunta, ignore-a de volta (não mande resposta pra ela).
+3. Escreva respostas bem estruturadas, humanizadas, maduras, em primeira ou terceira pessoa (preferencialmente mantendo o estilo de notas pessoais, ex: "Mora em São Paulo, Brasil e tem 28 anos").
+4. Caso a pergunta já tenha uma resposta atual válida em 'Respostas Atuais', priorize a resposta atual e mantenha a consistência, a menos que a referência traga dados cruciais mais completos ou que preencham por completo uma lacuna vazia.
+5. Retorne os resultados obrigatoriamente no esquema JSON solicitado no responseSchema, onde as chaves são os IDs numéricos em formato de string (por exemplo, "1", "2") e os valores são as novas respostas extraídas.
+
+Retorne SOMENTE o objeto JSON conforme o esquema.
+`;
+
+      parts.push({ text: prompt });
+
+      // Call Gemini 3.5-flash with structured JSON response config
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: { parts },
+        config: {
+          responseMimeType: "application/json",
+          systemInstruction: "Você é um assistente cirúrgico de extração de dados pessoais. Analisa referências biográficas e preenche relatórios de forma factual, mantendo o estilo direto do usuário. Retorna JSON puro.",
+          temperature: 0.2,
+        },
+      });
+
+      const resultText = response.text?.trim() || "{}";
+      const parsedAnswers = JSON.parse(resultText);
+
+      res.json({
+        status: "success",
+        answers: parsedAnswers
+      });
+
+    } catch (e: any) {
+      console.error("Erro ao analisar dossiê de referência:", e);
+      res.status(500).json({ error: formatGeminiError(e) });
+    }
+  });
+
   // ====== NEURAL CONNECTION MEMORY SYNC ENDPOINTS ======
   // Choose safe paths in OS temp folder (writable in severless containers like Cloud Run)
   const SYNC_FILE_PATH = path.join(os.tmpdir(), "osone-sync-profiles.json");

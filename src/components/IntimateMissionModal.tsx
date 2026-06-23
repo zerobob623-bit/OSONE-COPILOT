@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Lock, Fingerprint, FileText, Download, CheckCircle, HelpCircle, Edit3, Trash2 } from 'lucide-react';
+import { X, Lock, Fingerprint, FileText, Download, CheckCircle, HelpCircle, Edit3, Trash2, Loader2, UploadCloud } from 'lucide-react';
 import { INTIMATE_QUESTIONS, IntimateQuestion } from '../App';
 
 interface IntimateMissionModalProps {
@@ -8,11 +8,19 @@ interface IntimateMissionModalProps {
   onClose: () => void;
   intimateAnswers: { [id: number]: string };
   onUpdateAnswer: (id: number, val: string) => void;
+  onUpdateBulkAnswers?: (answers: { [id: number]: string }) => void;
 }
 
-export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdateAnswer }: IntimateMissionModalProps) {
+export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdateAnswer, onUpdateBulkAnswers }: IntimateMissionModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>("Informações Básicas e Identidade");
   const [filterType, setFilterType] = useState<'all' | 'answered' | 'pending'>('all');
+  
+  // Reference Document Upload States
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const answeredCount = Object.keys(intimateAnswers).filter(id => intimateAnswers[Number(id)]?.trim() !== '').length;
   const totalCount = INTIMATE_QUESTIONS.length;
@@ -21,6 +29,119 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdat
 
   // Group questions by category
   const categories = Array.from(new Set(INTIMATE_QUESTIONS.map(q => q.category)));
+
+  // Process reference document uploading
+  const processReferenceFile = async (file: File) => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisStatus("Decodificando arquivo biográfico...");
+    
+    try {
+      const reader = new FileReader();
+      
+      const filePromise = new Promise<{ base64: string; mimeType: string }>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve({
+            base64,
+            mimeType: file.type || "text/plain"
+          });
+        };
+        reader.onerror = () => reject(new Error("Falha ao ler o arquivo biográfico físico."));
+        reader.readAsDataURL(file);
+      });
+      
+      const { base64, mimeType } = await filePromise;
+      
+      setAnalysisStatus("Sincronizando com as engrenagens neurais...");
+      
+      const response = await fetch('/api/dossier/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: base64,
+          mimeType,
+          questions: INTIMATE_QUESTIONS,
+          currentAnswers: intimateAnswers
+        })
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Falha na análise automatizada do dossiê.");
+      }
+      
+      setAnalysisStatus("Mapeando sinapses novas no OSONE local...");
+      const data = await response.json();
+      
+      if (data.status === "success" && data.answers) {
+        const returnedAnswers = data.answers;
+        
+        const formattedNewAnswers: { [id: number]: string } = {};
+        let filledCount = 0;
+        
+        Object.entries(returnedAnswers).forEach(([key, val]) => {
+          const id = Number(key);
+          const valStr = String(val).trim();
+          
+          if (!isNaN(id) && id >= 1 && id <= 55 && valStr) {
+            // Fill empty fields only (as requested: "preencher caso falte, ou preencher automaticamente se dossiê limpo")
+            if (!intimateAnswers[id] || intimateAnswers[id].trim() === "") {
+              formattedNewAnswers[id] = valStr;
+              filledCount++;
+            }
+          }
+        });
+        
+        if (filledCount > 0) {
+          if (onUpdateBulkAnswers) {
+            onUpdateBulkAnswers(formattedNewAnswers);
+          } else {
+            Object.entries(formattedNewAnswers).forEach(([id, val]) => {
+              onUpdateAnswer(Number(id), val);
+            });
+          }
+          alert(`🧬 Mapeamento com sucesso! ${filledCount} novas respostas integradas às lacunas do seu Dossiê!`);
+        } else {
+          alert(`📄 Documento analisado! Todas as informações extraídas já estavam preenchidas no seu Dossiê.`);
+        }
+      } else {
+        throw new Error("Formato inválido de resposta do servidor neural.");
+      }
+      
+    } catch (err: any) {
+      console.error(err);
+      setAnalysisError(err.message || "Houve uma anomalia ao processar a referência.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processReferenceFile(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+  
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+  
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await processReferenceFile(file);
+    }
+  };
 
   const handleDownloadDossier = () => {
     // Generate beautiful Dossier Markdown content
@@ -115,12 +236,58 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdat
               </div>
             </div>
 
-            <div className="w-full md:w-auto shrink-0 flex items-center justify-end">
+            <div className="w-full md:w-auto shrink-0 flex flex-wrap items-center justify-end gap-2">
+              {/* Usar Dossiê de referência - Sleek, Compact Pill */}
+              <div 
+                className={`relative flex items-center gap-1.5 p-1.5 px-3 rounded-full border transition-all ${
+                  dragOver 
+                    ? "bg-rose-500/10 border-rose-500/30 ring-1 ring-rose-500/20 animate-pulse" 
+                    : "bg-zinc-950/40 border-white/5 hover:border-white/15"
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                {isAnalyzing ? (
+                  <div className="flex items-center gap-1.5">
+                    <Loader2 size={12} className="text-zinc-400 animate-spin" />
+                    <span className="text-[9.5px] text-rose-400 font-mono animate-pulse">{analysisStatus}</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 text-zinc-300 hover:text-white font-bold font-mono text-[10px] uppercase tracking-widest transition-all cursor-pointer"
+                  >
+                    <UploadCloud size={12} className="text-rose-450" />
+                    <span>Usar Referência</span>
+                  </button>
+                )}
+
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".pdf,.txt,.md,.json" 
+                  className="hidden" 
+                />
+              </div>
+
+              {analysisError && (
+                <div 
+                  onClick={() => setAnalysisError(null)}
+                  className="text-[9px] text-red-400 font-mono bg-red-950/30 border border-red-500/20 px-2.5 py-1.5 rounded-full cursor-pointer animate-fade-in flex items-center gap-1 shrink-0"
+                  title="Clique para limpar"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                  <span>Erro: {analysisError.length > 30 ? analysisError.substring(0, 30) + "..." : analysisError}</span>
+                </div>
+              )}
+
               <button 
                 onClick={handleDownloadDossier}
-                className="w-full md:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 font-semibold text-xs rounded-full border border-rose-400/20 transition-all text-white shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:scale-[1.02]"
+                className="w-full md:w-auto flex items-center justify-center gap-2 px-5 py-2 bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 font-semibold text-xs rounded-full border border-rose-400/20 transition-all text-white shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:scale-[1.02]"
               >
-                <Download size={15} />
+                <Download size={14} />
                 <span>{isMissionComplete ? "BAIXAR DOSSIÊ COMPLETO" : "EXPORTAR DOSSIÊ PARCIAL"}</span>
               </button>
             </div>
@@ -156,6 +323,7 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdat
                   <span className="text-zinc-300 font-semibold">Criptografia Baseada na Web</span>
                 </div>
               </div>
+
 
               {categories.map((category, idx) => {
                 const qInCat = INTIMATE_QUESTIONS.filter(q => q.category === category);

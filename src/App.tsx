@@ -12622,6 +12622,13 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
             return up;
           });
         }}
+        onUpdateBulkAnswers={(newAnswers) => {
+          setIntimateAnswers(prev => {
+            const up = { ...prev, ...newAnswers };
+            localStorage.setItem('osone_intimate_mission_answers', JSON.stringify(up));
+            return up;
+          });
+        }}
       />
 
       <ProfileModal
