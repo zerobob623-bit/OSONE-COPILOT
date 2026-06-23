@@ -4,7 +4,7 @@ import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, U
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
-export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogin }: { 
+export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogin, onOpenProfileModal }: { 
   isOpen: boolean; 
   onClose: () => void;
   mode: WorkspaceMode;
@@ -12,6 +12,7 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
   user?: any;
   onLogout?: () => void;
   onLogin?: () => void;
+  onOpenProfileModal?: () => void;
 }) => (
   <AnimatePresence>
     {isOpen && (
@@ -179,24 +180,31 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
 
           <div className="mt-auto pt-6 border-t border-white/[0.03]">
             {user ? (
-              <div className="mb-4 p-4 rounded-3xl bg-emerald-500/[0.02] border border-emerald-500/10 flex items-center justify-between gap-3">
+              <div 
+                onClick={onOpenProfileModal}
+                className="mb-4 p-4 rounded-3xl bg-cyan-500/[0.01] hover:bg-cyan-500/[0.04] border border-cyan-500/10 hover:border-cyan-500/25 flex items-center justify-between gap-3 cursor-pointer transition-all min-w-0"
+              >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full border border-emerald-500/20 overflow-hidden bg-zinc-900 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-full border border-cyan-500/20 overflow-hidden bg-zinc-900 flex items-center justify-center shrink-0">
                     {user.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
-                      <span className="text-emerald-400 font-bold text-xs uppercase">{user.displayName.slice(0, 2)}</span>
+                      <span className="text-cyan-400 font-bold text-xs uppercase">{user.displayName.slice(0, 2)}</span>
                     )}
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] font-bold text-her-ink/80 truncate leading-tight">{user.displayName}</p>
                     <p className="text-[8px] text-zinc-400 truncate mt-0.5">{user.email}</p>
-                    <p className="text-[7px] text-emerald-400 mt-1 uppercase tracking-wider font-semibold">Firebase Secure</p>
+                    {user.isLocal ? (
+                      <p className="text-[7px] text-cyan-400 mt-1 uppercase tracking-wider font-semibold">Cérebro Local</p>
+                    ) : (
+                      <p className="text-[7px] text-emerald-400 mt-1 uppercase tracking-wider font-semibold">Firebase Secure</p>
+                    )}
                   </div>
                 </div>
                 {onLogout && (
                   <button 
-                    onClick={onLogout}
+                    onClick={(e) => { e.stopPropagation(); onLogout(); }}
                     className="p-1.5 hover:bg-rose-500/10 rounded-lg text-rose-400 hover:text-rose-300 transition-all cursor-pointer"
                     title="Desconectar"
                   >
@@ -205,7 +213,10 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 )}
               </div>
             ) : (
-              <div className="mb-4 p-4 rounded-3xl bg-zinc-500/[0.02] border border-zinc-500/10 flex items-center justify-between gap-3 text-left">
+              <div 
+                onClick={onOpenProfileModal}
+                className="mb-4 p-4 rounded-3xl bg-zinc-500/[0.02] hover:bg-white/[0.02] border border-zinc-500/10 flex items-center justify-between gap-3 text-left cursor-pointer transition-all"
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-zinc-400 font-bold text-xs select-none">
                     ?
@@ -215,9 +226,9 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                     <p className="text-[8px] text-zinc-500 mt-0.5 uppercase tracking-wide">Sem Identidade</p>
                   </div>
                 </div>
-                {onLogin && (
+                {onOpenProfileModal && (
                   <button 
-                    onClick={onLogin}
+                    onClick={(e) => { e.stopPropagation(); onOpenProfileModal(); }}
                     className="py-1 px-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border border-cyan-500/25 cursor-pointer"
                   >
                     Entrar

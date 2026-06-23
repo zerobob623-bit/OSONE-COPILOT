@@ -14,6 +14,7 @@ export interface User {
   displayName: string;
   email: string;
   photoURL?: string;
+  isLocal?: boolean;
 }
 
 export interface ApiKeys {

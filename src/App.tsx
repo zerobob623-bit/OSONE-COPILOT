@@ -72,6 +72,7 @@ import { FileTreeItem } from './components/FileTreeItem';
 import { InfinityLogo } from './components/InfinityLogo';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
+import { ProfileModal } from './components/ProfileModal';
 import { IntimateMissionModal } from './components/IntimateMissionModal';
 import { CodePreview } from './components/CodePreview';
 import { VoiceSwitcher } from './components/VoiceSwitcher';
@@ -621,12 +622,27 @@ const getFriendlyModeName = (mode: WorkspaceMode): string => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('osone_last_active_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const isCloudSyncReady = useRef<boolean>(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
-  const [isGuestMode, setIsGuestMode] = useState(true);
+  const [isGuestMode, setIsGuestMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('osone_last_active_user');
+      return !saved;
+    } catch {
+      return true;
+    }
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [clickVisual, setClickVisual] = useState<{ x: number; y: number; visible: boolean }>({ x: 0, y: 0, visible: false });
   const [showUi, setShowUi] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2796,6 +2812,113 @@ export default function App() {
     }
   };
 
+  const switchUser = async (targetUser: User | null) => {
+    isCloudSyncReady.current = false;
+    setUser(targetUser);
+    
+    if (targetUser) {
+      setIsGuestMode(false);
+      localStorage.setItem('osone_last_active_user', JSON.stringify(targetUser));
+      
+      const userPrefix = `osone_user_${targetUser.uid}_`;
+      
+      // Load AI profile
+      const savedProfile = localStorage.getItem(userPrefix + 'ai_profile') || localStorage.getItem('osone_ai_profile');
+      if (savedProfile) {
+        setAiProfile(JSON.parse(savedProfile));
+      } else {
+        setAiProfile({
+          name: 'OSONE',
+          personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+          writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+        });
+      }
+      
+      // Load health data
+      const savedHealth = localStorage.getItem(userPrefix + 'health_data') || localStorage.getItem('osone_health_data');
+      if (savedHealth) {
+        setHealthData(JSON.parse(savedHealth));
+      } else {
+        setHealthData({ sleepPoints: 0, sleepHours: 0, steps: 0, calories: 0, heartRate: 0, mindfulnessMinutes: 0 });
+      }
+      
+      // Load chat history
+      const dbChat = await getMemoryItem<Message[]>(userPrefix + 'chat_history', []);
+      if (dbChat && dbChat.length > 0) {
+        setChatHistory(dbChat);
+      } else {
+        const savedGlobalChat = localStorage.getItem('osone_chat_history');
+        if (savedGlobalChat) {
+          try {
+            setChatHistory(JSON.parse(savedGlobalChat));
+          } catch {
+            setChatHistory([]);
+          }
+        } else {
+          setChatHistory([
+            {
+              id: "welcome",
+              role: "assistant",
+              content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+            }
+          ]);
+        }
+      }
+      
+      // Load answers
+      const dbAnswers = await getMemoryItem<{ [id: number]: string }>(userPrefix + 'intimate_mission_answers', {});
+      if (dbAnswers && Object.keys(dbAnswers).length > 0) {
+        setIntimateAnswers(dbAnswers);
+      } else {
+        const savedGlobalAnswers = localStorage.getItem('osone_intimate_mission_answers');
+        if (savedGlobalAnswers) {
+          try {
+            setIntimateAnswers(JSON.parse(savedGlobalAnswers));
+          } catch {
+            setIntimateAnswers({});
+          }
+        } else {
+          setIntimateAnswers({});
+        }
+      }
+      
+      // Load long term memory
+      const dbLongMemory = await getMemoryItem<string>(userPrefix + 'long_term_memory', '');
+      if (dbLongMemory) {
+        setLongTermMemory(dbLongMemory);
+      } else {
+        setLongTermMemory(localStorage.getItem('osone_long_term_memory') || '');
+      }
+      
+      if (!targetUser.isLocal) {
+        await loadUserDataFromCloud(targetUser);
+      } else {
+        setTimeout(() => {
+          isCloudSyncReady.current = false;
+        }, 850);
+        addNotification(`Perfil Local: Bem-vindo de volta, ${targetUser.displayName}!`, "success");
+      }
+    } else {
+      setIsGuestMode(true);
+      localStorage.removeItem('osone_last_active_user');
+      setChatHistory([
+        {
+          id: "welcome",
+          role: "assistant",
+          content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+        }
+      ]);
+      setIntimateAnswers({});
+      setLongTermMemory('');
+      setAiProfile({
+        name: 'OSONE',
+        personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+        writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+      });
+      setHealthData({ sleepPoints: 0, sleepHours: 0, steps: 0, calories: 0, heartRate: 0, mindfulnessMinutes: 0 });
+    }
+  };
+
   const handleLogin = async () => {
     try {
       setIsAuthLoading(true);
@@ -2806,10 +2929,8 @@ export default function App() {
         email: result.user.email || '',
         photoURL: result.user.photoURL || undefined
       };
-      setUser(userObj);
-      setIsGuestMode(false);
+      await switchUser(userObj);
       addNotification(`Bem-vindo, ${userObj.displayName}! Login realizado via Gmail.`, "success");
-      await loadUserDataFromCloud(userObj);
     } catch (err: any) {
       console.error("Erro no login com Google/Gmail:", err);
       if (err.code !== "auth/popup-closed-by-user") {
@@ -2824,10 +2945,11 @@ export default function App() {
     try {
       setIsAuthLoading(true);
       isCloudSyncReady.current = false;
-      await signOut(auth);
-      setUser(null);
-      setIsGuestMode(true);
-      addNotification("Conexão com Firebase encerrada.", "info");
+      if (user && !user.isLocal) {
+        await signOut(auth);
+      }
+      await switchUser(null);
+      addNotification("Sessão encerrada.", "info");
     } catch (err: any) {
       console.error("Erro ao fazer logout:", err);
       addNotification("Erro ao encerrar sessão.", "error");
@@ -2851,8 +2973,20 @@ export default function App() {
         setIsGuestMode(false);
         loadUserDataFromCloud(userObj);
       } else {
-        setUser(null);
-        setIsGuestMode(true);
+        setUser(prev => {
+          if (prev && prev.isLocal) return prev;
+          return null;
+        });
+        setIsGuestMode(prev => {
+          const saved = localStorage.getItem('osone_last_active_user');
+          if (saved) {
+            try {
+              const u = JSON.parse(saved);
+              if (u && u.isLocal) return false;
+            } catch {}
+          }
+          return true;
+        });
         isCloudSyncReady.current = false;
       }
       setIsAuthLoading(false);
@@ -2861,15 +2995,22 @@ export default function App() {
   }, []);
 
   const syncProfileToCloud = async (updatedProfile?: AIProfile, updatedHealth?: any) => {
+    const userPrefix = user ? `osone_user_${user.uid}_` : '';
     if (updatedProfile) {
       localStorage.setItem('osone_ai_profile', JSON.stringify(updatedProfile));
-      if (user && isCloudSyncReady.current) {
+      if (userPrefix) {
+        localStorage.setItem(userPrefix + 'ai_profile', JSON.stringify(updatedProfile));
+      }
+      if (user && !user.isLocal && isCloudSyncReady.current) {
         syncUserDataToCloud(user, { aiProfile: updatedProfile });
       }
     }
     if (updatedHealth) {
       localStorage.setItem('osone_health_data', JSON.stringify(updatedHealth));
-      if (user && isCloudSyncReady.current) {
+      if (userPrefix) {
+        localStorage.setItem(userPrefix + 'health_data', JSON.stringify(updatedHealth));
+      }
+      if (user && !user.isLocal && isCloudSyncReady.current) {
         syncUserDataToCloud(user, { healthData: updatedHealth });
       }
     }
@@ -2898,16 +3039,30 @@ export default function App() {
   });
 
   useEffect(() => {
-    setMemoryItem('osone_intimate_mission_answers', intimateAnswers);
-    if (user && isCloudSyncReady.current) {
-      syncUserDataToCloud(user, { intimateAnswers });
+    if (user) {
+      const userPrefix = `osone_user_${user.uid}_`;
+      setMemoryItem(userPrefix + 'intimate_mission_answers', intimateAnswers);
+      localStorage.setItem(userPrefix + 'intimate_mission_answers', JSON.stringify(intimateAnswers));
+      if (!user.isLocal && isCloudSyncReady.current) {
+        syncUserDataToCloud(user, { intimateAnswers });
+      }
+    } else {
+      setMemoryItem('osone_intimate_mission_answers', intimateAnswers);
+      localStorage.setItem('osone_intimate_mission_answers', JSON.stringify(intimateAnswers));
     }
   }, [intimateAnswers, user]);
 
   useEffect(() => {
-    setMemoryItem('osone_long_term_memory', longTermMemory);
-    if (user && isCloudSyncReady.current) {
-      syncUserDataToCloud(user, { longTermMemory });
+    if (user) {
+      const userPrefix = `osone_user_${user.uid}_`;
+      setMemoryItem(userPrefix + 'long_term_memory', longTermMemory);
+      localStorage.setItem(userPrefix + 'long_term_memory', longTermMemory);
+      if (!user.isLocal && isCloudSyncReady.current) {
+        syncUserDataToCloud(user, { longTermMemory });
+      }
+    } else {
+      setMemoryItem('osone_long_term_memory', longTermMemory);
+      localStorage.setItem('osone_long_term_memory', longTermMemory);
     }
   }, [longTermMemory, user]);
 
@@ -2993,9 +3148,16 @@ export default function App() {
 
   useEffect(() => {
     chatHistoryRef.current = chatHistory;
-    setMemoryItem('osone_chat_history', chatHistory);
-    if (user && isCloudSyncReady.current) {
-      syncUserDataToCloud(user, { chatHistory });
+    if (user) {
+      const userPrefix = `osone_user_${user.uid}_`;
+      setMemoryItem(userPrefix + 'chat_history', chatHistory);
+      localStorage.setItem(userPrefix + 'chat_history', JSON.stringify(chatHistory));
+      if (!user.isLocal && isCloudSyncReady.current) {
+        syncUserDataToCloud(user, { chatHistory });
+      }
+    } else {
+      setMemoryItem('osone_chat_history', chatHistory);
+      localStorage.setItem('osone_chat_history', JSON.stringify(chatHistory));
     }
   }, [chatHistory, user]);
 
@@ -9233,20 +9395,38 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
 
                         <div className="space-y-1.5 text-left">
                           <div className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-1 px-1">CONEXÃO SECURE</div>
-                          <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg p-2 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Autenticado via Firebase</span>
-                          </div>
+                          {user.isLocal ? (
+                            <div className="text-[10px] bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-lg p-2 flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                              <span>Cérebro Local Ativo</span>
+                            </div>
+                          ) : (
+                            <div className="text-[10px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg p-2 flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>Nuvem Ativa via Gmail</span>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setIsProfileModalOpen(true);
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full py-2 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                          >
+                            <UserIcon size={13} />
+                            <span>Alternar / Gerenciar</span>
+                          </button>
                           
                           <button
                             onClick={() => {
                               handleLogout();
                               setIsProfileOpen(false);
                             }}
-                            className="w-full mt-2 py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                            className="w-full mt-1.5 py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
                           >
                             <LogOut size={13} />
-                            <span>Desconectar Gmail</span>
+                            <span>Desconectar Perfil</span>
                           </button>
                         </div>
                         {/* Popover arrow */}
@@ -9258,12 +9438,12 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               </div>
             ) : (
               <button 
-                onClick={handleLogin}
+                onClick={() => setIsProfileModalOpen(true)}
                 className="p-1 px-3 md:py-1.5 border border-cyan-500/40 hover:border-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 text-[10px] font-semibold transition-all flex items-center gap-2 rounded-full cursor-pointer shadow-[0_0_15px_rgba(6,182,212,0.15)]"
-                title="Fazer Login via Google/Gmail"
+                title="Acessar Perfis Locais ou Gmail"
               >
-                <span className="w-4 h-4 rounded-full bg-white flex items-center justify-center text-[10px] font-black text-zinc-950 font-sans leading-none shadow-sm">G</span>
-                <span className="hidden md:inline text-[8px] tracking-[0.2em] leading-none font-bold uppercase">Conectar Gmail</span>
+                <UserIcon size={12} className="text-cyan-400" />
+                <span className="hidden md:inline text-[8px] tracking-[0.2em] leading-none font-bold uppercase">Entrar / Perfis</span>
               </button>
             )}
           </div>
@@ -12316,6 +12496,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         user={user}
         onLogout={handleLogout}
         onLogin={handleLogin}
+        onOpenProfileModal={() => setIsProfileModalOpen(true)}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 
@@ -12441,6 +12622,16 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
             return up;
           });
         }}
+      />
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentUser={user}
+        onSwitchUser={switchUser}
+        onGoogleLogin={handleLogin}
+        onLogout={handleLogout}
+        isAuthLoading={isAuthLoading}
       />
 
       <SkeletonBrainPopup 

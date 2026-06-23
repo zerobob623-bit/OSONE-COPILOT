@@ -10,9 +10,23 @@ import {
 import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
-const app = initializeApp(firebaseConfig);
+// Merge JSON settings with explicit environment variables (e.g. on Vercel or GitHub builds)
+const mergedConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfig.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfig.measurementId,
+};
+
+const app = initializeApp(mergedConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Use custom Database ID if specified either on Vercel environment vars or in config file
+const dbId = import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfig.firestoreDatabaseId;
+export const db = dbId ? getFirestore(app, dbId) : getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Configuro escopos extras de Gmail/Profile se necessário
