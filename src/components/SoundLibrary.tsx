@@ -713,11 +713,19 @@ export const SoundLibrary = ({
               {playlists.map(pl => {
                 const isPlayingPl = playingPlaylistId === pl.id;
                 return (
-                  <button
+                  <div
                     key={pl.id}
                     onClick={() => setActivePlaylistId(pl.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setActivePlaylistId(pl.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                     className={cn(
-                      "w-full p-3 rounded-lg text-left text-xs flex items-center justify-between transition-all group",
+                      "w-full p-3 rounded-lg text-left text-xs flex items-center justify-between transition-all group cursor-pointer select-none focus:outline-none focus:bg-white/[0.04]",
                       activePlaylistId === pl.id 
                         ? "bg-white/[0.06] text-white font-medium border-l-2 border-her-accent" 
                         : "text-her-muted hover:bg-white/[0.02] border-l-2 border-transparent"
@@ -731,13 +739,13 @@ export const SoundLibrary = ({
                       <span className="text-[9px] bg-white/[0.05] px-1.5 py-0.5 rounded-full">{pl.soundIds.length}</span>
                       <button 
                         onClick={(e) => handleDeletePlaylist(pl.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-all text-her-muted"
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-all text-her-muted cursor-pointer"
                         title="Excluir Playlist"
                       >
                         <Trash2 size={11} />
                       </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
 
