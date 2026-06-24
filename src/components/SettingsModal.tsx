@@ -526,18 +526,71 @@ export const SettingsModal = ({
                         />
                       </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">ID da Voz Clone (Voice ID)</label>
-                          <span className="text-[9.5px] text-her-muted/40 font-mono">Rachel default</span>
+                      <div className="bg-white/[0.01] border border-white/[0.05] p-4 rounded-3xl space-y-4">
+                        <div className="flex flex-col gap-2">
+                          <label className="block text-[10px] uppercase tracking-widest text-her-muted font-bold select-none text-left">Selecione a Voz Ativa (ElevenLabs)</label>
+                          <div className="grid grid-cols-3 gap-2 p-1 bg-black/40 rounded-2xl border border-white/[0.05]">
+                            {(['voice1', 'voice2', 'voice3'] as const).map((v, i) => (
+                              <button
+                                key={v}
+                                type="button"
+                                onClick={() => setKeys({ ...keys, elevenLabsActiveVoice: v })}
+                                className={cn(
+                                  "py-2 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer",
+                                  (keys.elevenLabsActiveVoice || 'voice1') === v 
+                                    ? "bg-rose-500/10 text-rose-400 border border-rose-500/30 font-bold" 
+                                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
+                                )}
+                              >
+                                Voz {i + 1}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <input 
-                          type="text"
-                          value={keys.elevenLabsVoiceId || ''}
-                          onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
-                          className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-3.5 focus:outline-none focus:border-her-accent/30 transition-all text-sm font-mono text-zinc-300 placeholder:text-her-muted/25"
-                          placeholder="Ex: 21m00Tcm4TlvDq8ikWAM..."
-                        />
+
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="block text-[10px] uppercase tracking-widest text-zinc-400 font-bold select-none text-left">ID da Voz 1 (Principal)</label>
+                              <span className="text-[9px] text-her-muted/40 font-mono">Rachel se em branco</span>
+                            </div>
+                            <input 
+                              type="text"
+                              value={keys.elevenLabsVoiceId || ''}
+                              onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId: e.target.value })}
+                              className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-3 focus:outline-none focus:border-rose-500/30 transition-all text-xs font-mono text-zinc-300 placeholder:text-her-muted/25"
+                              placeholder="Ex: 21m00Tcm4TlvDq8ikWAM..."
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="block text-[10px] uppercase tracking-widest text-zinc-400 font-bold select-none text-left">ID da Voz 2</label>
+                              <span className="text-[9px] text-her-muted/40 font-mono">Opcional</span>
+                            </div>
+                            <input 
+                              type="text"
+                              value={keys.elevenLabsVoiceId2 || ''}
+                              onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId2: e.target.value })}
+                              className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-3 focus:outline-none focus:border-rose-500/30 transition-all text-xs font-mono text-zinc-300 placeholder:text-her-muted/25"
+                              placeholder="ID da segunda voz clone..."
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="block text-[10px] uppercase tracking-widest text-zinc-400 font-bold select-none text-left">ID da Voz 3</label>
+                              <span className="text-[9px] text-her-muted/40 font-mono">Opcional</span>
+                            </div>
+                            <input 
+                              type="text"
+                              value={keys.elevenLabsVoiceId3 || ''}
+                              onChange={(e) => setKeys({ ...keys, elevenLabsVoiceId3: e.target.value })}
+                              className="w-full bg-white/[0.02] border border-white/[0.05] rounded-2xl px-4 py-3 focus:outline-none focus:border-rose-500/30 transition-all text-xs font-mono text-zinc-300 placeholder:text-her-muted/25"
+                              placeholder="ID da terceira voz clone..."
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       <button

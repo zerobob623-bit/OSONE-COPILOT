@@ -1265,13 +1265,20 @@ ${processedChunk}`;
     }
   });
 
-  // Helper to run content generation with automated 503 / UNAVAILABLE fallbacks
+  // Helper to run content generation with automated fallbacks
   const generateContentWithFallback = async (ai: GoogleGenAI, params: { model: string; contents: any; config?: any }) => {
-    const primaryModel = params.model || "gemini-3.5-flash";
-    const modelsToTry = [primaryModel, "gemini-3.1-flash-lite", "gemini-2.5-flash"];
+    let primaryModel = params.model || "gemini-2.5-flash";
+    if (primaryModel === "gemini-3.5-flash" || primaryModel.includes("3.5")) {
+      primaryModel = "gemini-2.5-flash";
+    }
+    
+    const modelsToTry = [primaryModel, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-pro"];
+    
+    // Remove duplicates keeping order
+    const uniqueModels = Array.from(new Set(modelsToTry));
     
     let lastError: any = null;
-    for (const modelName of modelsToTry) {
+    for (const modelName of uniqueModels) {
       try {
         console.log(`Trying Gemini content generation with model: ${modelName}`);
         const response = await ai.models.generateContent({
@@ -1282,23 +1289,7 @@ ${processedChunk}`;
         return response;
       } catch (err: any) {
         lastError = err;
-        const errMsg = String(err?.message || "");
-        const errCode = String(err?.status || err?.code || err?.message || "");
-        const errString = errMsg + " " + errCode + " " + JSON.stringify(err || {});
-        
-        const is503 = errString.includes("503") || 
-                      errString.includes("UNAVAILABLE") || 
-                      errString.toLowerCase().includes("high demand") ||
-                      errString.toLowerCase().includes("temporary") ||
-                      errString.toLowerCase().includes("temporarily");
-        
-        if (is503) {
-          console.warn(`Model ${modelName} is temporarily unavailable (503 / High Demand). Trying next fallback...`);
-          continue;
-        } else {
-          // If it's a critical non-503 error, throw immediately (abort tier attempt)
-          throw err;
-        }
+        console.warn(`Model ${modelName} failed to generate content:`, err?.message || err);
       }
     }
     throw lastError;

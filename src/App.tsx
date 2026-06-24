@@ -1337,6 +1337,8 @@ export default function App() {
   });
   const [isVoiceSwitcherOpen, setIsVoiceSwitcherOpen] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [isConfirmingOptimize, setIsConfirmingOptimize] = useState(false);
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
     try {
       const saved = localStorage.getItem('osone_sound_library');
@@ -1619,12 +1621,15 @@ export default function App() {
         googleHomeToken: '',
         elevenLabsApiKey: '',
         elevenLabsVoiceId: '',
+        elevenLabsVoiceId2: '',
+        elevenLabsVoiceId3: '',
+        elevenLabsActiveVoice: 'voice1',
         elevenLabsStability: 0.5,
         elevenLabsSimilarityBoost: 0.75,
         elevenLabsStyle: 0.0,
         elevenLabsSpeakerBoost: true,
         elevenLabsModel: 'eleven_multilingual_v2',
-        geminiModel: 'gemini-3.5-flash',
+        geminiModel: 'gemini-2.5-flash',
       });
       localStorage.setItem('osone_v4_factory_restored_v2_clean', 'true');
     }
@@ -1645,12 +1650,15 @@ export default function App() {
       googleHomeToken: '',
       elevenLabsApiKey: '',
       elevenLabsVoiceId: '',
+      elevenLabsVoiceId2: '',
+      elevenLabsVoiceId3: '',
+      elevenLabsActiveVoice: 'voice1',
       elevenLabsStability: 0.5,
       elevenLabsSimilarityBoost: 0.75,
       elevenLabsStyle: 0.0,
       elevenLabsSpeakerBoost: true,
       elevenLabsModel: 'eleven_multilingual_v2',
-      geminiModel: 'gemini-3.5-flash',
+      geminiModel: 'gemini-2.5-flash',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -1660,6 +1668,13 @@ export default function App() {
     }
     return defaultKeys;
   });
+
+  const getActiveElevenLabsVoiceId = (): string => {
+    const active = apiKeys.elevenLabsActiveVoice || 'voice1';
+    if (active === 'voice2') return apiKeys.elevenLabsVoiceId2 || apiKeys.elevenLabsVoiceId || '';
+    if (active === 'voice3') return apiKeys.elevenLabsVoiceId3 || apiKeys.elevenLabsVoiceId || '';
+    return apiKeys.elevenLabsVoiceId || '';
+  };
 
   useEffect(() => {
     const checkServerQuota = async () => {
@@ -2298,7 +2313,7 @@ export default function App() {
           clientApiKey: apiKeys.gemini || '',
           voice: targetVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsVoiceId: getActiveElevenLabsVoiceId(),
           elevenLabsStability: apiKeys.elevenLabsStability,
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
@@ -2447,7 +2462,7 @@ export default function App() {
             clientApiKey: apiKeys.gemini || '',
             voice: targetVoice,
             elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-            elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+            elevenLabsVoiceId: getActiveElevenLabsVoiceId(),
             elevenLabsStability: apiKeys.elevenLabsStability,
             elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
             elevenLabsStyle: apiKeys.elevenLabsStyle,
@@ -2559,7 +2574,7 @@ export default function App() {
           clientApiKey: apiKeys.gemini || '',
           voice: targetVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsVoiceId: getActiveElevenLabsVoiceId(),
           elevenLabsStability: apiKeys.elevenLabsStability,
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
@@ -3394,6 +3409,10 @@ Escreva um novo retorno. Comece expressando a pancada física com dor bem-humora
   const [searchPopups, setSearchPopups] = useState<SearchPopupItem[]>([]);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const isSpeakingRef = useRef(false);
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
   const [liveState, setLiveState] = useState<LiveState>({ status: 'idle' });
   const liveStateRef = useRef<LiveState>({ status: 'idle' });
   useEffect(() => {
@@ -4288,19 +4307,7 @@ ${isBad
     audioProcessorRef.current?.stopRecording?.();
     audioPlayerRef.current?.stop?.();
     
-    const geminiKey = apiKeys.gemini || '';
-    const elApiKey = apiKeys.elevenLabsApiKey || '';
-    if (!geminiKey.trim()) {
-      addNotification("Por favor, insira sua chave API do Gemini em 'Ajustes & Perfil' para iniciar.", "error");
-      setWorkspaceMode('aural_control');
-      return;
-    }
-    if (!elApiKey.trim()) {
-      addNotification("Por favor, insira sua chave API da ElevenLabs em 'Ajustes & Perfil' para iniciar.", "error");
-      setWorkspaceMode('aural_control');
-      return;
-    }
-
+    // Permitimos tentar iniciar usando as credenciais e chaves do ambiente do servidor
     setLiveState({ status: 'connected' }); // ← seta DEPOIS de limpar
     setIsElevenLabsLiveActive(true);
     isElevenLabsLiveActiveRef.current = true;
@@ -4331,7 +4338,7 @@ ${isBad
           clientApiKey: apiKeys.gemini || '',
           voice: selectedVoice === 'Scarlet' ? 'Fenrir' : selectedVoice,
           elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: apiKeys.elevenLabsVoiceId || '',
+          elevenLabsVoiceId: getActiveElevenLabsVoiceId(),
           elevenLabsStability: apiKeys.elevenLabsStability,
           elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
           elevenLabsStyle: apiKeys.elevenLabsStyle,
@@ -4448,36 +4455,27 @@ ${isBad
     
     rec.onresult = (event: any) => {
       if (elevenLabsStateRef.current !== 'listening') {
-        lastProcessedResultIndexRef.current = event.results.length;
-        accumulatedTranscriptRef.current = "";
         return;
       }
       
-      let interimTranscript = "";
-      let finalTranscript = "";
-      
-      for (let i = Math.max(lastProcessedResultIndexRef.current, event.resultIndex); i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; ++i) {
+        fullTranscript += event.results[i][0].transcript;
       }
       
-      const currentText = (finalTranscript || interimTranscript).trim();
+      const currentText = fullTranscript.trim();
       if (currentText) {
         accumulatedTranscriptRef.current = currentText;
         setVoiceTranscript(currentText);
         
-        // VAD Inteligente: reseta temporizador e processa com silêncio de 1100ms
+        // VAD Inteligente: reseta temporizador e envia após 1000ms de silêncio
         if (elevenLabsSilenceTimeoutRef.current) {
           clearTimeout(elevenLabsSilenceTimeoutRef.current);
         }
         
         elevenLabsSilenceTimeoutRef.current = setTimeout(() => {
-          lastProcessedResultIndexRef.current = event.results.length;
           triggerElevenLabsTurn();
-        }, 1100);
+        }, 1000);
       }
     };
     
@@ -4516,11 +4514,22 @@ ${isBad
     
     if (!finalText) return;
     
+    // Parar reconhecimento imediatamente para evitar eco ou ruídos enquanto processa a resposta
+    if (elevenLabsRecognitionRef.current) {
+      try {
+        elevenLabsRecognitionRef.current.onstart = null;
+        elevenLabsRecognitionRef.current.onresult = null;
+        elevenLabsRecognitionRef.current.onerror = null;
+        elevenLabsRecognitionRef.current.onend = null;
+        elevenLabsRecognitionRef.current.stop();
+      } catch (_) {}
+      elevenLabsRecognitionRef.current = null;
+    }
+    
     elevenLabsStateRef.current = 'thinking';
     setIsListening(false);
     setIsTranscribing(true);
     
-    // Mantém o microfone ativo em background. O estado 'thinking' garante que qualquer áudio capturado seja ignorado.
     await handleElevenLabsUserTurn(finalText);
   };
 
@@ -6836,11 +6845,6 @@ tools: tools
 
   const startLiveSession = async (initiallyCameraActive = isCameraActive) => {
     const apiKey = apiKeys.gemini || '';
-    if (!apiKey) {
-      addNotification("Por favor, insira sua chave API do Gemini em 'Ajustes & Perfil' para conectar a voz.", "error");
-      setWorkspaceMode('aural_control');
-      return;
-    }
 
     setIsVoiceOutputPaused(false);
     setLiveState({ status: 'connecting' });
@@ -7526,6 +7530,10 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               audioProcessorRef.current?.startRecording(
                 (base64Data) => {
                   if (session) {
+                    // Evitar eco/retorno: se o OSONE ou os Professores estiverem falando, descartamos a captura do microfone!
+                    if (isSpeakingRef.current) {
+                      return;
+                    }
                     try {
                       session.sendRealtimeInput({
                         audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
@@ -11225,22 +11233,80 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                     {(chatHistory.length > 0 || isDuoMode || customSkill) && (
                       <div className="flex justify-between items-center px-2 md:px-0 mb-3 shrink-0">
                         {chatHistory.length > 0 && (
-                          <button 
-                            onClick={() => {
-                              if (confirm("Deseja atualizar a conversa? Isso removerá o contexto antigo para priorizar o novo assunto.")) {
-                                // Keep only the last 6 messages if there are many, or just remove the first half
-                                setChatHistory(prev => {
-                                  const keepCount = Math.max(4, Math.floor(prev.length / 3));
-                                  return prev.slice(-keepCount);
-                                });
-                                addNotification("Conversa atualizada e otimizada.", "info");
-                              }
-                            }}
-                            className="flex items-center gap-2 text-her-muted/40 hover:text-her-accent transition-colors text-[10px] uppercase tracking-widest group ml-auto"
-                          >
-                            <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
-                            Atualizar Chat
-                          </button>
+                          <div className="flex items-center gap-3 ml-auto select-none">
+                            {/* OPTIMIZE CHAT BUTTON */}
+                            {isConfirmingOptimize ? (
+                              <div className="flex items-center gap-2 bg-zinc-950/60 border border-her-accent/30 px-2.5 py-1 rounded-xl text-[10px] animate-in fade-in duration-200">
+                                <span className="text-her-accent font-mono uppercase tracking-wider font-semibold">Otimizar?</span>
+                                <button 
+                                  onClick={() => {
+                                    setChatHistory(prev => {
+                                      const keepCount = Math.max(4, Math.floor(prev.length / 3));
+                                      return prev.slice(-keepCount);
+                                    });
+                                    addNotification("Conversa atualizada e otimizada.", "info");
+                                    setIsConfirmingOptimize(false);
+                                  }}
+                                  className="text-white hover:text-emerald-400 font-bold uppercase px-1.5 transition-colors"
+                                >
+                                  Sim
+                                </button>
+                                <span className="text-white/20">|</span>
+                                <button 
+                                  onClick={() => setIsConfirmingOptimize(false)}
+                                  className="text-white/40 hover:text-white uppercase px-1.5 transition-colors"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => {
+                                  setIsConfirmingOptimize(true);
+                                  setIsConfirmingClear(false);
+                                }}
+                                className="flex items-center gap-2 text-her-muted/40 hover:text-her-accent transition-colors text-[10px] uppercase tracking-widest group"
+                              >
+                                <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
+                                Otimizar Chat
+                              </button>
+                            )}
+
+                            {/* CLEAR CHAT BUTTON */}
+                            {isConfirmingClear ? (
+                              <div className="flex items-center gap-2 bg-rose-950/20 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[10px] animate-in fade-in duration-200">
+                                <span className="text-rose-400 font-mono uppercase tracking-wider font-semibold">Apagar Tudo?</span>
+                                <button 
+                                  onClick={() => {
+                                    setChatHistory([]);
+                                    addNotification("Histórico de conversa apagado com sucesso.", "success");
+                                    setIsConfirmingClear(false);
+                                  }}
+                                  className="text-rose-400 hover:text-rose-300 font-bold uppercase px-1.5 transition-colors"
+                                >
+                                  Sim
+                                </button>
+                                <span className="text-white/20">|</span>
+                                <button 
+                                  onClick={() => setIsConfirmingClear(false)}
+                                  className="text-white/40 hover:text-white uppercase px-1.5 transition-colors"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => {
+                                  setIsConfirmingClear(true);
+                                  setIsConfirmingOptimize(false);
+                                }}
+                                className="flex items-center gap-1.5 text-rose-500/50 hover:text-rose-400 transition-colors text-[10px] uppercase tracking-widest group"
+                              >
+                                <Trash2 size={12} className="group-hover:scale-110 transition-transform" />
+                                Limpar Chat
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

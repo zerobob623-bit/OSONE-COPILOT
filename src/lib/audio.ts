@@ -16,7 +16,13 @@ export class AudioProcessor {
       }
 
       this.audioContext = new AudioContextClass({ sampleRate: 16000 });
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       
       if (!this.audioContext || !this.stream) {
         return; 
@@ -60,6 +66,9 @@ export class AudioProcessor {
   
       this.source.connect(this.processor);
       this.processor.connect(this.audioContext.destination);
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
     } catch (error: any) {
       const isPermissionDenied = error?.name === 'NotAllowedError' || 
                                  error?.message?.includes('Permission denied') || 
@@ -122,6 +131,10 @@ export class AudioPlayer {
   playChunk(base64Data: string) {
     if (!this.audioContext || this.audioContext.state === 'closed') return;
 
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume().catch(err => console.error("Erro ao resumir AudioContext no playChunk:", err));
+    }
+
     try {
       const binary = atob(base64Data);
       const bytes = new Uint8Array(binary.length);
@@ -175,10 +188,7 @@ export class AudioPlayer {
       source.onended = () => {
         this.activeSources.delete(source);
         if (this.activeSources.size === 0) {
-          // Double check if nextStartTime is significantly ahead
-          if (this.audioContext && this.nextStartTime <= this.audioContext.currentTime + 0.1) {
-            this.onActivityChange?.(false);
-          }
+          this.onActivityChange?.(false);
         }
       };
     } catch (err) {

@@ -23,6 +23,9 @@ export interface ApiKeys {
   googleHomeToken?: string;
   elevenLabsApiKey?: string;
   elevenLabsVoiceId?: string;
+  elevenLabsVoiceId2?: string;
+  elevenLabsVoiceId3?: string;
+  elevenLabsActiveVoice?: 'voice1' | 'voice2' | 'voice3';
   elevenLabsStability?: number;
   elevenLabsSimilarityBoost?: number;
   elevenLabsStyle?: number;
