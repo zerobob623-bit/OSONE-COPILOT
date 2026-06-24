@@ -1629,7 +1629,7 @@ export default function App() {
         elevenLabsStyle: 0.0,
         elevenLabsSpeakerBoost: true,
         elevenLabsModel: 'eleven_multilingual_v2',
-        geminiModel: 'gemini-2.5-flash',
+        geminiModel: 'gemini-3.5-flash',
       });
       localStorage.setItem('osone_v4_factory_restored_v2_clean', 'true');
     }
@@ -1658,7 +1658,7 @@ export default function App() {
       elevenLabsStyle: 0.0,
       elevenLabsSpeakerBoost: true,
       elevenLabsModel: 'eleven_multilingual_v2',
-      geminiModel: 'gemini-2.5-flash',
+      geminiModel: 'gemini-3.5-flash',
     };
     try {
       const saved = localStorage.getItem('osone_api_keys');
@@ -4794,7 +4794,7 @@ ${adaptive.directions}`;
       // Transmit to Gemini vision proxy
       const base64Part = capturedDataUrl.split(',')[1];
       const effectiveApiKey = apiKeys.gemini || '';
-      const modelName = apiKeys.geminiModel || "gemini-2.5-flash";
+      const modelName = apiKeys.geminiModel || "gemini-3.5-flash";
       
       const visionPrompt = `Você é o OSONE Sentinel Eye (Olho Sentinela OSONE), o módulo de percepção visual avançada e visão computacional em tempo real que monitora de forma amigável as ações do usuário no OSONE G5.
 Analise a imagem da tela fornecida (representando o que o usuário está visualizando e editando). Veja as abas de trabalho (Escrita, Canvas, Saúde, Música, Whiteboard, TikTok Live, etc.), textos ativos, códigos, desenhos ou configurações.

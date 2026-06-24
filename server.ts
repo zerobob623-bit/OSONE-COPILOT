@@ -1166,8 +1166,8 @@ Nome do interlocutor: ${senderName}`;
         const candidateModels = [
           "gemini-3.1-flash-tts-preview",
           "gemini-3.5-flash",
-          "gemini-2.5-flash",
-          "gemini-2.0-flash"
+          "gemini-3.1-flash-lite",
+          "gemini-2.5-flash"
         ];
 
         for (const modelName of candidateModels) {
@@ -1267,12 +1267,16 @@ ${processedChunk}`;
 
   // Helper to run content generation with automated fallbacks
   const generateContentWithFallback = async (ai: GoogleGenAI, params: { model: string; contents: any; config?: any }) => {
-    let primaryModel = params.model || "gemini-2.5-flash";
-    if (primaryModel === "gemini-3.5-flash" || primaryModel.includes("3.5")) {
-      primaryModel = "gemini-2.5-flash";
-    }
+    const primaryModel = params.model || "gemini-3.5-flash";
     
-    const modelsToTry = [primaryModel, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.5-pro"];
+    // Tiered candidates using standard non-deprecated Gemini 3.x and 2.5 models
+    const modelsToTry = [
+      primaryModel, 
+      "gemini-3.5-flash", 
+      "gemini-3.1-flash-lite", 
+      "gemini-2.5-flash", 
+      "gemini-3.1-pro-preview"
+    ];
     
     // Remove duplicates keeping order
     const uniqueModels = Array.from(new Set(modelsToTry));
