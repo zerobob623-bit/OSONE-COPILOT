@@ -1093,7 +1093,7 @@ export default function PersonalizationPanel({
                   {[
                     { id: 'classic', name: 'Clássico (Esfera)' },
                     { id: 'wave', name: 'Fluidos (Alabastro)' },
-                    { id: 'neural', name: 'Constelação Neural' },
+                    { id: 'neural', name: 'Constelação Neural (Padrão)' },
                     { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
                     { id: 'smoke', name: 'Nuvem de Fumaça (Virtual)' },
                     { id: 'shadow', name: 'Osone Sensus (Quântico)' },

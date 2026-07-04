@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Plus, Trash2, Check, Loader2, Cloud, Database } from 'lucide-react';
+import { X, User, Plus, Trash2, Check, Loader2, Cloud, Database, Fingerprint } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User as UserClass } from '../types';
 
@@ -12,6 +12,8 @@ interface ProfileModalProps {
   onGoogleLogin: () => Promise<void>;
   onLogout: () => Promise<void>;
   isAuthLoading: boolean;
+  onOpenDossier?: () => void;
+  intimateAnswersCount?: number;
 }
 
 export const ProfileModal = ({
@@ -21,7 +23,9 @@ export const ProfileModal = ({
   onSwitchUser,
   onGoogleLogin,
   onLogout,
-  isAuthLoading
+  isAuthLoading,
+  onOpenDossier,
+  intimateAnswersCount
 }: ProfileModalProps) => {
   const [localProfiles, setLocalProfiles] = useState<UserClass[]>([]);
   const [newProfileName, setNewProfileName] = useState('');
@@ -290,6 +294,33 @@ export const ProfileModal = ({
                 <p className="text-[9px] text-rose-400 font-semibold">{errorMessage}</p>
               )}
             </form>
+
+            {onOpenDossier && (
+              <div className="border-t border-white/5 pt-5 space-y-3">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Mapeamento Biométrico</span>
+                <div className="p-4 rounded-2xl bg-rose-500/5 border border-rose-500/10 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-rose-400 flex items-center gap-1.5 truncate">
+                      <Fingerprint size={14} className="animate-pulse shrink-0" />
+                      Dossiê de Identidade
+                    </p>
+                    <p className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wider">
+                      Respostas Coletadas: {intimateAnswersCount || 0}/55
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenDossier();
+                      onClose();
+                    }}
+                    className="p-2 px-3 rounded-xl border border-rose-500/20 hover:border-rose-400 bg-rose-500/5 hover:bg-rose-500/15 text-rose-400 text-xs font-bold transition-all cursor-pointer shrink-0"
+                  >
+                    Mapear Sinapses
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="border-t border-white/5 pt-5 space-y-3">
               <span className="text-[9px] font-mono uppercase tracking-widest text-zinc-500">Privacidade OSONE</span>

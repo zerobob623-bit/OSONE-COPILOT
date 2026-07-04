@@ -1283,17 +1283,29 @@ ${processedChunk}`;
     
     let lastError: any = null;
     for (const modelName of uniqueModels) {
-      try {
-        console.log(`Trying Gemini content generation with model: ${modelName}`);
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: params.contents,
-          config: params.config
-        });
-        return response;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`Model ${modelName} failed to generate content:`, err?.message || err);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`Trying Gemini content generation (Model: ${modelName}, Attempt: ${attempt})`);
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: params.contents,
+            config: params.config
+          });
+          return response;
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = err?.message || String(err);
+          const isTransient = errMsg.includes("503") || errMsg.includes("UNAVAILABLE") || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED");
+          
+          if (isTransient && attempt < 2) {
+            console.log(`[Fallback Log] Model ${modelName} hit transient error on attempt ${attempt}. Waiting 400ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 400));
+            continue;
+          }
+          
+          console.log(`[Fallback Log] Model ${modelName} attempt ${attempt} returned exception:`, errMsg);
+          break; // Move to next model
+        }
       }
     }
     throw lastError;
@@ -1494,35 +1506,8 @@ ${processedChunk}`;
         return res.json(response);
       }
     } catch (err: any) {
-      console.warn("Proxy server-side generateImages falhou com erro de cota ou rede. Ativando fallback para Pollinations AI...", err.message || err);
-      try {
-        const aspectRatio = config?.aspectRatio || "1:1";
-        const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
-        const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
-        const seed = Math.floor(Math.random() * 9999999);
-        const pollinationUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
-        
-        const pollinationRes = await fetch(pollinationUrl);
-        if (!pollinationRes.ok) {
-          throw new Error("Servidor Pollinations também indisponível");
-        }
-        
-        const arrayBuffer = await pollinationRes.arrayBuffer();
-        const base64String = Buffer.from(arrayBuffer).toString("base64");
-        
-        return res.json({
-          generatedImages: [
-            {
-              image: {
-                imageBytes: base64String
-              }
-            }
-          ]
-        });
-      } catch (fallbackErr: any) {
-        console.error("Erro também no fallback de imagem:", fallbackErr);
-        return res.status(500).json({ error: formatGeminiError(err) });
-      }
+      console.error("[Image Generation] Erro na geração de imagem com Gemini 3.1:", err);
+      return res.status(500).json({ error: formatGeminiError(err) });
     }
   });
 

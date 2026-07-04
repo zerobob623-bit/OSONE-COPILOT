@@ -1579,8 +1579,14 @@ export default function App() {
   };
 
   const [orbStyle, setOrbStyle] = useState<OrbStyle>(() => {
+    const initialized = localStorage.getItem('osone_orb_style_forced_neural_v2');
+    if (!initialized) {
+      localStorage.setItem('osone_orb_style_forced_neural_v2', 'true');
+      localStorage.setItem('osone_orb_style', 'neural');
+      return 'neural';
+    }
     const saved = localStorage.getItem('osone_orb_style');
-    return (saved as OrbStyle) || 'jarvis';
+    return (saved as OrbStyle) || 'neural';
   });
 
   useEffect(() => {
@@ -1607,9 +1613,9 @@ export default function App() {
       localStorage.removeItem('osone_is_duo_voice_active');
       localStorage.removeItem('osone_chat_auto_speak');
       
-      localStorage.setItem('osone_orb_style', 'jarvis');
+      localStorage.setItem('osone_orb_style', 'neural');
        
-      setOrbStyle('jarvis');
+      setOrbStyle('neural');
       setVoiceEngine('gemini');
       setVoicePageIndex(0);
       setSelectedVoice('Zephyr');
@@ -6507,32 +6513,20 @@ tools: tools
                     const generatedImage = imageResult.generatedImages?.[0];
                     if (generatedImage?.image?.imageBytes) {
                       imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                    } else if (imageResult.error) {
+                      throw new Error(imageResult.error.message || imageResult.error);
+                    } else {
+                      throw new Error("Resposta de imagem do Gemini 3.1 vazia ou inválida.");
                     }
+                  } else {
+                    const errorJson = await proxyImageRes.json().catch(() => ({}));
+                    throw new Error(errorJson.error || `Servidor de imagens retornou status ${proxyImageRes.status}`);
                   }
-                } catch (geminiErr) {
-                  console.warn("Erro ao gerar com Gemini, usando canal livre de alta fidelidade:", geminiErr);
+                } catch (geminiErr: any) {
+                  throw new Error(geminiErr.message || "Erro na conexão com a API do Gemini 3.1.");
                 }
-              }
-
-              // Se não conseguiu com Gemini ou não tem chave, usa Pollinations AI como canal de fluxo gratuito excelente
-              if (!imageUrl) {
-                const seed = Math.floor(Math.random() * 9999999);
-                const queryPrompt = encodeURIComponent(prompt);
-                const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
-                const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
-                const pollinationUrl = `https://image.pollinations.ai/prompt/${queryPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
-
-                const pollinationRes = await fetch(pollinationUrl);
-                if (!pollinationRes.ok) {
-                  throw new Error("Não foi possível conectar aos servidores de imagem gratuitos do OSONE.");
-                }
-                const blob = await pollinationRes.blob();
-                imageUrl = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.onerror = reject;
-                  reader.readAsDataURL(blob);
-                });
+              } else {
+                throw new Error("A chave API do Gemini não está configurada nos Ajustes.");
               }
 
               if (imageUrl) {
@@ -8552,33 +8546,20 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                             const generatedImage = imageResult.generatedImages?.[0];
                             if (generatedImage?.image?.imageBytes) {
                               imageUrl = `data:image/jpeg;base64,${generatedImage.image.imageBytes}`;
+                            } else if (imageResult.error) {
+                              throw new Error(imageResult.error.message || imageResult.error);
+                            } else {
+                              throw new Error("Resposta de imagem do Gemini 3.1 vazia ou inválida.");
                             }
+                          } else {
+                            const errorJson = await res.json().catch(() => ({}));
+                            throw new Error(errorJson.error || `Servidor de imagens retornou status ${res.status}`);
                           }
-                        } catch (e) {
-                          console.warn("Erro ao gerar imagem via Gemini, recorrendo a canal livre:", e);
+                        } catch (e: any) {
+                          throw new Error(e.message || "Erro na conexão com a API do Gemini 3.1.");
                         }
-                      }
-                      
-                      if (!imageUrl) {
-                        try {
-                          const seed = Math.floor(Math.random() * 9999999);
-                          const queryPrompt = encodeURIComponent(prompt);
-                          const width = aspectRatio === '16:9' ? 1024 : aspectRatio === '9:16' ? 576 : aspectRatio === '4:3' ? 1024 : aspectRatio === '3:4' ? 768 : 1024;
-                          const height = aspectRatio === '16:9' ? 576 : aspectRatio === '9:16' ? 1024 : aspectRatio === '4:3' ? 768 : aspectRatio === '3:4' ? 1024 : 1024;
-                          const pollinationUrl = `https://image.pollinations.ai/prompt/${queryPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&enhance=true`;
-                          
-                          const pollinationRes = await fetch(pollinationUrl);
-                          if (!pollinationRes.ok) throw new Error("Erro no servidor livre");
-                          const blob = await pollinationRes.blob();
-                          imageUrl = await new Promise<string>((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(blob);
-                          });
-                        } catch (err: any) {
-                          throw new Error(`Ambos os canais falharam. Detalhe: ${err.message}`);
-                        }
+                      } else {
+                        throw new Error("Chave API do Gemini não está configurada nos Ajustes.");
                       }
                       
                       return imageUrl;
@@ -9131,26 +9112,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             <span className="hidden sm:inline">{isHandsFreeActive ? "HANDS-FREE ON" : "VOZ PASSIVA"}</span>
           </button>
 
-          {/* TOGGLE LEGENDA SUPERIOR */}
-          <button
-            onClick={() => {
-              setSubtitlesEnabled(!subtitlesEnabled);
-              addNotification(subtitlesEnabled ? "Legendas desativadas." : "Legendas em tempo real ativadas!", "info");
-            }}
-            className={cn(
-              "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1",
-              subtitlesEnabled 
-                ? "bg-sky-500/10 border-sky-500/35 text-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.25)]" 
-                : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
-            )}
-            title={subtitlesEnabled ? "Desativar Legendas" : "Ativar Legendas em Tempo Real"}
-          >
-            <MessageSquare size={13} className={subtitlesEnabled ? "scale-110 text-sky-400" : ""} />
-            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
-              {subtitlesEnabled ? "LEG: ON" : "LEG: OFF"}
-            </span>
-          </button>
-
           {/* MODO VOZ LIVRE (IMERSIVO) TOGGLE */}
           <button
             onClick={() => {
@@ -9348,17 +9309,6 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
             </AnimatePresence>
           </div>
 
-          <button 
-            onClick={() => setIsIntimateMissionOpen(true)}
-            className="p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full relative overflow-hidden ml-1 bg-rose-500/10 border-rose-500/25 text-rose-400 hover:bg-rose-500/20"
-            title="Missão Secreta do OSONE: Dossiê de Identidade"
-          >
-            <Fingerprint size={13} className="animate-pulse" />
-            <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
-              DOSSIÊ: {Object.keys(intimateAnswers).length}/55
-            </span>
-          </button>
-
           {/* GOOGLE / GMAIL LOGIN WITH FIREBASE */}
           <div className="relative z-40">
             {isAuthLoading ? (
@@ -9414,6 +9364,17 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                               <span>Nuvem Ativa via Gmail</span>
                             </div>
                           )}
+
+                          <button
+                            onClick={() => {
+                              setIsIntimateMissionOpen(true);
+                              setIsProfileOpen(false);
+                            }}
+                            className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                          >
+                            <Fingerprint size={13} className="animate-pulse" />
+                            <span>Dossiê de Identidade ({Object.keys(intimateAnswers).length}/55)</span>
+                          </button>
 
                           <button
                             onClick={() => {
@@ -12705,6 +12666,8 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
         onGoogleLogin={handleLogin}
         onLogout={handleLogout}
         isAuthLoading={isAuthLoading}
+        onOpenDossier={() => setIsIntimateMissionOpen(true)}
+        intimateAnswersCount={Object.keys(intimateAnswers).length}
       />
 
       <SkeletonBrainPopup 

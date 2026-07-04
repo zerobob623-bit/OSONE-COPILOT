@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle, Pin, Volume2, RefreshCw, Copy, Check } from 'lucide-react';
+import { X, Cpu, Palette, Key, Smartphone, Info, Power, Activity, CheckCircle2, AlertCircle, Loader2, Home, UserCircle, Pin, Volume2, RefreshCw, Copy, Check, Image } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
@@ -465,6 +465,26 @@ export const SettingsModal = ({
                         Escolha o modelo de inteligência preferencial para geração de código, sugestão de melhorias e chats integrados do OSONE.
                       </p>
                     </div>
+
+                    <div className="mt-5 border-t border-white/5 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Image size={12} className="text-her-accent" />
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Geração de Imagens (Text-to-Image)</label>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-white/[0.01] border border-white/[0.05] flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-white">Nano Banana 2</p>
+                          <p className="text-[10px] text-her-muted/60 font-mono">gemini-3.1-flash-image</p>
+                        </div>
+                        <span className="p-1 px-2.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[9px] font-bold uppercase tracking-widest border border-emerald-500/25 flex items-center gap-1.5 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Padrão Ativo
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[10px] text-her-muted/40 italic leading-relaxed">
+                        Este é o modelo generativo multimídia mais avançado do ecossistema Gemini para criação e edição de imagens de alta fidelidade e resolução.
+                      </p>
+                    </div>
                   </motion.div>
                 )}
 
@@ -836,7 +856,7 @@ export const SettingsModal = ({
                           {[
                             { id: 'classic', name: 'Clássico (Esfera)' },
                             { id: 'wave', name: 'Fluidos (Alabastro)' },
-                            { id: 'neural', name: 'Constelação Neural' },
+                            { id: 'neural', name: 'Constelação Neural (Padrão)' },
                             { id: 'jarvis', name: 'Jarvis (HUD 3D)' },
                             { id: 'smoke', name: 'Nuvem de Fumaça (Virtual)' },
                             { id: 'shadow', name: 'Osone Sensus (Quântico)' },
