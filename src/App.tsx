@@ -939,12 +939,29 @@ export default function App() {
   });
   
   const [aiProfile, setAiProfile] = useState<AIProfile>(() => {
-    const saved = localStorage.getItem('osone_ai_profile');
-    return saved ? JSON.parse(saved) : {
-      name: 'OSONE',
-      personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
-      writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
-    };
+    try {
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser && parsedUser.uid) {
+          userPrefix = `osone_user_${parsedUser.uid}_`;
+        }
+      }
+      const savedKey = userPrefix ? userPrefix + 'ai_profile' : 'osone_ai_profile';
+      const saved = localStorage.getItem(savedKey) || localStorage.getItem('osone_ai_profile');
+      return saved ? JSON.parse(saved) : {
+        name: 'OSONE',
+        personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+        writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+      };
+    } catch {
+      return {
+        name: 'OSONE',
+        personality: 'Inteligência Artificial avançada, prestativa e focada em resultados.',
+        writingStyle: 'Conciso, técnico mas amigável, direto ao ponto.'
+      };
+    }
   });
 
   const [voiceModulation, setVoiceModulation] = useState<VoiceModulation>(() => {
@@ -975,14 +992,33 @@ export default function App() {
   }, [voiceModulation]);
 
   const [healthData, setHealthData] = useState(() => {
-    const saved = localStorage.getItem('osone_health_data');
-    return saved ? JSON.parse(saved) : {
-      age: '',
-      weight: '',
-      height: '',
-      gender: 'masculino',
-      stylePreference: 'casual'
-    };
+    try {
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser && parsedUser.uid) {
+          userPrefix = `osone_user_${parsedUser.uid}_`;
+        }
+      }
+      const savedKey = userPrefix ? userPrefix + 'health_data' : 'osone_health_data';
+      const saved = localStorage.getItem(savedKey) || localStorage.getItem('osone_health_data');
+      return saved ? JSON.parse(saved) : {
+        age: '',
+        weight: '',
+        height: '',
+        gender: 'masculino',
+        stylePreference: 'casual'
+      };
+    } catch {
+      return {
+        age: '',
+        weight: '',
+        height: '',
+        gender: 'masculino',
+        stylePreference: 'casual'
+      };
+    }
   });
 
   const handleUpdateProfile = (profile: AIProfile) => {
@@ -2990,9 +3026,7 @@ export default function App() {
           email: firebaseUser.email || '',
           photoURL: firebaseUser.photoURL || undefined
         };
-        setUser(userObj);
-        setIsGuestMode(false);
-        loadUserDataFromCloud(userObj);
+        switchUser(userObj);
       } else {
         setUser(prev => {
           if (prev && prev.isLocal) return prev;
@@ -3048,7 +3082,16 @@ export default function App() {
 
   const [intimateAnswers, setIntimateAnswers] = useState<{ [id: number]: string }>(() => {
     try {
-      const saved = localStorage.getItem('osone_intimate_mission_answers');
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser && parsedUser.uid) {
+          userPrefix = `osone_user_${parsedUser.uid}_`;
+        }
+      }
+      const savedKey = userPrefix ? userPrefix + 'intimate_mission_answers' : 'osone_intimate_mission_answers';
+      const saved = localStorage.getItem(savedKey) || localStorage.getItem('osone_intimate_mission_answers');
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -3056,7 +3099,20 @@ export default function App() {
   });
 
   const [longTermMemory, setLongTermMemory] = useState<string>(() => {
-    return localStorage.getItem('osone_long_term_memory') || '';
+    try {
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser && parsedUser.uid) {
+          userPrefix = `osone_user_${parsedUser.uid}_`;
+        }
+      }
+      const savedKey = userPrefix ? userPrefix + 'long_term_memory' : 'osone_long_term_memory';
+      return localStorage.getItem(savedKey) || localStorage.getItem('osone_long_term_memory') || '';
+    } catch {
+      return '';
+    }
   });
 
   useEffect(() => {
@@ -3091,17 +3147,31 @@ export default function App() {
   useEffect(() => {
     const loadIndexedDBMemories = async () => {
       try {
-        const dbChat = await getMemoryItem<Message[]>('osone_chat_history', []);
+        const savedUserStr = localStorage.getItem('osone_last_active_user');
+        let userPrefix = '';
+        if (savedUserStr) {
+          try {
+            const parsedUser = JSON.parse(savedUserStr);
+            if (parsedUser && parsedUser.uid) {
+              userPrefix = `osone_user_${parsedUser.uid}_`;
+            }
+          } catch {}
+        }
+
+        const chatKey = userPrefix ? userPrefix + 'chat_history' : 'osone_chat_history';
+        const dbChat = await getMemoryItem<Message[]>(chatKey, []);
         if (dbChat && dbChat.length > 0) {
           setChatHistory(dbChat);
         }
 
-        const dbAnswers = await getMemoryItem<{ [id: number]: string }>('osone_intimate_mission_answers', {});
+        const answersKey = userPrefix ? userPrefix + 'intimate_mission_answers' : 'osone_intimate_mission_answers';
+        const dbAnswers = await getMemoryItem<{ [id: number]: string }>(answersKey, {});
         if (dbAnswers && Object.keys(dbAnswers).length > 0) {
           setIntimateAnswers(dbAnswers);
         }
 
-        const dbLongMemory = await getMemoryItem<string>('osone_long_term_memory', '');
+        const memoryKey = userPrefix ? userPrefix + 'long_term_memory' : 'osone_long_term_memory';
+        const dbLongMemory = await getMemoryItem<string>(memoryKey, '');
         if (dbLongMemory) {
           setLongTermMemory(dbLongMemory);
         }
@@ -3145,7 +3215,16 @@ export default function App() {
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [chatHistory, setChatHistory] = useState<Message[]>(() => {
     try {
-      const saved = localStorage.getItem('osone_chat_history');
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        if (parsedUser && parsedUser.uid) {
+          userPrefix = `osone_user_${parsedUser.uid}_`;
+        }
+      }
+      const chatKey = userPrefix ? userPrefix + 'chat_history' : 'osone_chat_history';
+      const saved = localStorage.getItem(chatKey) || localStorage.getItem('osone_chat_history');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -5374,6 +5453,7 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
     
     if (voiceEngine === 'gemini' && liveState.status === 'connected' && liveSessionRef.current) {
       if (userMessage) {
+        addMessage({ role: 'user' as const, content: fullMessage });
         liveSessionRef.current.sendRealtimeInput({ text: userMessage });
       }
       if (currentFiles.length > 0) {
@@ -7522,11 +7602,23 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
               }]);
 
               audioProcessorRef.current?.startRecording(
-                (base64Data) => {
+                (base64Data, rms) => {
                   if (session) {
-                    // Evitar eco/retorno: se o OSONE ou os Professores estiverem falando, descartamos a captura do microfone!
+                    // Evitar eco/retorno: se o OSONE ou os Professores estiverem falando, só enviamos áudio se detectarmos um volume que indique que o usuário está interrompendo de fato.
+                    // Se o usuário falar ativamente, o RMS passará de um limite de voz (ex: 0.007).
+                    // Isso permite interrupção (barge-in) real por voz se o usuário falar com volume normal, enquanto filtra o próprio eco do assistente vindo da caixa de som!
                     if (isSpeakingRef.current) {
-                      return;
+                      if (rms < 0.007) {
+                        return;
+                      }
+                      // Interrompe a voz localmente de forma instantânea para dar feedback imediato de que o usuário tomou a palavra!
+                      audioPlayerRef.current?.stop();
+                      if (typeof window !== 'undefined' && window.speechSynthesis) {
+                        window.speechSynthesis.cancel();
+                      }
+                      setDuoSpeakingHost(null);
+                      setIsSpeaking(false);
+                      isSpeakingRef.current = false;
                     }
                     try {
                       session.sendRealtimeInput({
@@ -10806,7 +10898,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                   }}
                   className={cn(
                     "flex flex-col items-center justify-center py-2 z-50 w-full",
-                    (liveState.status === 'connected' || isElevenLabsLiveActive)
+                    ((liveState.status === 'connected' || isElevenLabsLiveActive) && !isChatExpanded)
                       ? "relative flex-1 scale-100 md:scale-105" // Center scale
                       : (chatHistory.length > 0 || isChatExpanded)
                         ? "absolute -top-12 left-0 right-0 transform scale-50 opacity-40 animate-cloud-wave pointer-events-none" 
@@ -11070,7 +11162,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                         )}
                       </AnimatePresence>
                       
-                      {(chatHistory.length === 0 || liveState.status === 'connected') && (
+                      {((chatHistory.length === 0 || liveState.status === 'connected') && !isChatExpanded) && (
                         <div className={cn(
                           "mt-4 flex flex-col items-center gap-2 transition-all duration-500",
                           !showUi && "opacity-0 pointer-events-none scale-95"
@@ -11186,7 +11278,7 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 {/* Chat History - Integrated into screen */}
                 <div className={cn(
                   "flex-1 transition-all duration-700 w-full min-h-0 pt-12 translate-z-0",
-                  (liveState.status === 'connected' || !isChatExpanded || !showUi) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
+                  (!isChatExpanded || !showUi) ? "opacity-0 pointer-events-none scale-95" : "opacity-100",
                   "flex flex-col overflow-hidden h-full"
                 )}>
                   {/* Chat Content Panel */}

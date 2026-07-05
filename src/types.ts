@@ -31,7 +31,7 @@ export interface ApiKeys {
   elevenLabsStyle?: number;
   elevenLabsSpeakerBoost?: boolean;
   elevenLabsModel?: string;
-  geminiModel?: 'gemini-3.5-flash' | 'gemini-2.5-flash';
+  geminiModel?: 'gemini-3.5-flash' | 'gemini-2.5-flash' | 'gemini-3.1-flash-lite';
   googleCustomSearchApiKey?: string;
   googleCustomSearchCx?: string;
   tavilyApiKey?: string;

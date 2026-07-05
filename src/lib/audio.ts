@@ -8,7 +8,7 @@ export class AudioProcessor {
   private processor: ScriptProcessorNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
 
-  async startRecording(onAudioData: (base64Data: string) => void) {
+  async startRecording(onAudioData: (base64Data: string, rms: number) => void) {
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) {
@@ -61,7 +61,7 @@ export class AudioProcessor {
           binary += String.fromCharCode(uint8Bytes[i]);
         }
         const base64Data = btoa(binary);
-        onAudioData(base64Data);
+        onAudioData(base64Data, rms);
       };
   
       this.source.connect(this.processor);

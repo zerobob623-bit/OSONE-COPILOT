@@ -429,12 +429,12 @@ export const SettingsModal = ({
                         <Cpu size={12} className="text-her-accent" />
                         <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Modelo de Inteligência</label>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 bg-white/[0.01] border border-white/[0.05] p-1.5 rounded-2xl">
+                      <div className="grid grid-cols-3 gap-2 bg-white/[0.01] border border-white/[0.05] p-1.5 rounded-2xl">
                         <button
                           type="button"
                           onClick={() => setKeys({ ...keys, geminiModel: 'gemini-3.5-flash' })}
                           className={cn(
-                            "py-3 px-4 rounded-xl text-xs font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-2",
+                            "py-2.5 px-3 rounded-xl text-[11px] font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-1.5",
                             (keys.geminiModel === 'gemini-3.5-flash' || !keys.geminiModel)
                               ? "bg-white/[0.08] text-white shadow-lg border border-white/[0.1] font-bold"
                               : "text-her-muted hover:text-white/80 hover:bg-white/[0.03] border border-transparent font-medium"
@@ -447,9 +447,24 @@ export const SettingsModal = ({
                         </button>
                         <button
                           type="button"
+                          onClick={() => setKeys({ ...keys, geminiModel: 'gemini-3.1-flash-lite' })}
+                          className={cn(
+                            "py-2.5 px-3 rounded-xl text-[11px] font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-1.5",
+                            keys.geminiModel === 'gemini-3.1-flash-lite'
+                              ? "bg-white/[0.08] text-white shadow-lg border border-white/[0.1] font-bold"
+                              : "text-her-muted hover:text-white/80 hover:bg-white/[0.03] border border-transparent font-medium"
+                          )}
+                        >
+                          Gemini 3.1 Lite
+                          {keys.geminiModel === 'gemini-3.1-flash-lite' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-her-accent animate-pulse" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setKeys({ ...keys, geminiModel: 'gemini-2.5-flash' })}
                           className={cn(
-                            "py-3 px-4 rounded-xl text-xs font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-2",
+                            "py-2.5 px-3 rounded-xl text-[11px] font-semibold tracking-wide transition-all duration-300 flex items-center justify-center gap-1.5",
                             keys.geminiModel === 'gemini-2.5-flash'
                               ? "bg-white/[0.08] text-white shadow-lg border border-white/[0.1] font-bold"
                               : "text-her-muted hover:text-white/80 hover:bg-white/[0.03] border border-transparent font-medium"
