@@ -101,6 +101,52 @@ import { generatePDF } from './lib/pdfUtils';
 import { resolveAudioUrl, deleteAudio } from './lib/audioDb';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged, db, doc, setDoc, getDoc, OperationType, handleFirestoreError } from './firebase';
 
+// Safe helper to dynamically load PDF.js from cdnjs for client-side PDF text extraction
+const loadPdfJs = async (): Promise<any> => {
+  if (typeof window === 'undefined') return null;
+  if ((window as any).pdfjsLib) {
+    return (window as any).pdfjsLib;
+  }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      if (pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(pdfjsLib);
+      } else {
+        reject(new Error('pdfjsLib not found on window object'));
+      }
+    };
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
+};
+
+const extractTextFromPdf = async (file: File): Promise<string> => {
+  try {
+    const pdfjsLib = await loadPdfJs();
+    if (!pdfjsLib) return `[Não foi possível carregar o parser de PDF para: ${file.name}]`;
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+    const pdf = await loadingTask.promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      fullText += pageText + '\n';
+    }
+    return fullText;
+  } catch (error) {
+    console.error('Erro ao ler PDF:', error);
+    return `[Erro ao extrair conteúdo do PDF: ${file.name}]`;
+  }
+};
+
 // Cybernetic glowing robotic hand from the OSONE HUD
 const CyberneticHandIcon = ({ className = "w-8 h-8" }: { className?: string }) => {
   return (
@@ -6121,6 +6167,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
       tools.push({ functionDeclarations });
 
       const fileDataParts = await Promise.all(currentFiles.map(async (file) => {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const pdfText = await extractTextFromPdf(file);
+          return { text: `Conteúdo extraído do arquivo PDF ${file.name}:\n${pdfText}` };
+        }
         return new Promise<any>((resolve) => {
           const reader = new FileReader();
           if (file.type.startsWith('image/')) {
@@ -6903,6 +6953,15 @@ tools: tools
           });
         };
         reader.readAsDataURL(file);
+      } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        try {
+          const pdfText = await extractTextFromPdf(file);
+          session.sendRealtimeInput({
+            text: `Conteúdo extraído do arquivo PDF '${file.name}':\n\n${pdfText}`
+          });
+        } catch (err) {
+          console.error("Erro ao enviar PDF para Live Session:", err);
+        }
       } else {
         const reader = new FileReader();
         reader.onload = () => {
