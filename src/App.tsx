@@ -5498,8 +5498,10 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
     const fullMessage = fileNames ? `${userMessage}\n\n[Arquivos anexados: ${fileNames}]` : userMessage;
     
     if (voiceEngine === 'gemini' && liveState.status === 'connected' && liveSessionRef.current) {
-      if (userMessage) {
+      if (userMessage || currentFiles.length > 0) {
         addMessage({ role: 'user' as const, content: fullMessage });
+      }
+      if (userMessage) {
         liveSessionRef.current.sendRealtimeInput({ text: userMessage });
       }
       if (currentFiles.length > 0) {
@@ -6941,18 +6943,60 @@ tools: tools
 
     for (const file of filesToRead) {
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          session.sendRealtimeInput({
-            video: { data: base64, mimeType: file.type }
-          });
-          // Send a textual hint to trigger immediate analysis
-          session.sendRealtimeInput({
-            text: `[O usuário enviou uma imagem: ${file.name}. Analise-a agora.]`
-          });
-        };
-        reader.readAsDataURL(file);
+        // Load, optimize, and convert any image type to standard lightweight JPEG
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        
+        await new Promise<void>((resolve) => {
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            // Scale down image if it's too large to prevent overloading the live websocket stream
+            const maxDim = 1024;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              // Fill background to solid white for transparent elements/PNGs
+              ctx.fillStyle = "#FFFFFF";
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              
+              // Compress to 0.75 JPEG for optimal balance of speed and visual detail
+              const jpegBase64 = canvas.toDataURL('image/jpeg', 0.75).split(',')[1];
+              
+              try {
+                session.sendRealtimeInput({
+                  video: { data: jpegBase64, mimeType: 'image/jpeg' }
+                });
+                // Send explicit textual instruction triggering immediate analysis
+                session.sendRealtimeInput({
+                  text: `[O usuário enviou uma imagem: ${file.name}. Analise-a agora de forma inteligente e comente com o usuário sobre o que você vê.]`
+                });
+              } catch (err) {
+                console.error("Erro ao enviar imagem otimizada para Live Session:", err);
+              }
+            }
+            URL.revokeObjectURL(objectUrl);
+            resolve();
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve();
+          };
+          img.src = objectUrl;
+        });
       } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         try {
           const pdfText = await extractTextFromPdf(file);
