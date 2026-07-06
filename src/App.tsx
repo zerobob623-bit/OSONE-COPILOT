@@ -7667,17 +7667,13 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     // Se o usuário falar ativamente, o RMS passará de um limite de voz (ex: 0.007).
                     // Isso permite interrupção (barge-in) real por voz se o usuário falar com volume normal, enquanto filtra o próprio eco do assistente vindo da caixa de som!
                     if (isSpeakingRef.current) {
-                      if (rms < 0.007) {
+                      // Se o assistente estiver falando, enviamos o áudio somente se houver um sinal sonoro de voz real (RMS >= 0.012).
+                      // Isso evita que ruídos ambientes fracos ou o próprio som das caixas de som interrompam o assistente.
+                      // A interrupção real (barge-in) é detectada de forma extremamente precisa pelo servidor da API do Gemini,
+                      // que nos envia o evento "interrupted" no fluxo de mensagens, parando a fala local com total precisão!
+                      if (rms < 0.012) {
                         return;
                       }
-                      // Interrompe a voz localmente de forma instantânea para dar feedback imediato de que o usuário tomou a palavra!
-                      audioPlayerRef.current?.stop();
-                      if (typeof window !== 'undefined' && window.speechSynthesis) {
-                        window.speechSynthesis.cancel();
-                      }
-                      setDuoSpeakingHost(null);
-                      setIsSpeaking(false);
-                      isSpeakingRef.current = false;
                     }
                     try {
                       session.sendRealtimeInput({
