@@ -21,6 +21,8 @@ async function startServer() {
   
   // Create a WebSocket Server connected to the HTTP Server, responding on specifically /api/live-ws path
   const wss = new WebSocketServer({ noServer: true });
+  // Create a WebSocket Server for ElevenLabs streaming input audio proxy
+  const elWss = new WebSocketServer({ noServer: true });
 
   const PORT = 3000;
 
@@ -1311,6 +1313,52 @@ ${processedChunk}`;
     throw lastError;
   };
 
+  // Helper to run content stream generation with automated fallbacks
+  const generateContentStreamWithFallback = async (ai: GoogleGenAI, params: { model: string; contents: any; config?: any }) => {
+    const primaryModel = params.model || "gemini-3.5-flash";
+    
+    // Tiered candidates using standard non-deprecated Gemini 3.x and 2.5 models
+    const modelsToTry = [
+      primaryModel, 
+      "gemini-3.5-flash", 
+      "gemini-3.1-flash-lite", 
+      "gemini-2.5-flash", 
+      "gemini-3.1-pro-preview"
+    ];
+    
+    // Remove duplicates keeping order
+    const uniqueModels = Array.from(new Set(modelsToTry));
+    
+    let lastError: any = null;
+    for (const modelName of uniqueModels) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`Trying Gemini content stream generation (Model: ${modelName}, Attempt: ${attempt})`);
+          const stream = await ai.models.generateContentStream({
+            model: modelName,
+            contents: params.contents,
+            config: params.config
+          });
+          return stream;
+        } catch (err: any) {
+          lastError = err;
+          const errMsg = err?.message || String(err);
+          const isTransient = errMsg.includes("503") || errMsg.includes("UNAVAILABLE") || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED");
+          
+          if (isTransient && attempt < 2) {
+            console.log(`[Fallback Stream Log] Model ${modelName} hit transient error on attempt ${attempt}. Waiting 400ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 400));
+            continue;
+          }
+          
+          console.log(`[Fallback Stream Log] Model ${modelName} attempt ${attempt} returned exception:`, errMsg);
+          break; // Move to next model
+        }
+      }
+    }
+    throw lastError;
+  };
+
   // POST endpoint for high-quality, server-run intelligence completion using gemini-3.5-flash
   app.post("/api/chat-intel", async (req, res) => {
     try {
@@ -1344,6 +1392,53 @@ ${processedChunk}`;
     } catch (err: any) {
       console.error("Error inside /api/chat-intel endpoint:", err);
       return res.status(500).json({ error: formatGeminiError(err) });
+    }
+  });
+
+  // POST endpoint for streaming Gemini response using Server-Sent Events (SSE)
+  app.post("/api/chat-intel-stream", async (req, res) => {
+    try {
+      const { historyContents, systemInstruction, clientApiKey } = req.body;
+      const apiKey = clientApiKey || getSecretGeminiKey();
+      if (!apiKey) {
+        return res.status(400).json({ error: "Chave API do Gemini não definida no servidor." });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        vertexai: false,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+
+      const responseStream = await generateContentStreamWithFallback(ai, {
+        model: "gemini-3.5-flash",
+        contents: historyContents,
+        config: {
+          maxOutputTokens: 250,
+          temperature: 0.7,
+          systemInstruction: systemInstruction
+        }
+      });
+
+      for await (const chunk of responseStream) {
+        const text = chunk.text || "";
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      }
+      res.write("data: [DONE]\n\n");
+      res.end();
+    } catch (err: any) {
+      console.error("Error inside /api/chat-intel-stream endpoint:", err);
+      res.write(`data: ${JSON.stringify({ error: formatGeminiError(err) })}\n\n`);
+      res.end();
     }
   });
 
@@ -2036,7 +2131,7 @@ Não inclua nenhuma formatação markdown extra fora do JSON bruto.`;
     }
   });
 
-  // Handle upgrade event manually to route to the /api/live-ws or /api/blender-ws websocket bridge
+  // Handle upgrade event manually to route to the /api/live-ws or /api/elevenlabs-ws websocket bridge
   server.on("upgrade", (request, socket, head) => {
     try {
       const reqUrl = request.url || "";
@@ -2045,6 +2140,10 @@ Não inclua nenhuma formatação markdown extra fora do JSON bruto.`;
       if (pathname === "/api/live-ws") {
         wss.handleUpgrade(request, socket, head, (ws) => {
           wss.emit("connection", ws, request);
+        });
+      } else if (pathname === "/api/elevenlabs-ws") {
+        elWss.handleUpgrade(request, socket, head, (ws) => {
+          elWss.emit("connection", ws, request);
         });
       } else {
         socket.destroy();
@@ -2165,6 +2264,100 @@ Não inclua nenhuma formatação markdown extra fora do JSON bruto.`;
       console.error("Client WS error:", e);
       if (bidiSession) {
         try { bidiSession.close(); } catch (_) {}
+      }
+    });
+  });
+
+  // Handle incoming ElevenLabs streaming proxy connections
+  elWss.on("connection", async (clientWs, req) => {
+    console.log("Client connected to the server-side ElevenLabs WS Proxy");
+    
+    const reqUrl = req.url || "";
+    const queryString = reqUrl.includes("?") ? reqUrl.split("?")[1] : "";
+    const searchParams = new URLSearchParams(queryString);
+    
+    const voiceId = searchParams.get("voiceId") || "21m00Tcm4TlvDq8ikWAM"; // default Rachel
+    const modelId = searchParams.get("modelId") || "eleven_flash_v2_5";
+    const clientElApiKey = searchParams.get("apiKey") || "";
+    const stability = parseFloat(searchParams.get("stability") || "0.5");
+    const similarityBoost = parseFloat(searchParams.get("similarityBoost") || "0.75");
+    
+    const elApiKey = clientElApiKey || process.env.ELEVENLABS_API_KEY || "";
+    
+    if (!elApiKey) {
+      console.error("ElevenLabs API Key not configured on server or client.");
+      clientWs.send(JSON.stringify({ error: "Chave API ElevenLabs não configurada." }));
+      clientWs.close();
+      return;
+    }
+    
+    const outboundUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}`;
+    
+    console.log(`Establishing outbound connection to ElevenLabs: wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input`);
+    
+    // Create connection to ElevenLabs using the global polyfilled WebSocket
+    const elWs = new WebSocket(outboundUrl);
+    
+    elWs.on("open", () => {
+      console.log("ElevenLabs outbound WebSocket successfully established");
+      // Send initial settings and authentication
+      const initMsg = {
+        text: " ",
+        xi_api_key: elApiKey,
+        voice_settings: {
+          stability: stability,
+          similarity_boost: similarityBoost
+        },
+        generation_config: {
+          chunk_length_schedule: [120, 160, 250, 290]
+        }
+      };
+      elWs.send(JSON.stringify(initMsg));
+    });
+    
+    elWs.on("message", (data) => {
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(data.toString());
+      }
+    });
+    
+    elWs.on("error", (err) => {
+      console.error("ElevenLabs outbound WS error:", err);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({ error: `ElevenLabs Error: ${err.message}` }));
+      }
+    });
+    
+    elWs.on("close", (code, reason) => {
+      console.log(`ElevenLabs outbound WS closed. Code: ${code}, Reason: ${reason}`);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.close();
+      }
+    });
+    
+    clientWs.on("message", (msg) => {
+      if (elWs.readyState === WebSocket.OPEN) {
+        try {
+          const parsed = JSON.parse(msg.toString());
+          elWs.send(JSON.stringify(parsed));
+        } catch (_) {
+          // If it's raw text/string, send as text object
+          elWs.send(JSON.stringify({ text: msg.toString() }));
+        }
+      }
+    });
+    
+    clientWs.on("error", (err) => {
+      console.error("ElevenLabs Proxy client WS error:", err);
+      if (elWs.readyState === WebSocket.OPEN) {
+        elWs.close();
+      }
+    });
+    
+    clientWs.on("close", () => {
+      console.log("ElevenLabs Proxy client WS closed");
+      if (elWs.readyState === WebSocket.OPEN) {
+        elWs.close();
       }
     });
   });

@@ -56,7 +56,8 @@ import {
   Fingerprint,
   MapPin,
   Languages,
-  AlertCircle
+  AlertCircle,
+  Palette
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Modality, Type } from "@google/genai";
@@ -666,6 +667,113 @@ const getFriendlyModeName = (mode: WorkspaceMode): string => {
     default: return String(mode);
   }
 };
+
+// Queue player for handling dynamic chunk-by-chunk playback of base64 MP3 chunks from ElevenLabs
+class ElevenLabsQueuePlayer {
+  private audioCtx: AudioContext | null = null;
+  private nextPlayTime: number = 0;
+  private isPlaying: boolean = false;
+  private queue: AudioBuffer[] = [];
+  private onStateChange: (speaking: boolean) => void;
+  private activeSources: any[] = [];
+  public onQueueDrained: (() => void) | null = null;
+
+  constructor(onStateChange: (speaking: boolean) => void) {
+    this.onStateChange = onStateChange;
+  }
+
+  private initAudio() {
+    if (!this.audioCtx) {
+      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+  }
+
+  public async addChunk(base64Data: string) {
+    this.initAudio();
+    if (!this.audioCtx) return;
+
+    try {
+      const binaryString = window.atob(base64Data);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const arrayBuffer = bytes.buffer;
+
+      // decodeAudioData can be picky about partial chunks, catch decode failures gracefully
+      const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+      this.queue.push(audioBuffer);
+      this.processQueue();
+    } catch (e) {
+      console.warn("Soft warning: failed to decode an individual audio chunk (usually expected for boundary bytes):", e);
+    }
+  }
+
+  private processQueue() {
+    if (!this.audioCtx) return;
+    if (this.isPlaying) return;
+
+    if (this.queue.length === 0) {
+      this.onStateChange(false);
+      if (this.onQueueDrained) {
+        this.onQueueDrained();
+      }
+      return;
+    }
+
+    this.isPlaying = true;
+    this.onStateChange(true);
+    
+    const chunk = this.queue.shift();
+    if (!chunk) {
+      this.isPlaying = false;
+      this.onStateChange(false);
+      return;
+    }
+
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = chunk;
+    source.connect(this.audioCtx.destination);
+    this.activeSources.push(source);
+
+    const currentTime = this.audioCtx.currentTime;
+    if (this.nextPlayTime < currentTime) {
+      this.nextPlayTime = currentTime;
+    }
+
+    source.start(this.nextPlayTime);
+    this.nextPlayTime += chunk.duration;
+
+    source.onended = () => {
+      this.activeSources = this.activeSources.filter(s => s !== source);
+      this.isPlaying = false;
+      this.processQueue();
+    };
+  }
+
+  public stop() {
+    this.queue = [];
+    this.isPlaying = false;
+    this.nextPlayTime = 0;
+    
+    this.activeSources.forEach(s => {
+      try { s.stop(); } catch (_) {}
+    });
+    this.activeSources = [];
+
+    if (this.audioCtx && this.audioCtx.state !== 'closed') {
+      try {
+        this.audioCtx.close();
+      } catch (_) {}
+      this.audioCtx = null;
+    }
+    this.onStateChange(false);
+  }
+}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -1731,6 +1839,27 @@ export default function App() {
     document.body.setAttribute('data-theme', 'monochrome');
   }, [appTheme]);
 
+  const [bgTheme, setBgTheme] = useState<string>(() => {
+    return localStorage.getItem('osone_app_bg_theme') || 'cosmic';
+  });
+
+  const APP_BG_COLORS = [
+    { id: 'cosmic', name: 'Vulcão Ativo', color: '#ff3700', gradient: 'radial-gradient(circle at 50% 50%, #ff5500 0%, #2f0700 100%)' },
+    { id: 'abyssal', name: 'Rosa Shocking', color: '#ff007f', gradient: 'radial-gradient(circle at 50% 50%, #ff007f 0%, #300015 100%)' },
+    { id: 'forest', name: 'Verde Radioativo', color: '#00ff66', gradient: 'radial-gradient(circle at 50% 50%, #00ff66 0%, #001f0a 100%)' },
+    { id: 'obsidian', name: 'Azul Elétrico', color: '#00d2ff', gradient: 'radial-gradient(circle at 50% 50%, #00d2ff 0%, #001c3d 100%)' },
+    { id: 'crimson', name: 'Ouro Incandescente', color: '#ffcc00', gradient: 'radial-gradient(circle at 50% 50%, #ffb700 0%, #2b1800 100%)' },
+    { id: 'sepia', name: 'Púrpura Quântica', color: '#a855f7', gradient: 'radial-gradient(circle at 50% 50%, #a855f7 0%, #24003d 100%)' },
+    { id: 'gray', name: 'Preto Absoluto', color: '#18181b', gradient: 'radial-gradient(circle at 50% 50%, #27272a 0%, #000000 100%)' }
+  ];
+
+  useEffect(() => {
+    const selected = APP_BG_COLORS.find(c => c.id === bgTheme) || APP_BG_COLORS[0];
+    localStorage.setItem('osone_app_bg_theme', bgTheme);
+    document.body.style.setProperty('--bg-gradient', selected.gradient);
+    document.body.style.setProperty('--bg-color', selected.color);
+  }, [bgTheme]);
+
   const [apiKeys, setApiKeys] = useState<ApiKeys>(() => {
     const defaultKeys: ApiKeys = { 
       gemini: '', 
@@ -1983,6 +2112,7 @@ export default function App() {
   });
   const [duoSpeakingHost, setDuoSpeakingHost] = useState<'hostA' | 'hostB' | null>(null);
   const [isDuoPopoverOpen, setIsDuoPopoverOpen] = useState(false);
+  const [isBgPopoverOpen, setIsBgPopoverOpen] = useState(false);
   const [activeDuoHost, setActiveDuoHost] = useState<'hostA' | 'hostB'>('hostA');
   const [duoAutoPrompt, setDuoAutoPrompt] = useState<string | null>(null);
 
@@ -2729,6 +2859,20 @@ export default function App() {
   const [writingSounds, setWritingSounds] = useState<boolean>(() => {
     return localStorage.getItem('osone_writing_sounds') === 'true';
   });
+  const [writingAttachedFiles, setWritingAttachedFiles] = useState<File[]>([]);
+  const writingFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleWritingFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setWritingAttachedFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeWritingFile = (index: number) => {
+    setWritingAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const [isSidebarSettingsOpen, setIsSidebarSettingsOpen] = useState<boolean>(false);
   const [isProjectsDockOpen, setIsProjectsDockOpen] = useState<boolean>(false);
 
@@ -3629,12 +3773,18 @@ Escreva um novo retorno. Comece expressando a pancada física com dor bem-humora
   };
 
   const addSearchPopup = (popup: Omit<SearchPopupItem, 'id' | 'timestamp'>) => {
+    const id = Math.random().toString(36).substring(2, 9);
     const newPopup: SearchPopupItem = {
       ...popup,
-      id: Math.random().toString(36).substring(2, 9),
+      id,
       timestamp: new Date().toLocaleTimeString('pt-BR')
     };
     setSearchPopups(prev => [newPopup, ...prev].slice(0, 6));
+
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      setSearchPopups(prev => prev.filter(p => p.id !== id));
+    }, 10000);
   };
 
   const processGroundingToPopups = (grounding: any, queryText: string) => {
@@ -4176,10 +4326,25 @@ ${isBad
   const isElevenLabsLiveActiveRef = useRef(false);
   const elevenLabsStateRef = useRef<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
   const elevenLabsLiveAudioRef = useRef<HTMLAudioElement | null>(null);
-  const elevenLabsRecognitionRef = useRef<any>(null);
+  const elevenLabsQueuePlayerRef = useRef<ElevenLabsQueuePlayer | null>(null);
+  const elevenLabsWsRef = useRef<WebSocket | null>(null);
   const elevenLabsSilenceTimeoutRef = useRef<any>(null);
   const accumulatedTranscriptRef = useRef<string>("");
   const lastProcessedResultIndexRef = useRef<number>(0);
+
+  useEffect(() => {
+    elevenLabsQueuePlayerRef.current = new ElevenLabsQueuePlayer((speaking) => {
+      setIsSpeaking(speaking);
+    });
+    return () => {
+      elevenLabsQueuePlayerRef.current?.stop();
+      if (elevenLabsWsRef.current) {
+        try { elevenLabsWsRef.current.close(); } catch (_) {}
+      }
+    };
+  }, []);
+
+  const elevenLabsRecognitionRef = useRef<any>(null);
 
   // Wake Word listener implementation
   const isWaitingRef = useRef(isWaitingForWakeWord);
@@ -4422,6 +4587,15 @@ ${isBad
       } catch(_) {}
       elevenLabsLiveAudioRef.current = null;
     }
+
+    if (elevenLabsQueuePlayerRef.current) {
+      try { elevenLabsQueuePlayerRef.current.stop(); } catch(_) {}
+    }
+
+    if (elevenLabsWsRef.current) {
+      try { elevenLabsWsRef.current.close(); } catch(_) {}
+      elevenLabsWsRef.current = null;
+    }
     
     setIsListening(false);
     setIsSpeaking(false);
@@ -4456,67 +4630,81 @@ ${isBad
     setIsSpeaking(true);
     setIsListening(false);
     setIsTranscribing(true);
-    
+    setVoiceTranscript(text);
+
+    // Stop previous audio playback
+    if (elevenLabsQueuePlayerRef.current) {
+      elevenLabsQueuePlayerRef.current.stop();
+    }
+    if (elevenLabsWsRef.current) {
+      try { elevenLabsWsRef.current.close(); } catch (_) {}
+      elevenLabsWsRef.current = null;
+    }
+
     try {
-      const response = await fetch("/api/tts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          text: text,
-          engine: 'elevenlabs',
-          clientApiKey: apiKeys.gemini || '',
-          voice: selectedVoice === 'Scarlet' ? 'Fenrir' : selectedVoice,
-          elevenLabsApiKey: apiKeys.elevenLabsApiKey || '',
-          elevenLabsVoiceId: getActiveElevenLabsVoiceId(),
-          elevenLabsStability: apiKeys.elevenLabsStability,
-          elevenLabsSimilarityBoost: apiKeys.elevenLabsSimilarityBoost,
-          elevenLabsStyle: apiKeys.elevenLabsStyle,
-          elevenLabsSpeakerBoost: apiKeys.elevenLabsSpeakerBoost,
-          elevenLabsModel: apiKeys.elevenLabsModel,
-          vocalProfileEscarlate: vocalProfileEscarlate
-        })
-      });
-      
-      if (!response.ok) {
-        let errorDetail = "Falha ao sintetizar voz no premium tts";
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const voiceId = getActiveElevenLabsVoiceId();
+      const modelId = apiKeys.elevenLabsModel || 'eleven_flash_v2_5';
+      const apiKeyParam = apiKeys.elevenLabsApiKey ? `&apiKey=${apiKeys.elevenLabsApiKey}` : '';
+      const stability = apiKeys.elevenLabsStability ?? 0.5;
+      const similarityBoost = apiKeys.elevenLabsSimilarityBoost ?? 0.75;
+
+      const wsUrl = `${protocol}//${window.location.host}/api/elevenlabs-ws?voiceId=${voiceId}&modelId=${modelId}${apiKeyParam}&stability=${stability}&similarityBoost=${similarityBoost}`;
+      const ws = new WebSocket(wsUrl);
+      elevenLabsWsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("ElevenLabs Proxy WS connected for single-play text speech");
+        // Send the complete phrase chunk
+        ws.send(JSON.stringify({ text: text }));
+        // Immediately flush to signal end of stream
+        ws.send(JSON.stringify({ text: "", flush: true }));
+      };
+
+      ws.onmessage = async (event) => {
         try {
-          const errJson = await response.json();
-          errorDetail = errJson.error || errorDetail;
-        } catch (_) {}
-        addNotification(`Erro ElevenLabs: ${errorDetail}`, "error");
-        throw new Error(errorDetail);
+          const parsed = JSON.parse(event.data);
+          if (parsed.error) {
+            console.error("ElevenLabs server-side WS proxy error:", parsed.error);
+            addNotification(`Erro ElevenLabs: ${parsed.error}`, "error");
+            return;
+          }
+
+          if (parsed.audio) {
+            // Add chunk to player queue
+            elevenLabsQueuePlayerRef.current?.addChunk(parsed.audio);
+          }
+        } catch (e) {
+          console.error("Error processing websocket message:", e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("ElevenLabs Proxy WS error during speech playback:", err);
+      };
+
+      ws.onclose = () => {
+        console.log("ElevenLabs Proxy WS closed for single-play text speech");
+      };
+
+      // Set up the drainage handler to transition state back when speaking finishes
+      if (elevenLabsQueuePlayerRef.current) {
+        elevenLabsQueuePlayerRef.current.onQueueDrained = () => {
+          setIsSpeaking(false);
+          setVoiceTranscript('');
+          if (isElevenLabsLiveActiveRef.current) {
+            elevenLabsStateRef.current = 'listening';
+            startListeningElevenLabs();
+          }
+          if (elevenLabsWsRef.current) {
+            try { elevenLabsWsRef.current.close(); } catch (_) {}
+            elevenLabsWsRef.current = null;
+          }
+        };
       }
-      
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-      elevenLabsLiveAudioRef.current = audio;
-      
-      audio.onended = () => {
-        setIsSpeaking(false);
-        setVoiceTranscript('');
-        if (isElevenLabsLiveActiveRef.current) {
-          elevenLabsStateRef.current = 'listening';
-          // Se o microfone já está rodando, re-ativa os estados rapidamente sem recriar hardware
-          startListeningElevenLabs();
-        }
-      };
-      
-      audio.onerror = () => {
-        setIsSpeaking(false);
-        setVoiceTranscript('');
-        if (isElevenLabsLiveActiveRef.current) {
-          elevenLabsStateRef.current = 'listening';
-          startListeningElevenLabs();
-        }
-      };
-      
-      setVoiceTranscript(text);
-      await audio.play();
+
     } catch (e) {
-      console.error("Erro na síntese ElevenLabs Live:", e);
+      console.error("WS ElevenLabs speech failed, falling back to Web Speech Synthesis", e);
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'pt-BR';
       utterance.onstart = () => {
@@ -4680,6 +4868,19 @@ ${isBad
 
     addMessage({ role: 'user', content: userText }); // Só agora adiciona ao chat
     
+    // Stop any previous audio playback
+    if (elevenLabsQueuePlayerRef.current) {
+      elevenLabsQueuePlayerRef.current.stop();
+    }
+    if (elevenLabsWsRef.current) {
+      try { elevenLabsWsRef.current.close(); } catch (_) {}
+      elevenLabsWsRef.current = null;
+    }
+
+    let heartbeat: any = null;
+    let elWs: WebSocket | null = null;
+    let assistantMsgId = "";
+
     try {
       const adaptive = getAdaptivePersonalityMetadata(chatHistoryRef.current);
       let systemInstruction = `${profileInstruction}
@@ -4702,7 +4903,65 @@ ${adaptive.directions}`;
       - Nunca faça listas, tópicos estruturados, tópicos com hífens ou qualquer numeração por voz.
       - Conduza a conversa de forma estimulante, mantendo o diálogo profundo, natural e contínuo.`;
 
-      const response = await fetch("/api/chat-intel", {
+      // 1. Establish the ElevenLabs proxy WebSocket connection
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const voiceId = getActiveElevenLabsVoiceId();
+      const modelId = apiKeys.elevenLabsModel || 'eleven_flash_v2_5';
+      const apiKeyParam = apiKeys.elevenLabsApiKey ? `&apiKey=${apiKeys.elevenLabsApiKey}` : '';
+      const stability = apiKeys.elevenLabsStability ?? 0.5;
+      const similarityBoost = apiKeys.elevenLabsSimilarityBoost ?? 0.75;
+
+      const wsUrl = `${protocol}//${window.location.host}/api/elevenlabs-ws?voiceId=${voiceId}&modelId=${modelId}${apiKeyParam}&stability=${stability}&similarityBoost=${similarityBoost}`;
+      elWs = new WebSocket(wsUrl);
+      elevenLabsWsRef.current = elWs;
+
+      // Set up the queue player
+      if (!elevenLabsQueuePlayerRef.current) {
+        elevenLabsQueuePlayerRef.current = new ElevenLabsQueuePlayer((speaking) => {
+          setIsSpeaking(speaking);
+        });
+      }
+
+      elevenLabsQueuePlayerRef.current.onQueueDrained = () => {
+        setIsSpeaking(false);
+        setVoiceTranscript('');
+        if (isElevenLabsLiveActiveRef.current) {
+          elevenLabsStateRef.current = 'listening';
+          startListeningElevenLabs();
+        }
+        if (elevenLabsWsRef.current) {
+          try { elevenLabsWsRef.current.close(); } catch (_) {}
+          elevenLabsWsRef.current = null;
+        }
+      };
+
+      elWs.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed.error) {
+            console.error("ElevenLabs WS proxy response error:", parsed.error);
+            return;
+          }
+          if (parsed.audio) {
+            elevenLabsQueuePlayerRef.current?.addChunk(parsed.audio);
+          }
+        } catch (e) {
+          console.error("Error reading streaming audio chunk:", e);
+        }
+      };
+
+      // Start the heartbeat/keep-alive to send " " every 10 seconds
+      heartbeat = setInterval(() => {
+        if (elWs && elWs.readyState === WebSocket.OPEN) {
+          elWs.send(JSON.stringify({ text: " " }));
+        }
+      }, 10000);
+
+      // Create empty assistant message container
+      assistantMsgId = addMessage({ role: 'assistant', content: '' });
+
+      // 2. Fetch the streaming Gemini response
+      const response = await fetch("/api/chat-intel-stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -4714,26 +4973,92 @@ ${adaptive.directions}`;
         })
       });
 
-      if (!response.ok) {
-        throw new Error("Erro de resposta do servidor de inteligência");
+      if (!response.ok || !response.body) {
+        throw new Error("Erro de resposta do servidor de inteligência stream");
       }
 
-      const data = await response.json();
-      const replyText = data.text || "Desculpe, não consegui te ouvir bem.";
-      
-      addMessage({ role: 'assistant', content: replyText });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let finished = false;
+      let buffer = "";
+      let accumulatedReply = "";
+
+      // Change states to speaking/transcribing
+      elevenLabsStateRef.current = 'speaking';
       setIsGenerating(false);
       setIsTranscribing(false);
-      
-      if (isElevenLabsLiveActiveRef.current && elevenLabsStateRef.current === 'thinking') {
-        await playElevenLabsSpeech(replyText);
+
+      while (!finished) {
+        const { value, done } = await reader.read();
+        finished = done;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !finished });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const dataStr = line.slice(6).trim();
+              if (dataStr === "[DONE]") {
+                finished = true;
+                break;
+              }
+              try {
+                const parsed = JSON.parse(dataStr);
+                if (parsed.error) {
+                  throw new Error(parsed.error);
+                }
+                if (parsed.text) {
+                  const chunkText = parsed.text;
+                  accumulatedReply += chunkText;
+
+                  // Update UI message content in real-time!
+                  setChatHistory(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: accumulatedReply } : m));
+
+                  // Update subtitle/voice transcript
+                  setVoiceTranscript(accumulatedReply);
+
+                  // Stream text chunk into ElevenLabs WebSocket proxy!
+                  if (elWs && elWs.readyState === WebSocket.OPEN) {
+                    elWs.send(JSON.stringify({ text: chunkText }));
+                  }
+                }
+              } catch (e) {
+                console.error("Error parsing SSE line:", e);
+              }
+            }
+          }
+        }
       }
+
+      // Cleanup heartbeat
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
+
+      // 3. Send final flush chunk to ElevenLabs to complete audio synthesis
+      if (elWs && elWs.readyState === WebSocket.OPEN) {
+        elWs.send(JSON.stringify({ text: "", flush: true }));
+      }
+
     } catch (err) {
-      console.error("Erro no processamento Gemini ElevenLabs Live:", err);
+      console.error("Erro no processamento Gemini ElevenLabs Live Stream:", err);
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
       setIsGenerating(false);
       setIsTranscribing(false);
-      if (isElevenLabsLiveActiveRef.current && elevenLabsStateRef.current === 'thinking') {
-        await playElevenLabsSpeech("Desculpe, tive um atraso na conexão cerebral agora.");
+
+      // Fallback message
+      const errorText = "Desculpe, tive um atraso na conexão cerebral agora.";
+      if (assistantMsgId) {
+        setChatHistory(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: errorText } : m));
+      } else {
+        addMessage({ role: 'assistant', content: errorText });
+      }
+
+      if (isElevenLabsLiveActiveRef.current) {
+        await playElevenLabsSpeech(errorText);
       }
     }
   };
@@ -5019,7 +5344,7 @@ Siga rigorosamente estas diretrizes:
   const handleGenerate = async (explicitPrompt?: string) => {
     const finalPrompt = explicitPrompt || workspacePrompt;
     const effectiveApiKey = apiKeys.gemini || '';
-    if (!finalPrompt.trim()) return;
+    if (!finalPrompt.trim() && writingAttachedFiles.length === 0) return;
 
     if (!explicitPrompt) {
       setLastWorkspacePrompt(workspacePrompt);
@@ -5045,9 +5370,47 @@ Um quadro negro/verde/branco altamente estilizado para estudo está ativo e exib
 IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o código existente para seguir RIGOROSAMENTE todas as regras e diretrizes estabelecidas por esta Skill. Se for instruído a atuar sob esta nova Skill, certifique-se de escrever o conteúdo/código correspondente de forma totalmente alinhada!`;
       }
 
-      const contents = isEditing 
-        ? `CÓDIGO ATUAL:\n\n${workspaceText}\n\nINSTRUÇÕES DE MODIFICAÇÃO:\n${finalPrompt}`
-        : finalPrompt;
+      const finalPromptText = finalPrompt.trim() || "Analise a imagem anexada ou conteúdo e atue sobre o código ou texto se aplicável.";
+
+      const contentsText = isEditing 
+        ? `CÓDIGO ATUAL:\n\n${workspaceText}\n\nINSTRUÇÕES DE MODIFICAÇÃO:\n${finalPromptText}`
+        : finalPromptText;
+
+      // Converter arquivos para o formato aceito pela API
+      let fileDataParts: any[] = [];
+      if (writingAttachedFiles.length > 0) {
+        fileDataParts = await Promise.all(writingAttachedFiles.map(async (file) => {
+          if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+            const pdfText = await extractTextFromPdf(file);
+            return { text: `Conteúdo extraído do arquivo PDF ${file.name}:\n${pdfText}` };
+          }
+          return new Promise<any>((resolve) => {
+            const reader = new FileReader();
+            if (file.type.startsWith('image/')) {
+              reader.onload = () => {
+                const base64 = (reader.result as string).split(',')[1];
+                resolve({
+                  inlineData: {
+                    data: base64,
+                    mimeType: file.type
+                  }
+                });
+              };
+              reader.readAsDataURL(file);
+            } else {
+              reader.onload = () => {
+                const text = reader.result as string;
+                resolve({ text: `Conteúdo do arquivo ${file.name}:\n${text}` });
+              };
+              reader.readAsText(file);
+            }
+          });
+        }));
+      }
+
+      const promptPayload = fileDataParts.length > 0
+        ? [{ role: 'user', parts: [{ text: contentsText }, ...fileDataParts] }]
+        : contentsText;
 
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -5055,7 +5418,7 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         body: JSON.stringify({
           clientApiKey: effectiveApiKey,
           model: apiKeys.geminiModel || "gemini-3.5-flash",
-          prompt: contents,
+          prompt: promptPayload,
           systemInstruction
         })
       });
@@ -5075,6 +5438,7 @@ IMPORTANTE: Você deve realizar a geração de conteúdo do zero ou modificar o 
         }
       }
       setWorkspacePrompt('');
+      setWritingAttachedFiles([]);
       
       // Auto-analisar após gerar se for código
       if (text && (text.includes('<') || text.includes('function') || text.includes('const'))) {
@@ -9336,6 +9700,68 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
 
 
 
+          {/* SELETOR DE COR DE FUNDO */}
+          <div className="relative">
+            <button
+              onClick={() => setIsBgPopoverOpen(!isBgPopoverOpen)}
+              className={cn(
+                "p-2 md:px-3 md:py-1.5 transition-all text-[10px] font-medium flex items-center gap-1.5 border rounded-full ml-1",
+                isBgPopoverOpen 
+                  ? "bg-amber-500/10 border-amber-500/35 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]" 
+                  : "bg-white/[0.03] border-white/[0.08] text-her-muted hover:border-white/20 hover:bg-white/[0.05]"
+              )}
+              title="Mudar Cor de Fundo do App"
+            >
+              <Palette size={13} />
+              <span className="hidden sm:inline leading-none tracking-widest text-[9px] font-bold uppercase">
+                FUNDO
+              </span>
+            </button>
+
+            <AnimatePresence>
+              {isBgPopoverOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-3 p-3 bg-zinc-950/95 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.8)] z-[200] min-w-[240px] flex flex-col gap-2.5"
+                >
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-300">Cor de Fundo</span>
+                    <span className="text-[9px] text-zinc-500 font-mono">7 Atmosferas</span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-2 py-1 justify-items-center">
+                    {APP_BG_COLORS.map((cfg) => (
+                      <button
+                        key={cfg.id}
+                        onClick={() => {
+                          setBgTheme(cfg.id);
+                          addNotification(`Atmosfera alterada para: ${cfg.name}`, "info");
+                        }}
+                        className={cn(
+                          "w-6 h-6 rounded-full border transition-all duration-300 relative group flex items-center justify-center hover:scale-115 active:scale-90 cursor-pointer",
+                          bgTheme === cfg.id 
+                            ? "border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.4)]" 
+                            : "border-white/10 hover:border-white/40"
+                        )}
+                        style={{ background: cfg.color }}
+                        title={cfg.name}
+                      >
+                        {bgTheme === cfg.id && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white shadow-inner" />
+                        )}
+                        {/* Tooltip */}
+                        <span className="absolute bottom-full mb-2 hidden group-hover:block bg-zinc-900 border border-white/10 text-[8px] text-white px-1.5 py-0.5 rounded whitespace-nowrap pointer-events-none z-50 shadow-md">
+                          {cfg.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           {/* MODO DUO (SALA DE PROFESSORES) HEADER ACTIVATOR */}
           <div className="relative">
             <button 
@@ -10184,28 +10610,65 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
 
                     {/* AI Prompt com design futurístico integrado no topo */}
                     <div className={cn(
-                      "w-full px-4 pt-4 pb-2 flex justify-center shrink-0 z-40 transition-all duration-500",
+                      "w-full px-4 pt-4 pb-2 flex flex-col items-center shrink-0 z-40 transition-all duration-500",
                       writingFocusMode ? "opacity-10 hover:opacity-100 focus-within:opacity-100" : "opacity-100"
                     )}>
+                      {writingAttachedFiles.length > 0 && (
+                        <div className={cn(
+                          "w-full flex flex-wrap gap-2 px-3 py-2 bg-black/40 border border-white/5 rounded-xl mb-2 backdrop-blur-md transition-all",
+                          writingWidthMode === 'compact' ? "max-w-[650px]" :
+                          writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
+                        )}>
+                          {writingAttachedFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 text-[10px] text-zinc-300 border border-white/5 shadow-sm rounded-lg">
+                              {file.type.startsWith('image/') ? (
+                                <ImageIcon size={11} className="text-amber-500" />
+                              ) : (
+                                <Paperclip size={11} className="text-blue-400" />
+                              )}
+                              <span className="truncate max-w-[120px]">{file.name}</span>
+                              <button onClick={() => removeWritingFile(idx)} className="hover:text-red-400 p-0.5 transition-colors">
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div className={cn(
                         "w-full flex items-center bg-black/95 backdrop-blur-3xl border border-white/10 rounded-2xl p-1 shadow-2xl transition-all duration-300",
                         writingWidthMode === 'compact' ? "max-w-[650px]" :
                         writingWidthMode === 'classic' ? "max-w-[850px]" : "max-w-full"
                       )}>
                         <input 
+                          type="file"
+                          ref={writingFileInputRef}
+                          onChange={handleWritingFileSelect}
+                          multiple
+                          accept="image/*,application/pdf,text/*"
+                          className="hidden"
+                        />
+                        <button 
+                          onClick={() => writingFileInputRef.current?.click()}
+                          className="w-10 h-10 text-white/30 hover:text-white/60 hover:bg-white/5 transition-all rounded-xl flex items-center justify-center shrink-0 border border-transparent hover:border-white/5"
+                          title="Anexar imagens ou documentos"
+                        >
+                          <Paperclip size={14} />
+                        </button>
+                        <input 
                           type="text"
                           value={workspacePrompt}
                           onChange={(e) => setWorkspacePrompt(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                          placeholder="Sussurrar comando criativo para a IA..."
-                          className="flex-1 bg-transparent px-4 py-2.5 focus:outline-none text-xs md:text-sm text-white/90 placeholder:text-white/20"
+                          placeholder="Sussurrar comando com imagens anexadas ou texto para a IA..."
+                          className="flex-1 bg-transparent px-2.5 py-2.5 focus:outline-none text-xs md:text-sm text-white/90 placeholder:text-white/20"
                         />
                         <button 
                           onClick={() => handleGenerate()}
-                          disabled={isGenerating || !workspacePrompt.trim()}
+                          disabled={isGenerating || (!workspacePrompt.trim() && writingAttachedFiles.length === 0)}
                           className={cn(
                             "w-9 h-9 flex items-center justify-center rounded-xl transition-all shrink-0",
-                            workspacePrompt.trim() 
+                            (workspacePrompt.trim() || writingAttachedFiles.length > 0)
                               ? (writingTheme === 'sepia' ? "bg-amber-600 text-white" : writingTheme === 'forest' ? "bg-emerald-600 text-white" : "bg-her-accent text-white") 
                               : "text-white/10"
                           )}

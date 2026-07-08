@@ -13,13 +13,16 @@ interface NotificationProps {
   duration?: number;
 }
 
-export function NotificationToast({ id, message, type = 'info', onClose, duration = 4000 }: NotificationProps) {
+export function NotificationToast({ id, message, type = 'info', onClose, duration = 7000 }: NotificationProps) {
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onClose(id);
+      onCloseRef.current(id);
     }, duration);
     return () => clearTimeout(timer);
-  }, [id, onClose, duration]);
+  }, [id, duration]);
 
   const icons = {
     info: <Info size={18} className="text-blue-400" />,

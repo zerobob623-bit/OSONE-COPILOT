@@ -67,14 +67,58 @@ export const CodePreview = ({ code }: { code: string }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Build safe srcDoc HTML
   const srcDocContent = useMemo(() => {
+    const headIncludes = `
+      <!-- Google Fonts para Design Superior -->
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+      
+      <!-- Tailwind CSS V3 Engine -->
+      <script src="https://cdn.tailwindcss.com"></script>
+      <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: {
+                sans: ['Inter', 'sans-serif'],
+                display: ['Space Grotesk', 'sans-serif'],
+                mono: ['JetBrains Mono', 'monospace'],
+                outfit: ['Outfit', 'sans-serif'],
+                serif: ['Playfair Display', 'serif'],
+              }
+            }
+          }
+        }
+      </script>
+
+      <!-- Ícones: FontAwesome & Lucide Icons -->
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+      <script src="https://unpkg.com/lucide@latest"></script>
+
+      <!-- SweetAlert2 (Para Alertas sem Travar no Sandbox) -->
+      <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-dark@4/dark.css">
+
+      <!-- GSAP & Animate.css (Animações Avançadas) -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+      <!-- Alpine.js (Interatividade Reativa Leve e Moderna) -->
+      <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+      <!-- Chart.js & Canvas Confetti -->
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    `;
+
     if (!code || !code.trim()) {
       return `
         <!DOCTYPE html>
         <html>
           <head>
-            <script src="https://cdn.tailwindcss.com"></script>
+            <meta charset="UTF-8">
+            ${headIncludes}
           </head>
           <body class="bg-zinc-900 text-zinc-400 flex items-center justify-center h-screen font-sans">
             <div class="text-center p-6 bg-zinc-950/40 rounded-xl border border-white/5 max-w-xs">
@@ -94,7 +138,7 @@ export const CodePreview = ({ code }: { code: string }) => {
         <html>
           <head>
             <meta charset="UTF-8">
-            <script src="https://cdn.tailwindcss.com"></script>
+            ${headIncludes}
             <style>
               body {
                 background-color: #09090b;
@@ -114,6 +158,25 @@ export const CodePreview = ({ code }: { code: string }) => {
                   error: { message: message, line: lineno, col: colno }
                 }, '*');
                 return false;
+              };
+
+              // Polyfill SweetAlert2 no interpretador de JS puro
+              window.alert = function(msg) {
+                if (window.Swal) {
+                  window.Swal.fire({
+                    title: 'Notificação',
+                    text: msg,
+                    icon: 'info',
+                    confirmButtonColor: '#10b981',
+                    background: '#18181b',
+                    color: '#f4f4f5'
+                  });
+                } else {
+                  console.log('[Alert]:', msg);
+                }
+              };
+              window.confirm = function(msg) {
+                return true;
               };
             </script>
           </head>
@@ -195,6 +258,34 @@ export const CodePreview = ({ code }: { code: string }) => {
             log: { type: 'warn', text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }
           }, '*');
         };
+
+        // Polyfill de alert, confirm e prompt via SweetAlert2 (Impede travamentos e erros no sandbox)
+        window.alert = function(msg) {
+          if (window.Swal) {
+            window.Swal.fire({
+              title: 'Notificação',
+              text: msg,
+              icon: 'info',
+              confirmButtonColor: '#10b981',
+              background: '#18181b',
+              color: '#f4f4f5'
+            });
+          } else {
+            _log('[Alert]:', msg);
+          }
+        };
+
+        window.confirm = function(msg) {
+          _log('[Confirm]:', msg);
+          return true;
+        };
+
+        // Auto inicialização de ícones Lucide
+        window.addEventListener('DOMContentLoaded', () => {
+          if (window.lucide) {
+            window.lucide.createIcons();
+          }
+        });
       </script>
     `;
 
@@ -204,9 +295,16 @@ export const CodePreview = ({ code }: { code: string }) => {
       // Find head index to inject scripts or construct it
       const headIndex = code.search(/<head>/i);
       if (headIndex !== -1) {
-        return code.replace(/<head>/i, `<head>${injectedScript}<script src="https://cdn.tailwindcss.com"></script>`);
+        return code.replace(/<head>/i, `<head>${headIncludes}${injectedScript}`);
+      } else {
+        // Find <html> and inject <head> right after it
+        const htmlMatch = code.match(/<html[^>]*>/i);
+        if (htmlMatch) {
+          const matchedTag = htmlMatch[0];
+          return code.replace(matchedTag, `${matchedTag}\n<head>${headIncludes}${injectedScript}</head>`);
+        }
       }
-      return injectedScript + code;
+      return headIncludes + injectedScript + code;
     }
 
     return `
@@ -215,9 +313,9 @@ export const CodePreview = ({ code }: { code: string }) => {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <script src="https://cdn.tailwindcss.com"></script>
+          ${headIncludes}
           <style>
-            body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 1.5rem; background-color: #ffffff; color: #1f2937; }
+            body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 1.5rem; background-color: #ffffff; color: #1f2937; }
           </style>
           ${injectedScript}
         </head>
