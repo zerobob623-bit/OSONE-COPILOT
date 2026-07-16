@@ -27,7 +27,7 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
   const [vocalStyle, setVocalStyle] = useState<'soprano' | 'tenor' | 'vocoder' | 'cosmic'>('vocoder');
   const [beatVolume, setBeatVolume] = useState<number>(0.25);
   const [harmonyVolume, setHarmonyVolume] = useState<number>(0.35);
-  const [muteVocalGuide, setMuteVocalGuide] = useState<boolean>(true); // Guide voice off by default to avoid robotic TTS
+  const [muteVocalGuide, setMuteVocalGuide] = useState<boolean>(false); // Enabled by default so the AI sings out loud immediately!
   const [voiceRate, setVoiceRate] = useState<number>(0.92); // slightly slower is better for singing cadence
   const [systemMessage, setSystemMessage] = useState<string>('');
 
@@ -480,74 +480,16 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
     setCurrentWordIndex(wordIndex);
     const word = lineWords[wordIndex];
 
-    // Pitch for voice synthesis
-    const wordPitch = getPitchForWord(wordIndex, lineIndex);
-
-    // Trigger matching synthesizer voice assist note
+    // Trigger matching synthesizer voice assist note (Vocoder harmony notes)
     playWordHarmonyNote(wordIndex, lineIndex, word.length);
 
-    if (!muteVocalGuide && typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel(); // instant utterance swap for crisp rhythm!
-
-      const utterance = new SpeechSynthesisUtterance(word);
-      utteranceRef.current = utterance;
-
-      if (selectedVoiceName) {
-        const voices = window.speechSynthesis.getVoices();
-        const matched = voices.find(v => v.name === selectedVoiceName);
-        if (matched) utterance.voice = matched;
-      }
-
-      // Slightly faster rate works wonders for individual words flow
-      utterance.rate = voiceRate * 1.05;
-      utterance.pitch = wordPitch;
-
-      (window as any)._activeUtterances = (window as any)._activeUtterances || [];
-      (window as any)._activeUtterances.push(utterance);
-      if ((window as any)._activeUtterances.length > 50) {
-        (window as any)._activeUtterances.shift();
-      }
-
-      let advanceTriggered = false;
-      const triggerNext = () => {
-        if (advanceTriggered) return;
-        advanceTriggered = true;
-        
-        // Human breathing cadence delay proportional to text length
-        const minGap = 120 - Math.min(60, word.length * 5);
-        lineTimeoutRef.current = setTimeout(() => {
-          playWordAtIndex(wordIndex + 1, lineIndex, lineWords);
-        }, minGap);
-      };
-
-      utterance.onend = triggerNext;
-      utterance.onerror = triggerNext;
-
-      // Safe fallback timeout to prevent infinite stuck state if speaking system freezes
-      const wordsThreshold = Math.max(380, word.length * 105);
-      const safetyFallbackTimer = setTimeout(() => {
-        triggerNext();
-      }, wordsThreshold);
-
-      utterance.onend = () => {
-        clearTimeout(safetyFallbackTimer);
-        triggerNext();
-      };
-      utterance.onerror = () => {
-        clearTimeout(safetyFallbackTimer);
-        triggerNext();
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } else {
-      // If vocal guide is MUTED/DISABLED, we advance automatically after a pleasant word reading duration!
-      // This creates a magnificent visual karaoke tracker with only the backing instruments.
-      const wordDuration = Math.max(220, Math.min(650, word.length * 95));
-      const gap = 80;
-      lineTimeoutRef.current = setTimeout(() => {
-        playWordAtIndex(wordIndex + 1, lineIndex, lineWords);
-      }, wordDuration + gap);
-    }
+    // We advance automatically after a pleasant word reading duration in perfect sync with the backing melody/synthesizer tracks!
+    // This creates a magnificent visual karaoke tracker with only the backing instruments, allowing Gemini/Live to sing without duplicate basic TTS voices.
+    const wordDuration = Math.max(220, Math.min(650, word.length * 95));
+    const gap = 80;
+    lineTimeoutRef.current = setTimeout(() => {
+      playWordAtIndex(wordIndex + 1, lineIndex, lineWords);
+    }, wordDuration + gap);
   };
 
   // Main Singing engine queue
@@ -701,27 +643,11 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
             <span className="font-mono text-[9px] uppercase tracking-wider">RITMO: {beatGenre}</span>
           </button>
 
-          {/* Vocal Guide (TTS Guide) Toggle */}
-          <button
-            onClick={() => {
-              const newVal = !muteVocalGuide;
-              setMuteVocalGuide(newVal);
-              if (newVal && typeof window !== 'undefined' && window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-              }
-            }}
-            title={muteVocalGuide ? "Ativar Guia Vocal (Voz TTS)" : "Mudar para Vocals Mudos"}
-            className={`p-2 border text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 px-3 ${
-              !muteVocalGuide 
-                ? "bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/30 text-rose-300"
-                : "bg-white/[0.02] hover:bg-white/[0.05] border-white/5 hover:border-white/10 text-zinc-400"
-            }`}
-          >
-            <Volume2 size={13} className={!muteVocalGuide ? "text-rose-400 animate-bounce" : "text-zinc-500"} />
-            <span className="font-mono text-[9px] uppercase tracking-wider">
-              {muteVocalGuide ? "Guia TTS: OFF" : "Guia TTS: ON"}
-            </span>
-          </button>
+          {/* Gemini Vocalization Status */}
+          <div className="p-2 bg-pink-500/10 border border-pink-500/25 text-pink-300 rounded-xl flex items-center gap-1.5 px-3 select-none">
+            <Volume2 size={13} className="text-pink-400 animate-pulse" />
+            <span className="font-mono text-[9px] uppercase tracking-wider font-bold">Vocal: Gemini Live</span>
+          </div>
 
           {/* Close Karaoke */}
           <button 
@@ -944,11 +870,9 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
 
             {/* Quick guide voice status */}
             <div className="text-center md:text-left font-sans text-[10px] text-zinc-400">
-              <span className="font-semibold block text-zinc-350">Guia Vocal TTS: {muteVocalGuide ? "MUTADO 🔇" : "ATIVADO 🔊"}</span>
+              <span className="font-semibold block text-pink-400">Voz Síncrona: Gemini Live 🌟</span>
               <p className="text-[9px] text-zinc-500 leading-normal">
-                {muteVocalGuide 
-                  ? "Cante você mesmo por cima das harmonias!" 
-                  : "Voz robótica auxiliar ativa."}
+                Cantando em tempo real com harmonias e acordes sintetizados!
               </p>
             </div>
           </div>
