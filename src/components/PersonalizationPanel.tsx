@@ -458,7 +458,7 @@ export default function PersonalizationPanel({
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] text-her-muted mb-4 font-bold select-none">Voz Ativa do Sistema</label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
+                    {['Kore', 'Puck', 'Charon', 'Fenrir', 'Scarlet'].map((voice) => (
                       <button
                         key={voice}
                         onClick={() => setSelectedVoice(voice)}

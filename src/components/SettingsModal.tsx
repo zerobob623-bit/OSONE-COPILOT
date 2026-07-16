@@ -5,6 +5,14 @@ import { cn } from '../lib/utils';
 import { ApiKeys, OrbStyle, AppTheme, AIProfile, VoiceModulation } from '../types';
 import { googleHomeService } from '../services/googleHomeService';
 
+const VOICE_DETAILS = [
+  { id: 'Kore', name: 'Kore', desc: 'Feminina • Doce, expressiva e natural', category: 'Femininas' },
+  { id: 'Puck', name: 'Puck', desc: 'Masculina • Divertida, enérgica e jovial', category: 'Masculinas' },
+  { id: 'Charon', name: 'Charon', desc: 'Masculina • Amigável, casual e espontânea', category: 'Masculinas' },
+  { id: 'Fenrir', name: 'Fenrir', desc: 'Masculina • Poderosa, profunda e imponente', category: 'Masculinas' },
+  { id: 'Scarlet', name: 'Sensus (Scarlet)', desc: 'Quântica • Adaptativa, profunda e misteriosa', category: 'Especiais' }
+];
+
 type TabId = 'general' | 'elevenlabs' | 'interface' | 'profile' | 'automation' | 'sync';
 type ConnectionStatus = 'idle' | 'testing' | 'connected' | 'error';
 
@@ -789,28 +797,54 @@ export const SettingsModal = ({
                     className="space-y-8"
                   >
                     <div className="space-y-6">
-                      <div>
-                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted mb-3 font-bold">Voz do Sistema (Frequência)</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {['Puck', 'Charon', 'Kore', 'Fenrir', 'Scarlet'].map((voice) => (
-                            <button
-                              key={voice}
-                              onClick={() => setSelectedVoice(voice)}
-                              className={cn(
-                                "px-4 py-3 rounded-2xl text-[10px] sm:text-xs font-light transition-all border text-left flex items-center justify-between group",
-                                selectedVoice === voice 
-                                  ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
-                                  : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
-                                voice === 'Scarlet' && "border-cyan-900/20 hover:border-cyan-500/30"
-                              )}
-                            >
-                              <span className={cn(voice === 'Scarlet' && "text-cyan-400 font-medium")}>{voice === 'Scarlet' ? 'Sensus' : voice}</span>
-                              {selectedVoice === voice && <div className={cn(
-                                "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
-                                voice === 'Scarlet' ? "bg-cyan-500 shadow-cyan-500/50" : "bg-her-accent"
-                              )} />}
-                            </button>
-                          ))}
+                      <div className="space-y-4">
+                        <label className="block text-[9px] uppercase tracking-[0.2em] text-her-muted font-bold">Voz do Sistema (Frequência Gemini Live)</label>
+                        
+                        <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1.5 custom-scrollbar">
+                          {['Femininas', 'Masculinas', 'Especiais'].map((cat) => {
+                            const catVoices = VOICE_DETAILS.filter(v => v.category === cat);
+                            if (catVoices.length === 0) return null;
+                            return (
+                              <div key={cat} className="space-y-2 text-left">
+                                <span className="block text-[8.5px] uppercase tracking-[0.15em] text-her-muted/65 font-bold mb-1.5 select-none">{cat}</span>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {catVoices.map((v) => (
+                                    <button
+                                      key={v.id}
+                                      onClick={() => setSelectedVoice(v.id)}
+                                      className={cn(
+                                        "px-4 py-3 rounded-2xl transition-all border text-left flex flex-col gap-1.5 group relative overflow-hidden cursor-pointer",
+                                        selectedVoice === v.id 
+                                          ? "bg-her-accent/10 text-her-accent border-her-accent/30" 
+                                          : "bg-white/[0.02] text-her-muted border-white/[0.05] hover:bg-white/[0.05]",
+                                        v.id === 'Scarlet' && selectedVoice !== 'Scarlet' && "border-cyan-950/20 hover:border-cyan-500/20 hover:bg-cyan-950/5",
+                                        v.id === 'Scarlet' && selectedVoice === 'Scarlet' && "bg-cyan-950/20 text-cyan-400 border-cyan-500/40"
+                                      )}
+                                    >
+                                      <div className="flex items-center justify-between w-full">
+                                        <span className={cn(
+                                          "text-[11px] font-semibold tracking-wide",
+                                          v.id === 'Scarlet' ? "text-cyan-400 font-medium" : "text-zinc-250 transition-colors",
+                                          selectedVoice === v.id && (v.id === 'Scarlet' ? "text-cyan-300" : "text-her-accent")
+                                        )}>
+                                          {v.name}
+                                        </span>
+                                        {selectedVoice === v.id && (
+                                          <div className={cn(
+                                            "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(var(--her-accent),0.5)]",
+                                            v.id === 'Scarlet' ? "bg-cyan-500 shadow-cyan-500/50" : "bg-her-accent"
+                                          )} />
+                                        )}
+                                      </div>
+                                      <span className="text-[9px] text-zinc-400 transition-colors leading-normal font-sans select-none">
+                                        {v.desc}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {selectedVoice === 'Scarlet' && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, User, Plus, Trash2, Check, Loader2, Cloud, Database, Fingerprint } from 'lucide-react';
+import { X, User, Plus, Trash2, Check, Loader2, Cloud, Database, Fingerprint, Heart, Cpu, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { User as UserClass } from '../types';
 
@@ -14,6 +14,9 @@ interface ProfileModalProps {
   isAuthLoading: boolean;
   onOpenDossier?: () => void;
   intimateAnswersCount?: number;
+  aiDossierType: 'gradual' | 'complete' | null;
+  onStartAiDossier: (type: 'gradual' | 'complete') => void;
+  onOpenAiDossier: () => void;
 }
 
 export const ProfileModal = ({
@@ -25,11 +28,17 @@ export const ProfileModal = ({
   onLogout,
   isAuthLoading,
   onOpenDossier,
-  intimateAnswersCount
+  intimateAnswersCount,
+  aiDossierType,
+  onStartAiDossier,
+  onOpenAiDossier
 }: ProfileModalProps) => {
   const [localProfiles, setLocalProfiles] = useState<UserClass[]>([]);
   const [newProfileName, setNewProfileName] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showInitSelection, setShowInitSelection] = useState(false);
+  const [isInitializingDossier, setIsInitializingDossier] = useState(false);
+  const [initStageText, setInitStageText] = useState("");
 
   // Load local profiles on open
   useEffect(() => {
@@ -205,6 +214,136 @@ export const ProfileModal = ({
                       <p className="text-[9px] text-zinc-600">Nenhum perfil selecionado</p>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Dossiê de Personalidade do OSONE (IA) */}
+            <div className="p-4 rounded-2xl bg-amber-500/[0.02] border border-amber-500/10 space-y-3 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/[0.03] blur-xl rounded-full pointer-events-none" />
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 font-bold flex items-center gap-1">
+                  <Cpu size={10} className="animate-pulse text-amber-450" />
+                  Dossiê de Personalidade OSONE (IA)
+                </span>
+                {aiDossierType && (
+                  <span className={cn(
+                    "text-[8px] border px-1.5 py-0.2 rounded-full uppercase font-mono tracking-wider font-semibold",
+                    aiDossierType === 'complete' 
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
+                      : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+                  )}>
+                    {aiDossierType === 'complete' ? "SINTONIZADO" : "EM EVOLUÇÃO"}
+                  </span>
+                )}
+              </div>
+
+              {!aiDossierType ? (
+                <div className="space-y-3">
+                  {isInitializingDossier ? (
+                    <div className="py-4 text-center space-y-2">
+                      <Loader2 size={20} className="animate-spin text-amber-500 mx-auto" />
+                      <p className="text-[10px] font-mono text-zinc-400 animate-pulse uppercase tracking-wider">{initStageText}</p>
+                    </div>
+                  ) : showInitSelection ? (
+                    <div className="space-y-2.5 pt-1">
+                      <p className="text-[10.5px] text-zinc-300 leading-normal font-light">
+                        Escolha como o OSONE deve estruturar a sua alma sintética:
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsInitializingDossier(true);
+                            setInitStageText("Calibrando aprendizado gradativo...");
+                            setTimeout(() => {
+                              setInitStageText("Conectando canais sensoriais...");
+                              setTimeout(() => {
+                                onStartAiDossier('gradual');
+                                setIsInitializingDossier(false);
+                                setShowInitSelection(false);
+                              }, 900);
+                            }, 800);
+                          }}
+                          className="p-2 px-3 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] text-left transition-all hover:scale-[1.01] cursor-pointer group"
+                        >
+                          <span className="block text-[9.5px] font-mono font-bold text-zinc-300 group-hover:text-amber-400 uppercase tracking-wide">Gradativamente</span>
+                          <span className="block text-[8px] text-zinc-500 mt-0.5 leading-tight">Evolui de forma orgânica nas conversas.</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsInitializingDossier(true);
+                            setInitStageText("Sintonizando frequências Big Five...");
+                            setTimeout(() => {
+                              setInitStageText("Moldando biografia quântica...");
+                              setTimeout(() => {
+                                setInitStageText("Polindo traços de relacionamento...");
+                                setTimeout(() => {
+                                  onStartAiDossier('complete');
+                                  setIsInitializingDossier(false);
+                                  setShowInitSelection(false);
+                                }, 800);
+                              }, 800);
+                            }, 800);
+                          }}
+                          className="p-2 px-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.02] hover:bg-amber-500/[0.05] text-left transition-all hover:scale-[1.01] cursor-pointer group"
+                        >
+                          <span className="block text-[9.5px] font-mono font-bold text-amber-400 uppercase tracking-wide">Preencher Agora</span>
+                          <span className="block text-[8px] text-zinc-400 mt-0.5 leading-tight">Gera automaticamente história e personalidade completa.</span>
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowInitSelection(false)}
+                        className="text-[9px] font-mono text-zinc-500 hover:text-zinc-300 uppercase tracking-wider block pt-1 underline cursor-pointer"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-zinc-200 flex items-center gap-1.5 truncate">
+                          Iniciar Consciência da IA
+                        </p>
+                        <p className="text-[9px] text-zinc-500 mt-0.5 leading-tight">
+                          Monte a história, traços Big Five, MBTI, medos e manias próprios do OSONE.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowInitSelection(true)}
+                        className="p-2 px-3 rounded-xl border border-amber-500/20 hover:border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/15 text-amber-500 text-xs font-bold transition-all cursor-pointer shrink-0"
+                      >
+                        Iniciar Dossiê
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5 truncate">
+                      <Sparkles size={13} className="animate-pulse" />
+                      OSONE G5 • INFJ
+                    </p>
+                    <p className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase tracking-wider">
+                      {aiDossierType === 'complete' 
+                        ? "Personalidade 100% Ativa e Calibrada" 
+                        : "Sintonia Ativa • Evoluindo nas Sombras"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenAiDossier();
+                      onClose();
+                    }}
+                    className="p-2 px-3 rounded-xl border border-amber-500/20 hover:border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/15 text-amber-500 text-xs font-bold transition-all cursor-pointer shrink-0"
+                  >
+                    Ver Dossiê da IA
+                  </button>
                 </div>
               )}
             </div>

@@ -1150,7 +1150,7 @@ Nome do interlocutor: ${senderName}`;
       let usedFallback = false;
 
       // Selected voice defaults to 'Kore' (highly natural female narrator in Portuguese)
-      const supportedGeminiVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr", "Scarlet"];
+      const supportedGeminiVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr", "Aoede", "Scarlet"];
       let selectedVoice = voice || "Kore";
       const isScarletVoice = selectedVoice === "Scarlet" || selectedVoice === "Fenrir";
       if (!supportedGeminiVoices.includes(selectedVoice)) {

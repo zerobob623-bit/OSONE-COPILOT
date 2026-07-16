@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass, Database, Video, Radio, Eye } from 'lucide-react';
+import { X, Volume2, FileText, Folder, Music, Gamepad2, Zap, Activity, LogOut, User, Cpu, Puzzle, MessageSquare, Sliders, Compass, Database, Video, Radio, Eye, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { WorkspaceMode } from '../types';
 
@@ -173,6 +173,17 @@ export const Sidebar = ({ isOpen, onClose, mode, setMode, user, onLogout, onLogi
                 >
                   <Eye size={18} className="text-cyan-400" />
                   <span>Lente OSONE (Lens)</span>
+                </button>
+
+                <button 
+                  onClick={() => { setMode('sensus_evolution'); onClose(); }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-light text-sm",
+                    mode === 'sensus_evolution' ? "bg-amber-500/10 text-amber-400 border border-amber-500/25 shadow-[0_0_15px_rgba(245,158,11,0.15)]" : "hover:bg-white/[0.02] text-her-ink/60"
+                  )}
+                >
+                  <Heart size={18} className="text-amber-500 animate-pulse" />
+                  <span>Cérebro Sensus ("Her")</span>
                 </button>
               </div>
             </div>
