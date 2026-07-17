@@ -43,9 +43,22 @@ export function IntimateMissionModal({ isOpen, onClose, intimateAnswers, onUpdat
         reader.onload = () => {
           const result = reader.result as string;
           const base64 = result.split(',')[1];
+          let detectedMimeType = file.type;
+          const lowerName = file.name.toLowerCase();
+          if (!detectedMimeType) {
+            if (lowerName.endsWith('.pdf')) {
+              detectedMimeType = "application/pdf";
+            } else if (lowerName.endsWith('.txt')) {
+              detectedMimeType = "text/plain";
+            } else if (lowerName.endsWith('.html') || lowerName.endsWith('.htm')) {
+              detectedMimeType = "text/html";
+            } else if (lowerName.endsWith('.md')) {
+              detectedMimeType = "text/markdown";
+            }
+          }
           resolve({
             base64,
-            mimeType: file.type || "text/plain"
+            mimeType: detectedMimeType || "text/plain"
           });
         };
         reader.onerror = () => reject(new Error("Falha ao ler o arquivo biográfico físico."));

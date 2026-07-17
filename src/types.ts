@@ -40,7 +40,17 @@ export interface ApiKeys {
 export type OrbStyle = 'classic' | 'superintelligence' | 'neural' | 'shadow' | 'wave' | 'jarvis' | 'smoke';
 export type AppTheme = 'her' | 'cyberpunk' | 'monochrome' | 'nature';
 
-export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp' | 'map' | 'rag' | 'creator' | 'tiktok' | 'lens' | 'sentinel' | 'sensus_evolution';
+export type WorkspaceMode = 'home' | 'writing' | 'sounds' | 'canvas' | 'wellness' | 'aural_control' | 'local_control' | 'whatsapp' | 'map' | 'rag' | 'creator' | 'tiktok' | 'lens' | 'sentinel' | 'sensus_evolution' | 'memory_book';
+
+export interface MemoryBookEntry {
+  id: string;
+  date: string; // Formato "YYYY-MM-DD" para ordenamento
+  title: string;
+  summary: string;
+  keyPoints: string[];
+  topics: string[];
+  createdAt: number;
+}
 
 export interface RagFile {
   id: string;
@@ -149,6 +159,13 @@ export interface WritingProject {
   title: string;
   content: string;
   createdAt: number;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  messages: Message[];
 }
 
 

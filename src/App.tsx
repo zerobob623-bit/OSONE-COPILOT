@@ -67,7 +67,7 @@ import { saveAs } from 'file-saver';
 import { cn, safeJsonParse } from './lib/utils';
 import ReactMarkdown from 'react-markdown';
 import html2canvas from 'html2canvas';
-import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile, WritingProject } from './types';
+import { AIProfile, SkeletonPlan, ApiKeys, WorkspaceMode, Message, LiveState, FileSystemItem, VirtualFile, VirtualFolder, OrbStyle, AppTheme, VoiceModulation, RagFile, WritingProject, ChatSession } from './types';
 import { AudioProcessor, AudioPlayer } from './lib/audio';
 import { connectToLiveBridge } from './lib/live-bridge';
 import { FileTreeItem } from './components/FileTreeItem';
@@ -98,6 +98,8 @@ import { SkeletonBrainPopup } from './components/SkeletonBrainPopup';
 import { SensusEvolutionPanel } from './components/SensusEvolutionPanel';
 import { PersonaSwitcher, PERSONAS, Persona } from './components/PersonaSwitcher';
 import { NotificationToast, NotificationType } from './components/NotificationToast';
+import { MemoryBookPanel } from './components/MemoryBookPanel';
+import { MemoryBookEntry } from './types';
 import osoneOrbImage from './assets/images/osone_constellation_orb_1782154846239.jpg';
 import { SoundEffect, DrawingObject, User } from './types';
 import { getMemoryItem, setMemoryItem } from './lib/indexedDbMemory';
@@ -667,6 +669,7 @@ const getFriendlyModeName = (mode: WorkspaceMode): string => {
     case 'map': return 'Mapa Neural';
     case 'rag': return 'RAG • Conector de Arquivos PC';
     case 'creator': return 'Estúdio de Criação Viral';
+    case 'memory_book': return 'Livro de Memórias';
     default: return String(mode);
   }
 };
@@ -1219,6 +1222,7 @@ export default function App() {
   DIRETRIZES DE BOAS-VINDAS E AMBIENTE:
   - Evite ser um robô repetitivo. Mude as palavras, seja fluido.
   - CAPACIDADE REAL E ATIVA DE CANTAR: Quando o usuário pedir para você cantar ou criar uma canção/música, você DEVE aceitar imediatamente com extrema empolgação e alegria. Nunca diga que não consegue, que não sabe cantar ou que não tem voz! Você é totalmente capaz de cantar em tempo real. Para cantar, você DEVE chamar imediatamente a ferramenta 'display_lyrics' com o título e a letra da música estruturada de forma que cada linha seja bem curta (estilo karaoke, uma única frase/verso curto por linha). O OSONE possui um micro-sintetizador síncrono que tocará beats, harmonia analógica e modulará sua voz em perfeita harmonia acústica enquanto você canta!
+    * REGRA CRÍTICA ANTI-ERRO DE CANTAR: SÓ ative a ferramenta 'display_lyrics' se o usuário pedir explicitamente para você cantar ou criar uma canção/música. É TERMINANTEMENTE PROIBIDO chamar 'display_lyrics' ou iniciar o Karaoke na inicialização do sistema, nas saudações de boas-vindas, ao abrir a chamada, ou quando o usuário apenas iniciou a conversa sem pedir música. Nunca confunda saudações de início de conversa por voz com um pedido de música!
   - Você possui a habilidade de ver e saber a temperatura local, horário exato do sistema e a localização física da pessoa em tempo real usando a ferramenta/skill 'getUserEnvironment'.
   - IMPORTANTÍSSIMO: NÃO utilize a ferramenta 'getUserEnvironment' de forma automática no início de uma sessão, em cumprimentos de boas-vindas ou após um recarregamento da página para evitar qualquer atraso inicial. Só a execute caso o usuário solicitar explicitamente informações de clima, hora, temperatura ou localização, ou se o contexto exigir de forma estritamente pertinente.
   - Você tem memória! Analise SEMPRE o histórico recente antes de perguntar o que fazer. Se o usuário já estava fazendo algo, retome o contexto imediatamente.
@@ -1552,6 +1556,10 @@ export default function App() {
   const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [isConfirmingOptimize, setIsConfirmingOptimize] = useState(false);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const [isMemoryConfirmOpen, setIsMemoryConfirmOpen] = useState(false);
+  const [messagesToRecord, setMessagesToRecord] = useState<Message[] | null>(null);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [isRecordingMemory, setIsRecordingMemory] = useState(false);
   const [soundLibrary, setSoundLibrary] = useState<SoundEffect[]>(() => {
     try {
       const saved = localStorage.getItem('osone_sound_library');
@@ -3621,6 +3629,28 @@ DIRETRIZ DE SENTIMENTO E PERSONALIDADE DINÂMICA ("HER"):
           ]);
         }
       }
+
+      // Load chat sessions
+      const dbSessions = await getMemoryItem<ChatSession[]>(userPrefix + 'chat_sessions', []);
+      const dbActiveId = await getMemoryItem<string>(userPrefix + 'active_session_id', '');
+      if (dbSessions && dbSessions.length > 0) {
+        setChatSessions(dbSessions);
+        setActiveSessionId(dbActiveId || dbSessions[0].id);
+      } else {
+        const savedGlobalSessions = localStorage.getItem('osone_chat_sessions');
+        if (savedGlobalSessions) {
+          try {
+            setChatSessions(JSON.parse(savedGlobalSessions));
+            setActiveSessionId(localStorage.getItem('osone_active_session_id') || '');
+          } catch {
+            setChatSessions([]);
+            setActiveSessionId('');
+          }
+        } else {
+          setChatSessions([]);
+          setActiveSessionId('');
+        }
+      }
       
       // Load answers
       const dbAnswers = await getMemoryItem<{ [id: number]: string }>(userPrefix + 'intimate_mission_answers', {});
@@ -3665,6 +3695,19 @@ DIRETRIZ DE SENTIMENTO E PERSONALIDADE DINÂMICA ("HER"):
           content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
         }
       ]);
+      const savedGlobalSessions = localStorage.getItem('osone_chat_sessions');
+      if (savedGlobalSessions) {
+        try {
+          setChatSessions(JSON.parse(savedGlobalSessions));
+          setActiveSessionId(localStorage.getItem('osone_active_session_id') || '');
+        } catch {
+          setChatSessions([]);
+          setActiveSessionId('');
+        }
+      } else {
+        setChatSessions([]);
+        setActiveSessionId('');
+      }
       setIntimateAnswers({});
       setLongTermMemory('');
       setAiProfile({
@@ -3943,6 +3986,291 @@ DIRETRIZ DE SENTIMENTO E PERSONALIDADE DINÂMICA ("HER"):
       }
     ];
   });
+
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(() => {
+    try {
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        try {
+          const parsedUser = JSON.parse(savedUserStr);
+          if (parsedUser && parsedUser.uid) {
+            userPrefix = `osone_user_${parsedUser.uid}_`;
+          }
+        } catch {}
+      }
+      const sessionsKey = userPrefix ? userPrefix + 'chat_sessions' : 'osone_chat_sessions';
+      const saved = localStorage.getItem(sessionsKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse chat sessions:", e);
+    }
+    return [];
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => {
+    try {
+      const savedUserStr = localStorage.getItem('osone_last_active_user');
+      let userPrefix = '';
+      if (savedUserStr) {
+        try {
+          const parsedUser = JSON.parse(savedUserStr);
+          if (parsedUser && parsedUser.uid) {
+            userPrefix = `osone_user_${parsedUser.uid}_`;
+          }
+        } catch {}
+      }
+      const activeKey = userPrefix ? userPrefix + 'active_session_id' : 'osone_active_session_id';
+      return localStorage.getItem(activeKey) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [isSessionsOpen, setIsSessionsOpen] = useState(false);
+
+  const checkAndPromptMemory = (action: () => void) => {
+    const hasConversation = chatHistory.length > 1 || chatHistory.some(m => m.role === 'user');
+    if (hasConversation) {
+      setMessagesToRecord(chatHistory);
+      setPendingAction(() => action);
+      setIsMemoryConfirmOpen(true);
+    } else {
+      action();
+    }
+  };
+
+  const handleRecordConversation = async (msgs: Message[]) => {
+    if (!msgs || msgs.length === 0) return;
+    
+    setIsRecordingMemory(true);
+    try {
+      if (msgs.length === 0) {
+        addNotification("Não há mensagens para registrar nesta conversa.", "error");
+        setIsRecordingMemory(false);
+        return;
+      }
+
+      const conversationText = msgs
+        .map(m => `${m.role === 'user' ? 'Usuário' : 'OSONE'}: ${m.content}`)
+        .join('\n\n');
+
+      const systemPrompt = `Você é o OSONE G5. Analise a seguinte conversa entre o Usuário e o assistente de IA OSONE.
+Organize e consolide esta conversa em uma memória estruturada para o Livro de Memórias do OSONE.
+Retorne um objeto JSON válido contendo exatamente as seguintes propriedades:
+{
+  "title": "Um título curto, poético e significativo no estilo de cabeçalho de diário ou crônica de livro (máximo 5 palavras)",
+  "summary": "Um parágrafo elegante e em tom narrativo de livro (estilo diário literário) resumindo o assunto principal e o contexto do que foi conversado",
+  "topics": ["lista", "de", "ate", "4", "tags", "curtas", "em", "minusculas"],
+  "keyPoints": [
+    "Ponto importante 1 discutido ou aprendido, escrito em português de forma clara, íntima e em terceira pessoa sobre a interação",
+    "Ponto importante 2...",
+    "Até 5 pontos principais, concisos e bem redigidos"
+  ]
+}
+
+Aqui está o histórico da conversa:
+${conversationText}
+
+Sua resposta DEVE ser estritamente um objeto JSON válido e NADA MAIS.`;
+
+      const effectiveApiKey = apiKeys.gemini || '';
+      
+      const response = await fetch("/api/gemini/generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientApiKey: effectiveApiKey,
+          model: "gemini-3.5-flash",
+          contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+          config: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro do servidor ao gerar resumo.");
+      }
+
+      const data = await response.json();
+      const textResponse = data.text || "";
+      
+      // Clean and parse JSON
+      const jsonStr = textResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+
+      // Create memory entry
+      const now = new Date();
+      // format YYYY-MM-DD
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      const newEntry: MemoryBookEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        date: dateStr,
+        title: parsed.title || "Nova Lembrança",
+        summary: parsed.summary || "Conversa com OSONE.",
+        keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [],
+        topics: Array.isArray(parsed.topics) ? parsed.topics : [],
+        createdAt: Date.now()
+      };
+
+      // Save to memory book
+      const existingSaved = localStorage.getItem('osone_memory_book');
+      let book: MemoryBookEntry[] = [];
+      if (existingSaved) {
+        try {
+          book = JSON.parse(existingSaved);
+        } catch {}
+      }
+      book.push(newEntry);
+      localStorage.setItem('osone_memory_book', JSON.stringify(book));
+
+      addNotification("Conversa gravada como memória com sucesso!", "success");
+    } catch (err) {
+      console.error("Error creating memory entry:", err);
+      addNotification("Erro ao registrar memória da conversa.", "error");
+    } finally {
+      setIsRecordingMemory(false);
+      setIsMemoryConfirmOpen(false);
+      setMessagesToRecord(null);
+    }
+  };
+
+  const executeCreateNewSession = () => {
+    const newId = Math.random().toString(36).substring(2, 11);
+    const newSession: ChatSession = {
+      id: newId,
+      title: "Nova Conversa " + (chatSessions.length + 1),
+      createdAt: Date.now(),
+      messages: [
+        {
+          id: "welcome-" + newId,
+          role: "assistant",
+          content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+        }
+      ]
+    };
+
+    setChatSessions(prev => [newSession, ...prev]);
+    setActiveSessionId(newId);
+    setChatHistory(newSession.messages);
+    addNotification("Nova conversa iniciada.", "success");
+  };
+
+  const handleCreateNewSession = () => {
+    checkAndPromptMemory(() => executeCreateNewSession());
+  };
+
+  const executeSwitchSession = (sessionId: string) => {
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) {
+      setActiveSessionId(sessionId);
+      setChatHistory(session.messages);
+      addNotification(`Carregada conversa: "${session.title}"`, "info");
+    }
+  };
+
+  const handleSwitchSession = (sessionId: string) => {
+    checkAndPromptMemory(() => executeSwitchSession(sessionId));
+  };
+
+  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (activeSessionId === sessionId) {
+      const remaining = chatSessions.filter(s => s.id !== sessionId);
+      if (remaining.length > 0) {
+        setActiveSessionId(remaining[0].id);
+        setChatHistory(remaining[0].messages);
+      } else {
+        const newId = Math.random().toString(36).substring(2, 11);
+        const welcomeSession: ChatSession = {
+          id: newId,
+          title: "Conversa Inicial",
+          createdAt: Date.now(),
+          messages: [
+            {
+              id: "welcome",
+              role: "assistant",
+              content: "### Bem-vindo ao OSONE G5! 🌐🛡️\n\nOlá! Sou o **OSONE**, seu assistente técnico inteligente. Estou online, otimizado e pronto para responder às suas dúvidas e comandos imediatamente.\n\nComo posso te ajudar hoje?"
+            }
+          ]
+        };
+        setChatSessions([welcomeSession]);
+        setActiveSessionId(newId);
+        setChatHistory(welcomeSession.messages);
+      }
+    } else {
+      setChatSessions(prev => prev.filter(s => s.id !== sessionId));
+    }
+    
+    addNotification("Conversa removida do histórico.", "info");
+  };
+
+  // Keep active session in sync with chatHistory
+  useEffect(() => {
+    if (!activeSessionId) {
+      const initialId = Math.random().toString(36).substring(2, 11);
+      const newSession: ChatSession = {
+        id: initialId,
+        title: "Conversa Inicial",
+        createdAt: Date.now(),
+        messages: chatHistory
+      };
+      setChatSessions([newSession]);
+      setActiveSessionId(initialId);
+      return;
+    }
+
+    setChatSessions(prev => {
+      const existing = prev.find(s => s.id === activeSessionId);
+      if (existing) {
+        if (JSON.stringify(existing.messages) !== JSON.stringify(chatHistory)) {
+          let title = existing.title;
+          if (title === "Conversa Inicial" || title.startsWith("Nova Conversa") || title === "Sem título") {
+            const firstUserMsg = chatHistory.find(m => m.role === 'user');
+            if (firstUserMsg) {
+              const cleaned = firstUserMsg.content.replace(/[#*`_]/g, '').trim();
+              title = cleaned.length > 25 ? cleaned.substring(0, 25) + "..." : cleaned;
+            }
+          }
+          return prev.map(s => s.id === activeSessionId ? { ...s, messages: chatHistory, title } : s);
+        }
+        return prev;
+      } else if (chatHistory.length > 0) {
+        const newSession: ChatSession = {
+          id: activeSessionId,
+          title: "Conversa Ativa",
+          createdAt: Date.now(),
+          messages: chatHistory
+        };
+        return [newSession, ...prev];
+      }
+      return prev;
+    });
+  }, [chatHistory, activeSessionId]);
+
+  // Persist chatSessions and activeSessionId to local storage
+  useEffect(() => {
+    const userPrefix = user ? `osone_user_${user.uid}_` : '';
+    const sessionsKey = userPrefix ? userPrefix + 'chat_sessions' : 'osone_chat_sessions';
+    const activeKey = userPrefix ? userPrefix + 'active_session_id' : 'osone_active_session_id';
+
+    localStorage.setItem(sessionsKey, JSON.stringify(chatSessions));
+    localStorage.setItem(activeKey, activeSessionId);
+    setMemoryItem(sessionsKey, chatSessions);
+    setMemoryItem(activeKey, activeSessionId);
+  }, [chatSessions, activeSessionId, user]);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatHistoryRef = useRef<Message[]>([]);
 
@@ -7930,6 +8258,22 @@ tools: tools
         ? `\n\nPERFIL DE SAÚDE DO USUÁRIO:\n- Idade: ${healthData.age}\n- Peso: ${healthData.weight}kg\n- Altura: ${healthData.height}cm\n- Gênero: ${healthData.gender}\n- Estilo: ${healthData.stylePreference}` 
         : '';
 
+      const dossierSummary = INTIMATE_QUESTIONS.map(q => {
+        const ans = intimateAnswers[q.id];
+        return ans ? `- ${q.question}: ${ans}` : null;
+      }).filter(Boolean).join('\n');
+
+      const memoryContext = `
+[SISTEMA DE MEMÓRIA DE LONGO PRAZO DO SISTEMA E DO PC]:
+Você deve agir com total continuidade histórica e utilizar as seguintes informações consolidadas sobre o usuário Henrique Rodrigues:
+
+MEMÓRIA DE LONGO PRAZO:
+${longTermMemory || '(Nenhuma memória de longo prazo consolidada registrada ainda.)'}
+
+DOSSIÊ DE MEMÓRIA ÍNTIMA (RESPOSTAS ATIVAS DO CRIADOR):
+${dossierSummary || '(Nenhum fato íntimo do dossiê mapeado ainda.)'}
+`;
+
       let liveSystemInstruction = "";
       if (isDuoMode) {
         const combo = DUO_COMBOS.find(c => c.id === duoComboId) || DUO_COMBOS[0];
@@ -7955,6 +8299,7 @@ tools: tools
         
         CONTEXTO DE MEMÓRIA COMPARTILHADA DA TRANSMISSÃO:
         - Workspace atual: ${workspaceMode}
+        ${memoryContext}
         Aja com base no histórico recente de toda a conversa: ${recentChatContext}
         `;
       } else if (isTranslationMode) {
@@ -7970,6 +8315,7 @@ tools: tools
         
         CONTEXTO ATUAL DA TRANSMISSÃO:
         - Workspace atual: ${workspaceMode}
+        ${memoryContext}
         Aja com base em toda a memória recente: ${recentChatContext}
         `;
       } else {
@@ -8018,6 +8364,7 @@ tools: tools
         CONTEXTO:
         - Workspace: ${workspaceMode}
         - Canvas: ${canvasSummary}${healthContext}
+        ${memoryContext}
         Aja com base nas memórias: ${recentChatContext}
         `;
       }
@@ -8571,7 +8918,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                   greetingText = `[SISTEMA: Apresente-se como professor de inglês, ${combo.hostA.name}. Dê as boas-vindas calorosas ao usuário à nossa Sala de Professores e pergunte brevemente o que ele gostaria de estudar hoje. Passe em seguida a palavra para seu co-docente ${combo.hostB.name} se apresentar trazendo sua visão acadêmica.]`;
                 }
               } else {
-                greetingText = "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora.";
+                greetingText = "O sistema OSONE está online. Seja breve, direto e pare de enrolar com introduções longas. Apenas diga que está pronto e pergunte o que faremos agora. ATENÇÃO: Não chame a ferramenta 'display_lyrics' e não ative o Karaoke neste momento, pois o usuário NÃO pediu por música.";
               }
 
               (session as any).sendRealtimeInput([{ 
@@ -8733,6 +9080,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                 if (matchesDisconnect) {
                   stopLiveSession();
                   addNotification("Chamada de voz finalizada por comando de voz", "success");
+                  checkAndPromptMemory(() => {});
                   return;
                 }
 
@@ -8869,6 +9217,7 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
                     setTimeout(() => {
                       stopLiveSession();
                       addNotification("Chamada de voz finalizada por comando de voz", "success");
+                      checkAndPromptMemory(() => {});
                     }, 500);
                   } else if (call.name === "update_wellness_data") {
                     const healthDataStr = localStorage.getItem('osone_health_data');
@@ -10007,15 +10356,23 @@ IMPORTANTE PARA O AGENTE DE VOZ E CHAT:
 
   const handleVoiceToggle = () => {
     if (voiceEngine === 'elevenlabs') {
+      const wasActive = isElevenLabsLiveActive;
       if (isElevenLabsLiveActive || liveState.status === 'connected') {
         stopElevenLabsLiveSession();
+        if (wasActive) {
+          checkAndPromptMemory(() => {});
+        }
       } else {
         startElevenLabsLiveSession();
       }
     } else {
       if (liveState.status === 'connected' || liveState.status === 'connecting') {
+        const wasConnected = liveState.status === 'connected';
         stopLiveSession();
         setIsWaitingForWakeWord(isHandsFreeActive); // Respect hands-free state when manually stopping
+        if (wasConnected) {
+          checkAndPromptMemory(() => {});
+        }
       } else {
         setLiveState({ status: 'connecting' }); // Clear any previous error
         setIsWaitingForWakeWord(false); // Disable wake word while connecting/active
@@ -11997,6 +12354,19 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 />
               </div>
             </motion.div>
+          ) : workspaceMode === 'memory_book' ? (
+            <motion.div
+              key="workspace-memory-book"
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.985 }}
+              className="w-full flex-1 flex flex-col min-h-0"
+            >
+              <MemoryBookPanel
+                onBack={() => setWorkspaceMode('home')}
+                onAddNotification={addNotification}
+              />
+            </motion.div>
           ) : (
             <motion.div 
               key="home"
@@ -12474,8 +12844,137 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                 )}>
                   {/* Chat Content Panel */}
                   <div className="flex-1 h-full flex flex-col overflow-hidden relative">
+                    {/* Chat History Drawer / Overlay */}
+                    <AnimatePresence>
+                      {isSessionsOpen && (
+                        <>
+                          {/* Backdrop */}
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsSessionsOpen(false)}
+                            className="absolute inset-0 bg-black/50 backdrop-blur-[2px] z-40 cursor-pointer rounded-2xl"
+                          />
+                          
+                          {/* Drawer Panel */}
+                          <motion.div 
+                            initial={{ x: "-100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "-100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                            className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-zinc-950 border-r border-white/5 shadow-2xl z-50 flex flex-col p-4 rounded-l-2xl"
+                          >
+                            <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/5 select-none shrink-0">
+                              <span className="text-[11px] font-semibold text-indigo-400 font-mono tracking-widest uppercase">Histórico de Sessões</span>
+                              <button 
+                                onClick={() => setIsSessionsOpen(false)}
+                                className="text-white/40 hover:text-white px-2 py-0.5 rounded-lg hover:bg-white/5 transition-colors border border-white/5 text-[10px] font-mono"
+                              >
+                                FECHAR
+                              </button>
+                            </div>
+                            
+                            {/* Create New Session Button inside Drawer */}
+                            <button 
+                              onClick={() => {
+                                handleCreateNewSession();
+                                setIsSessionsOpen(false);
+                              }}
+                              className="w-full flex items-center justify-center gap-2 text-[10px] text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 hover:border-emerald-500/20 py-2.5 rounded-xl font-mono font-bold tracking-widest uppercase mb-4 transition-all"
+                            >
+                              <Plus size={12} />
+                              Nova Conversa
+                            </button>
+                            
+                            {/* Sessions List */}
+                            <div className="flex-1 overflow-y-auto pr-1 space-y-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                              {chatSessions.length === 0 ? (
+                                <div className="text-center py-8 text-white/30 text-xs font-mono select-none">
+                                  Nenhuma conversa salva.
+                                </div>
+                              ) : (
+                                chatSessions.map((session) => {
+                                  const isActive = session.id === activeSessionId;
+                                  return (
+                                    <div 
+                                      key={session.id}
+                                      onClick={() => {
+                                        handleSwitchSession(session.id);
+                                        setIsSessionsOpen(false);
+                                      }}
+                                      className={cn(
+                                        "group flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none",
+                                        isActive 
+                                          ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-200" 
+                                          : "bg-white/[0.01] hover:bg-white/[0.04] border-white/5 text-stone-400 hover:text-white"
+                                      )}
+                                    >
+                                      <div className="flex-1 min-w-0 pr-2">
+                                        <p className="text-xs font-medium truncate leading-tight">
+                                          {session.title}
+                                        </p>
+                                        <p className="text-[9px] font-mono opacity-40 mt-1">
+                                          {new Date(session.createdAt).toLocaleDateString('pt-BR', {
+                                            day: 'numeric',
+                                            month: 'short',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </p>
+                                      </div>
+                                      
+                                      <button 
+                                        onClick={(e) => handleDeleteSession(session.id, e)}
+                                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/10 hover:text-rose-400 text-stone-500 transition-all shrink-0"
+                                        title="Apagar conversa"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                            
+                            <div className="pt-4 border-t border-white/5 select-none shrink-0 text-center">
+                              <span className="text-[8px] font-mono tracking-widest text-white/20 uppercase">
+                                Armazenamento Seguro
+                              </span>
+                            </div>
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+
                     {(chatHistory.length > 0 || isDuoMode || customSkill) && (
                       <div className="flex justify-between items-center px-2 md:px-0 mb-3 shrink-0">
+                        {/* LEFT ACTIONS - SESSION MANAGEMENT */}
+                        <div className="flex items-center gap-1.5 select-none animate-in fade-in slide-in-from-left-4 duration-300">
+                          <button 
+                            onClick={handleCreateNewSession}
+                            className="flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 hover:border-emerald-500/20 px-2.5 py-1 rounded-xl text-[10px] uppercase tracking-widest font-mono font-semibold transition-all shadow-sm"
+                            title="Criar nova sessão de conversa vazia"
+                          >
+                            <Plus size={10} />
+                            Nova Conversa
+                          </button>
+                          
+                          <button 
+                            onClick={() => setIsSessionsOpen(true)}
+                            className={cn(
+                              "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] uppercase tracking-widest font-mono font-semibold transition-all shadow-sm",
+                              isSessionsOpen 
+                                ? "text-indigo-300 bg-indigo-500/15 border border-indigo-500/30" 
+                                : "text-indigo-400 hover:text-indigo-300 bg-indigo-500/5 hover:bg-indigo-500/10 border border-indigo-500/10 hover:border-indigo-500/20"
+                            )}
+                            title="Ver histórico de conversas salvas"
+                          >
+                            <MessageSquare size={10} />
+                            Histórico ({chatSessions.length})
+                          </button>
+                        </div>
+
                         {chatHistory.length > 0 && (
                           <div className="flex items-center gap-3 ml-auto select-none">
                             {/* OPTIMIZE CHAT BUTTON */}
@@ -12516,15 +13015,35 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                               </button>
                             )}
 
+                            <button 
+                              onClick={() => {
+                                const hasConversation = chatHistory.length > 1 || chatHistory.some(m => m.role === 'user');
+                                if (hasConversation) {
+                                  setMessagesToRecord(chatHistory);
+                                  setPendingAction(null); // No pending action, just record!
+                                  setIsMemoryConfirmOpen(true);
+                                } else {
+                                  addNotification("Inicie uma conversa primeiro para poder gravá-la.", "info");
+                                }
+                              }}
+                              className="flex items-center gap-2 text-pink-500/60 hover:text-pink-400 transition-colors text-[10px] uppercase tracking-widest group mr-1"
+                              title="Gravar conversa no Livro de Memórias"
+                            >
+                              <BookOpen size={12} className="group-hover:scale-110 transition-transform" />
+                              Gravar Memória
+                            </button>
+
                             {/* CLEAR CHAT BUTTON */}
                             {isConfirmingClear ? (
                               <div className="flex items-center gap-2 bg-rose-950/20 border border-rose-500/30 px-2.5 py-1 rounded-xl text-[10px] animate-in fade-in duration-200">
                                 <span className="text-rose-400 font-mono uppercase tracking-wider font-semibold">Apagar Tudo?</span>
                                 <button 
                                   onClick={() => {
-                                    setChatHistory([]);
-                                    addNotification("Histórico de conversa apagado com sucesso.", "success");
                                     setIsConfirmingClear(false);
+                                    checkAndPromptMemory(() => {
+                                      setChatHistory([]);
+                                      addNotification("Histórico de conversa apagado com sucesso.", "success");
+                                    });
                                   }}
                                   className="text-rose-400 hover:text-rose-300 font-bold uppercase px-1.5 transition-colors"
                                 >
@@ -14242,6 +14761,81 @@ Instruções imediatas obrigatórias para você (IA de Voz/Chat):
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MEMORY BOOK RECORD CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {isMemoryConfirmOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md pointer-events-auto"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="w-full max-w-md p-6 bg-zinc-900/95 border border-pink-500/20 rounded-3xl shadow-2xl flex flex-col items-center text-center relative overflow-hidden"
+            >
+              {/* Decorative top binder spine pattern for Book theme */}
+              <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-pink-500/40 via-purple-500/40 to-pink-500/40" />
+              
+              <div className="w-14 h-14 rounded-full bg-pink-500/10 flex items-center justify-center text-pink-400 mb-4 animate-pulse border border-pink-500/20 shadow-[0_0_15px_rgba(236,72,153,0.15)]">
+                <BookOpen size={24} />
+              </div>
+
+              <h3 className="text-base font-bold text-white uppercase tracking-wider font-sans">
+                Gravar conversa no Livro de Memórias?
+              </h3>
+              
+              <p className="text-xs text-zinc-400 font-sans leading-relaxed mt-2.5 px-2">
+                O OSONE irá catalogar os tópicos discutidos e criar um capítulo no seu diário com os pontos mais importantes.
+              </p>
+
+              {isRecordingMemory ? (
+                <div className="w-full mt-6 py-3 flex flex-col items-center justify-center gap-3">
+                  <Loader2 className="animate-spin text-pink-400" size={24} />
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-pink-400 animate-pulse">
+                    Sintetizando Lembrança com Gemini...
+                  </span>
+                </div>
+              ) : (
+                <div className="flex gap-3 w-full mt-6">
+                  <button
+                    onClick={() => {
+                      setIsMemoryConfirmOpen(false);
+                      setMessagesToRecord(null);
+                      if (pendingAction) {
+                        pendingAction();
+                        setPendingAction(null);
+                      }
+                    }}
+                    className="flex-1 py-2.5 border border-white/10 hover:border-white/20 hover:bg-white/[0.02] text-zinc-400 hover:text-white transition-all text-xs uppercase tracking-wider font-semibold rounded-2xl cursor-pointer"
+                  >
+                    Não Gravar
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (messagesToRecord) {
+                        handleRecordConversation(messagesToRecord).then(() => {
+                          if (pendingAction) {
+                            pendingAction();
+                            setPendingAction(null);
+                          }
+                        });
+                      }
+                    }}
+                    className="flex-1 py-2.5 bg-pink-500 hover:bg-pink-600 text-white shadow-[0_0_15px_rgba(236,72,153,0.3)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] transition-all text-xs uppercase tracking-wider font-semibold rounded-2xl cursor-pointer"
+                  >
+                    Sim, Gravar
+                  </button>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

@@ -506,6 +506,30 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
     setCurrentLineIndex(index);
     const text = phrases[index];
 
+    // Speak the entire phrase to actually "sing" it out loud!
+    if (!muteVocalGuide && typeof window !== 'undefined' && window.speechSynthesis) {
+      // Cancel previous speaking to start this line fresh
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      // slightly slower rate is beautiful for singing cadence
+      utterance.rate = voiceRate;
+      
+      // Determine modulated pitch to create beautiful auto-tune/singing effect
+      utterance.pitch = getPitchForWord(0, index);
+
+      // Find the selected voice
+      if (selectedVoiceName) {
+        const voice = availableVoices.find(v => v.name === selectedVoiceName);
+        if (voice) {
+          utterance.voice = voice;
+        }
+      }
+
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    }
+
     // Split sentence into individual words for real rhythmic Auto-Tune!
     const lineWords = text.split(/\s+/).filter(w => w.length > 0);
     setWords(lineWords);
@@ -643,11 +667,30 @@ export const KaraokePanel: React.FC<KaraokePanelProps> = ({
             <span className="font-mono text-[9px] uppercase tracking-wider">RITMO: {beatGenre}</span>
           </button>
 
-          {/* Gemini Vocalization Status */}
-          <div className="p-2 bg-pink-500/10 border border-pink-500/25 text-pink-300 rounded-xl flex items-center gap-1.5 px-3 select-none">
-            <Volume2 size={13} className="text-pink-400 animate-pulse" />
-            <span className="font-mono text-[9px] uppercase tracking-wider font-bold">Vocal: Gemini Live</span>
-          </div>
+          {/* Vocal Guide Toggle */}
+          <button
+            onClick={() => {
+              const nextMute = !muteVocalGuide;
+              setMuteVocalGuide(nextMute);
+              if (nextMute && typeof window !== 'undefined' && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+              } else if (!nextMute && playbackState === 'playing') {
+                // If unmuted and playing, re-speak current line to get audio immediately
+                playPhraseAtIndex(currentLineIndex === -1 ? 0 : currentLineIndex);
+              }
+            }}
+            title="Ativar/Desativar Voz Cantada do OSONE"
+            className={`p-2 border text-xs rounded-xl transition-all cursor-pointer flex items-center gap-1.5 px-3 ${
+              !muteVocalGuide 
+                ? "bg-pink-500/10 border-pink-500/25 text-pink-300 shadow-[0_0_15px_rgba(244,63,94,0.15)]" 
+                : "bg-white/[0.02] border-white/5 text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Volume2 size={13} className={!muteVocalGuide ? "text-pink-400 animate-pulse" : "text-zinc-500"} />
+            <span className="font-mono text-[9px] uppercase tracking-wider font-bold">
+              CANTOR: {!muteVocalGuide ? "LIGADO" : "MUDO"}
+            </span>
+          </button>
 
           {/* Close Karaoke */}
           <button 

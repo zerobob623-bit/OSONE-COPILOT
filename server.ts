@@ -618,7 +618,12 @@ Retorne SOMENTE o objeto JSON conforme o esquema.
       });
 
       const resultText = response.text?.trim() || "{}";
-      const parsedAnswers = JSON.parse(resultText);
+      let cleanJson = resultText;
+      if (cleanJson.includes("```")) {
+        // Strip markdown backticks
+        cleanJson = cleanJson.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+      }
+      const parsedAnswers = JSON.parse(cleanJson);
 
       res.json({
         status: "success",
@@ -1276,8 +1281,7 @@ ${processedChunk}`;
       primaryModel, 
       "gemini-3.5-flash", 
       "gemini-3.1-flash-lite", 
-      "gemini-2.5-flash", 
-      "gemini-3.1-pro-preview"
+      "gemini-2.5-flash"
     ];
     
     // Remove duplicates keeping order
@@ -1322,8 +1326,7 @@ ${processedChunk}`;
       primaryModel, 
       "gemini-3.5-flash", 
       "gemini-3.1-flash-lite", 
-      "gemini-2.5-flash", 
-      "gemini-3.1-pro-preview"
+      "gemini-2.5-flash"
     ];
     
     // Remove duplicates keeping order
