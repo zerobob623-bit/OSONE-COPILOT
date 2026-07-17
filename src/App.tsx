@@ -1107,6 +1107,8 @@ export default function App() {
   };
 
   const [writingSubMode, setWritingSubMode] = useState<'text' | 'preview'>('text');
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isGeneratingDocument, setIsGeneratingDocument] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<Persona>(() => {
     const saved = localStorage.getItem('osone_selected_persona');
     return saved ? (PERSONAS.find(p => p.id === saved) || PERSONAS[0]) : PERSONAS[0];
@@ -3057,6 +3059,291 @@ DIRETRIZ DE SENTIMENTO E PERSONALIDADE DINÂMICA ("HER"):
       addNotification(`Falha no download da narrativa: ${error.message || error}`, "error");
     } finally {
       setIsGeneratingWorkspaceMp3(false);
+    }
+  };
+
+  const convertMarkdownToHtml = (markdown: string): string => {
+    let html = markdown
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Headers
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+    html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
+
+    // Italic
+    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+    html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+
+    // Blockquotes
+    html = html.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+    // Code
+    html = html.replace(/`(.*?)`/gim, '<code>$1</code>');
+
+    // Unordered list items
+    html = html.replace(/^\s*[\-\*]\s+(.*$)/gim, '<li>$1</li>');
+    // Ordered list items
+    html = html.replace(/^\s*\d+\.\s+(.*$)/gim, '<li>$1</li>');
+
+    // Split and wrap paragraphs
+    const paragraphs = html.split(/\n{2,}/);
+    html = paragraphs.map(pText => {
+      const trimmed = pText.trim();
+      if (!trimmed) return '';
+      if (trimmed.startsWith('<h') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<li') || trimmed.startsWith('<ul') || trimmed.startsWith('<ol')) {
+        return trimmed;
+      }
+      return `<p>${trimmed.replace(/\n/g, '<br/>')}</p>`;
+    }).join('\n');
+
+    // Group list items
+    html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
+    html = html.replace(/<\/ul>\s*<ul>/gim, '');
+
+    return html;
+  };
+
+  const handleDownloadDocument = async (format: 'txt' | 'md' | 'html' | 'docx' | 'pdf') => {
+    if (!workspaceText.trim()) {
+      addNotification("O estúdio está vazio. Digite ou gere algum texto primeiro.", "info");
+      return;
+    }
+
+    const firstLine = workspaceText.trim().split('\n')[0] || '';
+    const cleanLine = firstLine.replace(/^#+\s*/, '').trim();
+    const documentTitle = cleanLine.substring(0, 40).trim() || 'rascunho_osone';
+    const sanitizedTitle = documentTitle.replace(/[/\\?%*:|"<>\s]+/g, '_').toLowerCase();
+
+    setIsGeneratingDocument(format);
+    setIsExportMenuOpen(false);
+
+    try {
+      if (format === 'txt') {
+        const blob = new Blob([workspaceText], { type: 'text/plain;charset=utf-8' });
+        saveAs(blob, `${sanitizedTitle}.txt`);
+        addNotification("Texto simples (.txt) baixado com sucesso!", "success");
+      } 
+      else if (format === 'md') {
+        const blob = new Blob([workspaceText], { type: 'text/markdown;charset=utf-8' });
+        saveAs(blob, `${sanitizedTitle}.md`);
+        addNotification("Documento Markdown (.md) baixado com sucesso!", "success");
+      } 
+      else if (format === 'html') {
+        const htmlBody = convertMarkdownToHtml(workspaceText);
+        const fullHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${documentTitle}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.8;
+      color: #1f2937;
+      background-color: #f3f4f6;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 740px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 60px 50px;
+      border-radius: 16px;
+      box-shadow: 0 4px 25px rgba(0, 0, 0, 0.05);
+    }
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.5rem;
+      color: #111827;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    h2 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.75rem;
+      color: #1f2937;
+      margin-top: 2.5rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    h3 {
+      font-size: 1.25rem;
+      color: #374151;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      color: #374151;
+      font-size: 1.05rem;
+      word-break: break-word;
+    }
+    blockquote {
+      border-left: 4px solid #f97316;
+      padding-left: 1.5rem;
+      margin: 1.5rem 0;
+      font-style: italic;
+      color: #4b5563;
+      background-color: #fff7ed;
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+      border-radius: 0 8px 8px 0;
+    }
+    code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.9em;
+      background-color: #f3f4f6;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: #eb5757;
+    }
+    ul, ol {
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      padding-left: 2rem;
+    }
+    li {
+      margin-bottom: 0.5rem;
+      color: #374151;
+    }
+    .footer {
+      margin-top: 4rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #f3f4f6;
+      text-align: center;
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
+    @media (max-width: 640px) {
+      body { padding: 20px 10px; }
+      .container { padding: 30px 20px; border-radius: 10px; }
+      h1 { font-size: 2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${htmlBody}
+    <div class="footer">Gerado com orgulho no OSONE G5 — ${new Date().toLocaleDateString('pt-BR')}</div>
+  </div>
+</body>
+</html>`;
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+        saveAs(blob, `${sanitizedTitle}.html`);
+        addNotification("Página Web (.html) estilizada baixada com sucesso!", "success");
+      }
+      else if (format === 'pdf') {
+        addNotification("Processando exportação em formato PDF estético...", "info");
+        const htmlBody = convertMarkdownToHtml(workspaceText);
+        await generatePDF(htmlBody, `${sanitizedTitle}.pdf`);
+        addNotification("Documento PDF (.pdf) gerado e baixado!", "success");
+      }
+      else if (format === 'docx') {
+        addNotification("Compilando documento do Microsoft Word...", "info");
+        const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+        const lines = workspaceText.split('\n');
+        const docxParagraphs: any[] = [];
+
+        lines.forEach((line) => {
+          const trimmed = line.trim();
+          if (!trimmed) {
+            docxParagraphs.push(new Paragraph({ children: [] }));
+            return;
+          }
+
+          if (trimmed.startsWith('# ')) {
+            docxParagraphs.push(new Paragraph({
+              text: trimmed.replace(/^#\s+/, ''),
+              heading: HeadingLevel.HEADING_1,
+            }));
+          } else if (trimmed.startsWith('## ')) {
+            docxParagraphs.push(new Paragraph({
+              text: trimmed.replace(/^##\s+/, ''),
+              heading: HeadingLevel.HEADING_2,
+            }));
+          } else if (trimmed.startsWith('### ')) {
+            docxParagraphs.push(new Paragraph({
+              text: trimmed.replace(/^###\s+/, ''),
+              heading: HeadingLevel.HEADING_3,
+            }));
+          } else if (trimmed.startsWith('> ')) {
+            docxParagraphs.push(new Paragraph({
+              children: [
+                new TextRun({
+                  text: trimmed.replace(/^>\s+/, ''),
+                  italics: true,
+                  color: "555555"
+                })
+              ]
+            }));
+          } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            docxParagraphs.push(new Paragraph({
+              children: [
+                new TextRun({
+                  text: `•  ${trimmed.replace(/^[-*]\s+/, '')}`
+                })
+              ]
+            }));
+          } else {
+            const parts: any[] = [];
+            let remaining = trimmed;
+            const regex = /\*\*(.*?)\*\*/g;
+            let match;
+            let lastIndex = 0;
+
+            while ((match = regex.exec(trimmed)) !== null) {
+              const precedingText = trimmed.substring(lastIndex, match.index);
+              if (precedingText) {
+                parts.push(new TextRun({ text: precedingText }));
+              }
+              parts.push(new TextRun({ text: match[1], bold: true }));
+              lastIndex = regex.lastIndex;
+            }
+
+            const remainingText = trimmed.substring(lastIndex);
+            if (remainingText) {
+              parts.push(new TextRun({ text: remainingText }));
+            }
+
+            if (parts.length === 0) {
+              parts.push(new TextRun({ text: trimmed }));
+            }
+
+            docxParagraphs.push(new Paragraph({ children: parts }));
+          }
+        });
+
+        const doc = new Document({
+          sections: [{
+            children: docxParagraphs
+          }]
+        });
+
+        const blob = await Packer.toBlob(doc);
+        saveAs(blob, `${sanitizedTitle}.docx`);
+        addNotification("Documento Word (.docx) estruturado com sucesso!", "success");
+      }
+    } catch (err: any) {
+      console.error(err);
+      addNotification(`Erro ao exportar documento: ${err.message || err}`, "error");
+    } finally {
+      setIsGeneratingDocument(null);
     }
   };
 
@@ -10482,6 +10769,90 @@ Você pode pedir para a IA elaborar lições ou escrever dados diretamente aqui 
                     )}
                     <span className="text-[9px] font-mono font-bold hidden sm:inline">EXPORTAR MP3</span>
                   </button>
+
+                  {/* Dropdown de Exportar Documento */}
+                  <div className="relative shrink-0">
+                    <button
+                      onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all shrink-0 flex items-center justify-center gap-1.5 border cursor-pointer",
+                        isExportMenuOpen
+                          ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                          : "border-transparent hover:bg-white/5 text-white/30 hover:text-white"
+                      )}
+                      title="Baixar Texto / Documento em vários formatos"
+                    >
+                      {isGeneratingDocument ? (
+                        <Loader2 size={12} className="animate-spin text-amber-400" />
+                      ) : (
+                        <FileText size={13} />
+                      )}
+                      <span className="text-[9px] font-mono font-bold hidden sm:inline">BAIXAR DOCUMENTO</span>
+                      <ChevronDown size={10} className={cn("transition-transform duration-200 opacity-60", isExportMenuOpen && "rotate-180")} />
+                    </button>
+
+                    {isExportMenuOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-[60]" 
+                          onClick={() => setIsExportMenuOpen(false)}
+                        />
+                        <div className={cn(
+                          "absolute top-full right-0 mt-1.5 w-52 rounded-xl border p-1 shadow-2xl z-[70] flex flex-col gap-0.5 animate-in fade-in slide-in-from-top-1 duration-150",
+                          writingTheme === 'charcoal' ? "bg-[#111317] border-white/5 shadow-black/80 text-zinc-100" :
+                          writingTheme === 'midnight' ? "bg-black border-white/[0.05] shadow-black/95 text-zinc-200" :
+                          writingTheme === 'sepia' ? "bg-[#1a1513] border-[#2e2520] shadow-black/60 text-[#eedbd0]" :
+                          "bg-[#07100b] border-emerald-950/60 shadow-black/80 text-emerald-100"
+                        )}>
+                          <div className="px-2 py-1.5 text-[8px] font-mono font-bold uppercase tracking-wider opacity-45 border-b border-white/5 mb-1 select-none">
+                            Formatos de Exportação
+                          </div>
+                          
+                          <button
+                            onClick={() => handleDownloadDocument('txt')}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10.5px] font-mono hover:bg-white/5 text-left transition-colors cursor-pointer w-full text-current"
+                          >
+                            <span>Texto Cru (.txt)</span>
+                            <span className="text-[8px] opacity-40 px-1 py-0.5 rounded bg-white/5">Simples</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadDocument('md')}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10.5px] font-mono hover:bg-white/5 text-left transition-colors cursor-pointer w-full text-current"
+                          >
+                            <span>Markdown (.md)</span>
+                            <span className="text-[8px] opacity-40 px-1 py-0.5 rounded bg-white/5">Rich</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadDocument('html')}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10.5px] font-mono hover:bg-white/5 text-left transition-colors cursor-pointer w-full text-current"
+                          >
+                            <span>Página Web (.html)</span>
+                            <span className="text-[8px] text-amber-400 font-bold px-1 py-0.5 rounded bg-amber-500/10">Estilizado</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadDocument('docx')}
+                            disabled={isGeneratingDocument !== null}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10.5px] font-mono hover:bg-white/5 text-left transition-colors cursor-pointer w-full text-current disabled:opacity-50"
+                          >
+                            <span>Documento Word (.docx)</span>
+                            <span className="text-[8px] text-blue-400 font-bold px-1 py-0.5 rounded bg-blue-500/10">MS Word</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadDocument('pdf')}
+                            disabled={isGeneratingDocument !== null}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[10.5px] font-mono hover:bg-white/5 text-left transition-colors cursor-pointer w-full text-current disabled:opacity-50"
+                          >
+                            <span>Documento PDF (.pdf)</span>
+                            <span className="text-[8px] text-red-400 font-bold px-1 py-0.5 rounded bg-red-500/10">Impressão</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Word counter and reading time details if text of interest */}
